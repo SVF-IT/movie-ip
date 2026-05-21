@@ -1,0 +1,1578 @@
+"use client";
+
+import { LanguageSelector } from "@/components/forms/language-selector";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { FileUpload } from "@/components/ui/file-upload";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { useAuth } from "@/contexts/auth-context";
+import { useAppToast } from "@/hooks/use-app-toast";
+import { useRequirePermission } from "@/hooks/use-require-permission";
+import { getMovieApprovalHistory, resubmitMovie } from "@/lib/api/approvals";
+import {
+  addMoviePerson,
+  getMovieById,
+  getMovieCast,
+  getMovieDirectors,
+  getProductionHouses,
+  removeMoviePerson,
+  searchPeople,
+  updateMovie,
+} from "@/lib/api/movies";
+import {
+  getMoviePendingChanges,
+  submitMovieFieldChange,
+  submitPersonChange,
+  type PendingChange,
+} from "@/lib/api/pending-changes";
+import type {
+  CertificationType,
+  MovieApproval,
+  MoviePeople,
+  MovieSource,
+  MovieWithDetails,
+  Person,
+  ProductionHouse,
+  RightNature,
+} from "@/lib/types/database";
+import { AlertTriangle, ArrowLeft, CheckCircle, Clock, Film, GitPullRequest, Loader2, Plus, RotateCcw, Search, X, XCircle } from "lucide-react";
+import Link from "next/link";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+const CERTIFICATIONS = ["U", "UA", "U/A", "UA 7+", "UA 13+", "UA 16+", "A", "S", "V/U", "V/UA", "UNCENSORED", "TBD"];
+
+const HOME_NATURE_OPTIONS = [
+  { value: "Exclusive", label: "Exclusively Owned" },
+  { value: "Jointly Owned", label: "Jointly Owned" },
+  { value: "Sold/Expired", label: "Sold / Expired" },
+];
+
+const HOLDBACK_PRESETS = ["Audio Rights", "Theatrical Exploitation", "FVOD", "AVOD", "SVOD", "TVOD"];
+
+const inputCls = "bg-slate-950/40 border-slate-700/50 text-slate-200 placeholder:text-slate-500 focus:border-slate-500 h-10";
+const selectCls = "bg-slate-950/40 border-slate-700/50 text-slate-300 h-10";
+const textareaCls = "bg-slate-950/40 border-slate-700/50 text-slate-200 placeholder:text-slate-500 focus:border-slate-500";
+const labelCls = "text-xs font-semibold text-slate-400 uppercase tracking-wider";
+
+function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="relative overflow-hidden rounded-xl bg-slate-900/40 border border-slate-800/60 backdrop-blur-xl shadow-xl">
+      <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-800/60">
+        <div className="p-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30">
+          <Film className="h-3.5 w-3.5 text-amber-400" />
+        </div>
+        <span className="text-sm font-semibold text-slate-200">{title}</span>
+      </div>
+      <div className="p-5 space-y-5">{children}</div>
+    </div>
+  );
+}
+
+function FormField({ label, required, hint, children }: { label: string; required?: boolean; hint?: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-2">
+      <Label className={labelCls}>{label}{required && <span className="text-red-400 ml-0.5">*</span>}</Label>
+      {children}
+      {hint && <p className="text-[10px] text-slate-400 leading-relaxed">{hint}</p>}
+    </div>
+  );
+}
+
+function TogglePill({ value, onChange, options = ["Yes", "No"] }: { value: string; onChange: (v: string) => void; options?: string[] }) {
+  return (
+    <div className="inline-flex bg-slate-950/50 border border-slate-700/50 rounded-full p-0.5 gap-0.5">
+      {options.map((opt) => {
+        const active = value === opt;
+        return (
+          <button key={opt} type="button" onClick={() => onChange(active ? "" : opt)}
+            className={[
+              "px-3 py-1 rounded-full text-[12.5px] font-semibold transition-all duration-150 whitespace-nowrap select-none",
+              active && opt === "Yes" ? "bg-emerald-500/20 text-emerald-400" :
+                active && opt === "No" ? "bg-red-500/20 text-red-400" :
+                  active ? "bg-slate-700/60 text-slate-300" :
+                    "text-slate-500 hover:text-slate-300",
+            ].filter(Boolean).join(" ")}>
+            {opt}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function RightsCard({ title, value, onChange, children }: { title: string; value: string; onChange: (v: string) => void; children?: React.ReactNode }) {
+  const isAcq = value === "Yes";
+  return (
+    <div className={["rounded-lg border overflow-hidden transition-colors duration-200", isAcq ? "border-emerald-500/40" : "border-slate-800/50"].join(" ")}>
+      <div className="flex items-center justify-between px-3 py-2.5 bg-slate-950/40 gap-2">
+        <span className={["text-[11px] font-bold uppercase tracking-widest transition-colors duration-200", isAcq ? "text-emerald-400" : "text-slate-400"].join(" ")}>{title}</span>
+        <TogglePill value={value} onChange={onChange} />
+      </div>
+      {isAcq && <div className="p-3 border-t border-slate-800/50 bg-slate-900/30">{children}</div>}
+    </div>
+  );
+}
+
+const LANG_LIST = ["Bengali","Hindi","English","Tamil","Telugu","Malayalam","Kannada","Marathi","Gujarati","Punjabi","Odia","Assamese"];
+
+function LangMultiPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [customInput, setCustomInput] = useState("");
+  const [showCustom, setShowCustom] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const selected = value ? value.split(",").map(s => s.trim()).filter(Boolean) : [];
+  const commit = (next: string[]) => onChange(next.join(", "));
+  const toggle = (lang: string) => commit(selected.includes(lang) ? selected.filter(s => s !== lang) : [...selected, lang]);
+  const addCustom = () => {
+    const v = customInput.trim();
+    if (!v || selected.includes(v)) { setCustomInput(""); setShowCustom(false); return; }
+    commit([...selected, v]); setCustomInput(""); setShowCustom(false);
+  };
+  const dbVal = selected.length ? `Yes(${selected.join(", ")})` : "";
+  return (
+    <div className="space-y-2 pt-2 pb-1">
+      <div className="flex flex-wrap gap-1.5">
+        {LANG_LIST.map(lang => {
+          const sel = selected.includes(lang);
+          return (
+            <button key={lang} type="button" onClick={() => toggle(lang)}
+              className={["px-2 py-0.5 rounded-full text-xs font-semibold border transition-all select-none",
+                sel ? "bg-amber-500/15 border-amber-500/50 text-amber-300" : "bg-slate-950/40 border-slate-700/40 text-slate-500 hover:text-slate-300",
+              ].join(" ")}>{lang}</button>
+          );
+        })}
+        {!showCustom && (
+          <button type="button" onClick={() => { setShowCustom(true); setTimeout(() => inputRef.current?.focus(), 50); }}
+            className="px-2 py-0.5 rounded-full text-xs font-semibold border border-dashed border-slate-600/50 text-slate-500 hover:text-slate-300 transition-all">
+            + Custom
+          </button>
+        )}
+      </div>
+      {showCustom && (
+        <div className="flex gap-2 items-center">
+          <Input ref={inputRef} value={customInput} onChange={e => setCustomInput(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } if (e.key === "Escape") { setShowCustom(false); setCustomInput(""); } }}
+            placeholder="Type language…"
+            className="h-7 flex-1 bg-slate-950/40 border-slate-700/50 text-slate-200 placeholder:text-slate-500 text-xs" />
+          <button type="button" onClick={addCustom} className="h-7 px-2.5 rounded-md bg-amber-600/20 border border-amber-500/30 text-amber-400 text-xs font-semibold hover:bg-amber-600/30">Add</button>
+          <button type="button" onClick={() => { setShowCustom(false); setCustomInput(""); }} className="h-7 w-7 flex items-center justify-center rounded-md text-slate-500 hover:text-slate-300">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {selected.map(lang => (
+            <span key={lang} className="flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/25 text-xs font-semibold text-amber-300">
+              {lang}
+              <button type="button" onClick={() => commit(selected.filter(s => s !== lang))} className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-amber-500/20">
+                <X className="h-2.5 w-2.5" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      {dbVal && (
+        <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-slate-950/60 border border-slate-800/60">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 shrink-0">DB:</span>
+          <span className="text-[11px] text-slate-400 font-mono break-all">{dbVal}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InlineRightsRow({ label, value, onChange, langValue, onLangChange }: { label: string; value: string; onChange: (v: string) => void; langValue?: string; onLangChange?: (v: string) => void }) {
+  return (
+    <div className="py-2.5 border-b border-slate-800/50 last:border-0 last:pb-0">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm font-semibold text-slate-200">{label}</span>
+        <TogglePill value={value} onChange={onChange} />
+      </div>
+      {onLangChange && value === "Yes" && (
+        <LangMultiPicker value={langValue ?? ""} onChange={onLangChange} />
+      )}
+    </div>
+  );
+}
+
+function MultiChips({ options, value, onChange }: { options: string[]; value: string; onChange: (v: string) => void }) {
+  const selected = value ? value.split(",").map(s => s.trim()).filter(Boolean) : [];
+  const toggle = (opt: string) => {
+    const next = selected.includes(opt) ? selected.filter(s => s !== opt) : [...selected, opt];
+    onChange(next.join(", "));
+  };
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map(opt => {
+        const sel = selected.includes(opt);
+        return (
+          <button key={opt} type="button" onClick={() => toggle(opt)}
+            className={["px-2.5 py-1 rounded-full text-xs font-semibold border transition-all duration-100 select-none",
+              sel ? "bg-slate-600/25 border-slate-500/50 text-slate-200" : "bg-slate-950/40 border-slate-700/40 text-slate-500 hover:text-slate-300",
+            ].join(" ")}>
+            {opt}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function HoldbackPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [customInput, setCustomInput] = useState("");
+  const [showCustom, setShowCustom] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const raw = value.replace(/^on\s*/i, "");
+  const selected = raw ? raw.split(",").map(s => s.trim()).filter(Boolean) : [];
+  const commit = (next: string[]) => onChange(next.length ? `on ${next.join(", ")}` : "");
+  const toggle = (opt: string) => commit(selected.includes(opt) ? selected.filter(s => s !== opt) : [...selected, opt]);
+  const addCustom = () => {
+    const val = customInput.trim();
+    if (!val || selected.includes(val)) { setCustomInput(""); setShowCustom(false); return; }
+    commit([...selected, val]); setCustomInput(""); setShowCustom(false);
+  };
+  return (
+    <div className="space-y-2.5">
+      <div className="flex flex-wrap gap-1.5">
+        {HOLDBACK_PRESETS.map(opt => {
+          const sel = selected.includes(opt);
+          return (
+            <button key={opt} type="button" onClick={() => toggle(opt)}
+              className={["px-2.5 py-1 rounded-full text-xs font-semibold border transition-all duration-100 select-none",
+                sel ? "bg-slate-600/25 border-slate-500/50 text-slate-200" : "bg-slate-950/40 border-slate-700/40 text-slate-500 hover:text-slate-300",
+              ].join(" ")}>{opt}</button>
+          );
+        })}
+        {!showCustom && (
+          <button type="button" onClick={() => { setShowCustom(true); setTimeout(() => inputRef.current?.focus(), 50); }}
+            className="px-2.5 py-1 rounded-full text-xs font-semibold border border-dashed border-slate-600/50 text-slate-500 hover:text-slate-300 hover:border-slate-500 transition-all">
+            + Custom
+          </button>
+        )}
+      </div>
+      {showCustom && (
+        <div className="flex gap-2 items-center">
+          <Input ref={inputRef} value={customInput} onChange={e => setCustomInput(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } if (e.key === "Escape") { setShowCustom(false); setCustomInput(""); } }}
+            placeholder="Type custom value…"
+            className="h-7 flex-1 bg-slate-950/40 border-slate-700/50 text-slate-200 placeholder:text-slate-500 text-xs focus-visible:ring-amber-500/40" />
+          <button type="button" onClick={addCustom}
+            className="h-7 px-2.5 rounded-md bg-amber-600/20 border border-amber-500/30 text-amber-400 text-xs font-semibold hover:bg-amber-600/30 transition-all">Add</button>
+          <button type="button" onClick={() => { setShowCustom(false); setCustomInput(""); }}
+            className="h-7 w-7 flex items-center justify-center rounded-md text-slate-500 hover:text-slate-300">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {selected.map(item => (
+            <span key={item} className="flex items-center gap-1 pl-2.5 pr-1 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/25 text-xs font-semibold text-amber-300">
+              {item}
+              <button type="button" onClick={() => commit(selected.filter(s => s !== item))}
+                className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-amber-500/20 transition-all">
+                <X className="h-2.5 w-2.5" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      {value && (
+        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-slate-950/60 border border-slate-800/60">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 shrink-0">DB value:</span>
+          <span className="text-[11px] text-slate-400 font-mono break-all">{value}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DurationInput({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
+  const format = (raw: string) => {
+    const digits = raw.replace(/\D/g, "").slice(0, 6);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 4) return `${digits.slice(0, 2)}:${digits.slice(2)}`;
+    return `${digits.slice(0, 2)}:${digits.slice(2, 4)}:${digits.slice(4)}`;
+  };
+  return (
+    <div className="relative">
+      <Input value={value} onChange={(e) => onChange(format(e.target.value))} placeholder="hh:mm:ss" maxLength={8} className={className} />
+      {value && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold uppercase tracking-widest text-slate-500 pointer-events-none">hh:mm:ss</span>}
+    </div>
+  );
+}
+
+export default function EditMoviePage() {
+  const router = useRouter();
+  const params = useParams();
+  const searchParams = useSearchParams();
+  const movieId = params.id as string;
+  const defaultTab = searchParams.get("tab") || "basic";
+  const { allowed, loading: permLoading } = useRequirePermission("edit", "movie", "/movies");
+  const { profile } = useAuth();
+
+  const [loading, setLoading] = useState(true);
+  const [productionHouses, setProductionHouses] = useState<ProductionHouse[]>([]);
+
+  const [title, setTitle] = useState("");
+  const [productionNo, setProductionNo] = useState("");
+  const [source, setSource] = useState<MovieSource>("home_production");
+  const [releaseDate, setReleaseDate] = useState("");
+  const [releaseYear, setReleaseYear] = useState("");
+  const [certification, setCertification] = useState("");
+  const [language, setLanguage] = useState("");
+  const [selectedHouseIds, setSelectedHouseIds] = useState<string[]>([""]);
+  const [wtpLibrary, setWtpLibrary] = useState("");
+  const [revenueShare, setRevenueShare] = useState("");
+  const [colorOrBw, setColorOrBw] = useState("");
+  const [trailerLink, setTrailerLink] = useState("");
+  const [posterUrl, setPosterUrl] = useState("");
+  const [assignorLicensor, setAssignorLicensor] = useState("");
+  const [licensee, setLicensee] = useState("");
+  const [agreementDate, setAgreementDate] = useState("");
+  const [agreementStartDate, setAgreementStartDate] = useState("");
+  const [agreementEndDate, setAgreementEndDate] = useState("");
+  const [internetRightsClassification, setInternetRightsClassification] = useState("");
+  const [prequelSequelRights, setPrequelSequelRights] = useState("");
+  const [characterRights, setCharacterRights] = useState("");
+  const [subtitlingRights, setSubtitlingRights] = useState("");
+  const [subtitlingLang, setSubtitlingLang] = useState("");
+  const [dubbingRights, setDubbingRights] = useState("");
+  const [dubbingLang, setDubbingLang] = useState("");
+  const [natureOfRights, setNatureOfRights] = useState("");
+  const [territory, setTerritory] = useState("");
+  const [remarks, setRemarks] = useState("");
+  const [actionables, setActionables] = useState("");
+  const [jointProdBuyBackDate, setJointProdBuyBackDate] = useState("");
+  const [jointlyExploitationRights, setJointlyExploitationRights] = useState("");
+  const [recensorFlag, setRecensorFlag] = useState(false);
+  // New rights fields
+  const [satelliteRights, setSatelliteRights] = useState("");
+  const [internetRights, setInternetRights] = useState("");
+  const [negativeRights, setNegativeRights] = useState("");
+  const [otherRights, setOtherRights] = useState("");
+  const [satelliteRightsClassification, setSatelliteRightsClassification] = useState("");
+  const [clipRights, setClipRights] = useState("");
+  const [clipRightsDuration, setClipRightsDuration] = useState("");
+  const [holdbacks, setHoldbacks] = useState("");
+  const [natureOfSatelliteRights, setNatureOfSatelliteRights] = useState("");
+  const [natureOfInternetRights, setNatureOfInternetRights] = useState("");
+  const [natureOfNegativeRights, setNatureOfNegativeRights] = useState("");
+  const [natureOfOtherRights, setNatureOfOtherRights] = useState("");
+  const [satelliteRightsStartDate, setSatelliteRightsStartDate] = useState("");
+  const [satelliteRightsEndDate, setSatelliteRightsEndDate] = useState("");
+  const [internetRightsStartDate, setInternetRightsStartDate] = useState("");
+  const [internetRightsEndDate, setInternetRightsEndDate] = useState("");
+  const [negativeRightsStartDate, setNegativeRightsStartDate] = useState("");
+  const [negativeRightsEndDate, setNegativeRightsEndDate] = useState("");
+  const [otherRightsStartDate, setOtherRightsStartDate] = useState("");
+  const [otherRightsEndDate, setOtherRightsEndDate] = useState("");
+  const [syndicationInternetRights, setSyndicationInternetRights] = useState("");
+
+  // Cast & Directors
+  const [cast, setCast] = useState<MoviePeople[]>([]);
+  const [directors, setDirectors] = useState<MoviePeople[]>([]);
+  const [personSearch, setPersonSearch] = useState("");
+  const [personResults, setPersonResults] = useState<Person[]>([]);
+  const [searchingPeople, setSearchingPeople] = useState(false);
+  const [addingRole, setAddingRole] = useState<"cast" | "director" | null>(null);
+
+  const [activeTab, setActiveTab] = useState(defaultTab);
+  const [approvalStatus, setApprovalStatus] = useState<"pending" | "approved" | "rejected" | null>(null);
+  const [approvalHistory, setApprovalHistory] = useState<MovieApproval[]>([]);
+  const [resubmitting, setResubmitting] = useState(false);
+
+  const [saving, setSaving] = useState(false);
+  const toast = useAppToast();
+
+  // Snapshot of field values at load time — used to build a before/after diff for approved movies
+  const [beforeSnapshot, setBeforeSnapshot] = useState<Record<string, unknown>>({});
+  const [pendingChanges, setPendingChanges] = useState<PendingChange[]>([]);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const [movie, houses] = await Promise.all([
+          getMovieById(movieId),
+          getProductionHouses(),
+        ]);
+        setProductionHouses(houses);
+        if (!movie) { toast.error("Movie not found"); setLoading(false); return; }
+        setTitle(movie.title || "");
+        setProductionNo(movie.production_no || "");
+        setSource(movie.source || "home_production");
+        setReleaseDate(movie.release_date || "");
+        setReleaseYear(movie.release_year?.toString() || "");
+        setCertification(movie.certification || "");
+        setLanguage(movie.language || "");
+
+        // Handle production houses - match by name text against production houses list
+        const phName = movie.production_house_name || "";
+        if (phName) {
+          // Preserve DB order by mapping each name to its matching house id
+          const names = phName.split(",").map(s => s.trim());
+          const matchedHouseIds = names
+            .map(n => houses.find(h => h.name.toLowerCase() === n.toLowerCase())?.id ?? "")
+            .filter(id => id !== "");
+
+          if (matchedHouseIds.length > 0) {
+            setSelectedHouseIds(matchedHouseIds);
+          } else {
+            setSelectedHouseIds([""]);
+          }
+        } else {
+          setSelectedHouseIds([""]);
+        }
+        setColorOrBw(movie.color_or_bw || "");
+        setTrailerLink(movie.trailer_link || "");
+        setPosterUrl(movie.poster_url || "");
+        setAssignorLicensor(movie.assignor_licensor || "");
+        setLicensee(movie.licensee || "");
+        setAgreementDate(movie.agreement_date || "");
+        setAgreementStartDate(movie.agreement_start_date || "");
+        setAgreementEndDate(movie.agreement_end_date || "");
+        setInternetRightsClassification(movie.internet_rights_classification || "");
+        setPrequelSequelRights(movie.prequel_sequel_rights || "");
+        setCharacterRights(movie.character_rights || "");
+        // subtitling/dubbing stored as "Yes(Bengali, Hindi)" or legacy "Yes: Bengali"
+        const subRaw = movie.subtitling_rights || "";
+        if (subRaw.startsWith("Yes(") && subRaw.endsWith(")")) {
+          setSubtitlingRights("Yes"); setSubtitlingLang(subRaw.slice(4, -1).trim());
+        } else if (subRaw.includes(":")) {
+          setSubtitlingRights("Yes"); setSubtitlingLang(subRaw.split(":").slice(1).join(":").trim());
+        } else { setSubtitlingRights(subRaw); setSubtitlingLang(""); }
+        const dubRaw = movie.dubbing_rights || "";
+        if (dubRaw.startsWith("Yes(") && dubRaw.endsWith(")")) {
+          setDubbingRights("Yes"); setDubbingLang(dubRaw.slice(4, -1).trim());
+        } else if (dubRaw.includes(":")) {
+          setDubbingRights("Yes"); setDubbingLang(dubRaw.split(":").slice(1).join(":").trim());
+        } else { setDubbingRights(dubRaw); setDubbingLang(""); }
+        setNatureOfRights(movie.nature_of_rights || "");
+        setTerritory(movie.territory || "");
+        setRemarks(movie.remarks || "");
+        setActionables(movie.actionables || "");
+        setWtpLibrary(movie.wtp_library || "");
+        setRevenueShare(movie.revenue_share || "");
+        setJointProdBuyBackDate(movie.joint_prod_buy_back_date || "");
+        setJointlyExploitationRights(movie.jointly_exploitation_rights || "");
+        setRecensorFlag(movie.recensor_flag ?? false);
+        setSatelliteRights(movie.satellite_rights || "");
+        setInternetRights(movie.internet_rights || "");
+        setNegativeRights(movie.negative_rights || "");
+        setOtherRights(movie.other_rights || "");
+        setSatelliteRightsClassification(movie.satellite_rights_classification || "");
+        setInternetRightsClassification(movie.internet_rights_classification || "");
+        setClipRights(movie.clip_rights || "");
+        setClipRightsDuration(movie.clip_rights_duration || "");
+        setHoldbacks(movie.holdbacks || "");
+        setNatureOfSatelliteRights(movie.nature_of_satellite_rights || "");
+        setNatureOfInternetRights(movie.nature_of_internet_rights || "");
+        setNatureOfNegativeRights(movie.nature_of_negative_rights || "");
+        setNatureOfOtherRights(movie.nature_of_other_rights || "");
+        setSatelliteRightsStartDate(movie.satellite_rights_start_date || "");
+        setSatelliteRightsEndDate(movie.satellite_rights_end_date || "");
+        setInternetRightsStartDate(movie.internet_rights_start_date || "");
+        setInternetRightsEndDate(movie.internet_rights_end_date || "");
+        setNegativeRightsStartDate(movie.negative_rights_start_date || "");
+        setNegativeRightsEndDate(movie.negative_rights_end_date || "");
+        setOtherRightsStartDate(movie.other_rights_start_date || "");
+        setOtherRightsEndDate(movie.other_rights_end_date || "");
+        setSyndicationInternetRights(movie.syndication_internet_rights || "");
+        const status = (movie as any).approval_status ?? null;
+        setApprovalStatus(status);
+        // Only auto-switch to Approval tab if no explicit ?tab= param in URL
+        if (!searchParams.get("tab") && (status === "pending" || status === "rejected")) {
+          setActiveTab("approval");
+        }
+        // Capture snapshot for change diff (only relevant for approved movies)
+        setBeforeSnapshot({
+          title: movie.title || "",
+          production_no: movie.production_no || "",
+          source: movie.source || "home_production",
+          release_date: movie.release_date || "",
+          release_year: movie.release_year?.toString() || "",
+          certification: movie.certification || "",
+          language: movie.language || "",
+          production_house_name: movie.production_house_name || "",
+          color_or_bw: movie.color_or_bw || "",
+          trailer_link: movie.trailer_link || "",
+          poster_url: movie.poster_url || "",
+          assignor_licensor: movie.assignor_licensor || "",
+          licensee: movie.licensee || "",
+          agreement_date: movie.agreement_date || "",
+          agreement_start_date: movie.agreement_start_date || "",
+          agreement_end_date: movie.agreement_end_date || "",
+          internet_rights_classification: movie.internet_rights_classification || "",
+          prequel_sequel_rights: movie.prequel_sequel_rights || "",
+          character_rights: movie.character_rights || "",
+          subtitling_rights: movie.subtitling_rights || "",
+          dubbing_rights: movie.dubbing_rights || "",
+          nature_of_rights: movie.nature_of_rights || "",
+          territory: movie.territory || "",
+          remarks: movie.remarks || "",
+          actionables: movie.actionables || "",
+          wtp_library: movie.wtp_library || "",
+          revenue_share: movie.revenue_share || "",
+          joint_prod_buy_back_date: movie.joint_prod_buy_back_date || "",
+          jointly_exploitation_rights: movie.jointly_exploitation_rights || "",
+          recensor_flag: movie.recensor_flag ?? false,
+          satellite_rights: movie.satellite_rights || "",
+          internet_rights: movie.internet_rights || "",
+          negative_rights: movie.negative_rights || "",
+          other_rights: movie.other_rights || "",
+          satellite_rights_classification: movie.satellite_rights_classification || "",
+          clip_rights: movie.clip_rights || "",
+          clip_rights_duration: movie.clip_rights_duration || "",
+          holdbacks: movie.holdbacks || "",
+          nature_of_satellite_rights: movie.nature_of_satellite_rights || "",
+          nature_of_internet_rights: movie.nature_of_internet_rights || "",
+          nature_of_negative_rights: movie.nature_of_negative_rights || "",
+          nature_of_other_rights: movie.nature_of_other_rights || "",
+          satellite_rights_start_date: movie.satellite_rights_start_date || "",
+          satellite_rights_end_date: movie.satellite_rights_end_date || "",
+          internet_rights_start_date: movie.internet_rights_start_date || "",
+          internet_rights_end_date: movie.internet_rights_end_date || "",
+          negative_rights_start_date: movie.negative_rights_start_date || "",
+          negative_rights_end_date: movie.negative_rights_end_date || "",
+          other_rights_start_date: movie.other_rights_start_date || "",
+          other_rights_end_date: movie.other_rights_end_date || "",
+          syndication_internet_rights: movie.syndication_internet_rights || "",
+        });
+
+        const [castData, dirData, historyData, pendingData] = await Promise.all([
+          getMovieCast(movieId),
+          getMovieDirectors(movieId),
+          getMovieApprovalHistory(movieId),
+          getMoviePendingChanges(movieId),
+        ]);
+        setCast(castData);
+        setDirectors(dirData);
+        setApprovalHistory(historyData);
+        setPendingChanges(pendingData);
+      } catch { toast.error("Failed to load movie"); }
+      finally { setLoading(false); }
+    }
+    load();
+  }, [movieId]);
+
+  const handlePersonSearch = useCallback(async (query: string) => {
+    setPersonSearch(query);
+    if (query.length < 2) { setPersonResults([]); return; }
+    setSearchingPeople(true);
+    try { const results = await searchPeople(query); setPersonResults(results); }
+    catch { setPersonResults([]); }
+    finally { setSearchingPeople(false); }
+  }, []);
+
+  const isApproved = approvalStatus === "approved";
+  const isEditor = profile?.role === "editor";
+  const submitterName = profile?.full_name || profile?.email || "Editor";
+  // editor always stages changes; legal/admin always apply directly
+  const shouldStage = isEditor;
+
+  const handleAddCast = async (person: Person) => {
+    try {
+      if (shouldStage) {
+        await submitPersonChange(movieId, "person_add", person.id, person.name, "Actor", submitterName, profile?.id);
+        setPersonSearch(""); setPersonResults([]); setAddingRole(null);
+        setPendingChanges(await getMoviePendingChanges(movieId));
+        toast.success("Cast change submitted for approval.");
+        return;
+      }
+      const newCast = await addMoviePerson(movieId, person.id, "Actor", cast.length + 1);
+      setCast([...cast, newCast]);
+      setPersonSearch(""); setPersonResults([]); setAddingRole(null);
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Failed to add cast member"); }
+  };
+
+  const handleRemoveCast = async (entry: MoviePeople) => {
+    try {
+      if (shouldStage) {
+        await submitPersonChange(movieId, "person_remove", entry.person_id, entry.person?.name || entry.person_id, "Actor", submitterName, profile?.id);
+        setPendingChanges(await getMoviePendingChanges(movieId));
+        toast.success("Cast removal submitted for approval.");
+        return;
+      }
+      await removeMoviePerson(entry.id, entry.person_id);
+      setCast(cast.filter((c) => c.id !== entry.id));
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Failed to remove cast member"); }
+  };
+
+  const handleAddDirector = async (person: Person) => {
+    try {
+      if (shouldStage) {
+        await submitPersonChange(movieId, "person_add", person.id, person.name, "Director", submitterName, profile?.id);
+        setPersonSearch(""); setPersonResults([]); setAddingRole(null);
+        setPendingChanges(await getMoviePendingChanges(movieId));
+        toast.success("Director change submitted for approval.");
+        return;
+      }
+      const newDir = await addMoviePerson(movieId, person.id, "Director");
+      setDirectors([...directors, newDir]);
+      setPersonSearch(""); setPersonResults([]); setAddingRole(null);
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Failed to add director"); }
+  };
+
+  const handleRemoveDirector = async (entry: MoviePeople) => {
+    try {
+      if (shouldStage) {
+        await submitPersonChange(movieId, "person_remove", entry.person_id, entry.person?.name || entry.person_id, "Director", submitterName, profile?.id);
+        setPendingChanges(await getMoviePendingChanges(movieId));
+        toast.success("Director removal submitted for approval.");
+        return;
+      }
+      await removeMoviePerson(entry.id, entry.person_id);
+      setDirectors(directors.filter((d) => d.id !== entry.id));
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Failed to remove director"); }
+  };
+
+  const handleResubmit = async () => {
+    setResubmitting(true);
+    try {
+      await resubmitMovie(movieId);
+      setApprovalStatus("pending");
+      const history = await getMovieApprovalHistory(movieId);
+      setApprovalHistory(history);
+      toast.success("Movie resubmitted for approval.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to resubmit");
+    } finally {
+      setResubmitting(false);
+    }
+  };
+
+  const isHomeProd = source === "home_production";
+  const isJointlyOwned = natureOfRights === "Jointly Owned";
+
+  const handleSave = async () => {
+    if (!title.trim()) { toast.error("Title is required"); return; }
+    if (title.trim().length > 500) { toast.error("Title must be 500 characters or less"); return; }
+    setSaving(true);
+    try {
+      let finalProductionHouseName: string | undefined;
+
+      const selectedHouses = selectedHouseIds
+        .map(id => productionHouses.find(h => h.id === id))
+        .filter((h): h is ProductionHouse => !!h);
+
+      if (selectedHouses.length > 0) {
+        finalProductionHouseName = selectedHouses.map(h => h.name).join(", ");
+      }
+
+      const afterSnapshot: Record<string, unknown> = {
+        title: title.trim(),
+        production_no: productionNo || "",
+        source,
+        release_date: releaseDate || "",
+        release_year: releaseYear || "",
+        certification: certification || "",
+        language: language.replace(/\s*[Dd]ubbed\s*/g, "").trim() || "",
+        production_house_name: finalProductionHouseName || "",
+        color_or_bw: colorOrBw || "",
+        trailer_link: trailerLink || "",
+        poster_url: posterUrl || "",
+        assignor_licensor: assignorLicensor || "",
+        licensee: licensee || "",
+        agreement_date: agreementDate || "",
+        agreement_start_date: agreementStartDate || "",
+        agreement_end_date: agreementEndDate || "",
+        internet_rights_classification: internetRightsClassification || "",
+        prequel_sequel_rights: prequelSequelRights || "",
+        character_rights: characterRights || "",
+        subtitling_rights: subtitlingRights === "Yes" && subtitlingLang ? `Yes(${subtitlingLang})` : subtitlingRights || "",
+        dubbing_rights: dubbingRights === "Yes" && dubbingLang ? `Yes(${dubbingLang})` : dubbingRights || "",
+        nature_of_rights: source === "acquired" ? "" : (natureOfRights || ""),
+        territory: territory || "",
+        remarks: remarks || "",
+        actionables: actionables || "",
+        wtp_library: wtpLibrary || "",
+        revenue_share: isJointlyOwned ? revenueShare : "",
+        joint_prod_buy_back_date: isJointlyOwned ? jointProdBuyBackDate : "",
+        jointly_exploitation_rights: isJointlyOwned ? jointlyExploitationRights : "",
+        recensor_flag: recensorFlag,
+        satellite_rights: satelliteRights || "",
+        internet_rights: internetRights || "",
+        negative_rights: negativeRights || "",
+        other_rights: otherRights || "",
+        satellite_rights_classification: satelliteRightsClassification || "",
+        clip_rights: clipRights || "",
+        clip_rights_duration: clipRightsDuration || "",
+        holdbacks: holdbacks || "",
+        nature_of_satellite_rights: natureOfSatelliteRights || "",
+        nature_of_internet_rights: natureOfInternetRights || "",
+        nature_of_negative_rights: natureOfNegativeRights || "",
+        nature_of_other_rights: natureOfOtherRights || "",
+        satellite_rights_start_date: satelliteRightsStartDate || "",
+        satellite_rights_end_date: satelliteRightsEndDate || "",
+        internet_rights_start_date: internetRightsStartDate || "",
+        internet_rights_end_date: internetRightsEndDate || "",
+        negative_rights_start_date: negativeRightsStartDate || "",
+        negative_rights_end_date: negativeRightsEndDate || "",
+        other_rights_start_date: otherRightsStartDate || "",
+        other_rights_end_date: otherRightsEndDate || "",
+        syndication_internet_rights: syndicationInternetRights || "",
+      };
+
+      // Editor always stages; legal/admin always apply directly
+      if (shouldStage) {
+        const changedFields = Object.keys(afterSnapshot).filter(
+          k => JSON.stringify(beforeSnapshot[k]) !== JSON.stringify(afterSnapshot[k])
+        );
+        if (changedFields.length === 0) {
+          toast.info("No changes detected.");
+          return;
+        }
+        await submitMovieFieldChange(movieId, beforeSnapshot, afterSnapshot, submitterName, profile?.id);
+        setPendingChanges(await getMoviePendingChanges(movieId));
+        toast.success("Changes submitted for approval.", "They will be applied once reviewed.");
+        setBeforeSnapshot(afterSnapshot);
+        return;
+      }
+
+      // Legal / admin — apply directly
+      const movieData: Partial<MovieWithDetails> = {
+        title: title.trim(), production_no: productionNo || undefined, source,
+        release_date: releaseDate || undefined, release_year: releaseYear || undefined,
+        certification: (certification as CertificationType) || undefined,
+        language: language.replace(/\s*[Dd]ubbed\s*/g, "").trim() || undefined,
+        production_house_name: finalProductionHouseName,
+        color_or_bw: colorOrBw || undefined, trailer_link: trailerLink || undefined,
+        poster_url: posterUrl || undefined, assignor_licensor: assignorLicensor || undefined,
+        licensee: licensee || undefined, agreement_date: agreementDate || undefined,
+        agreement_start_date: agreementStartDate || undefined, agreement_end_date: agreementEndDate || undefined,
+        prequel_sequel_rights: prequelSequelRights || undefined, character_rights: characterRights || undefined,
+        subtitling_rights: (subtitlingRights === "Yes" && subtitlingLang ? `Yes(${subtitlingLang})` : subtitlingRights) || undefined,
+        dubbing_rights: (dubbingRights === "Yes" && dubbingLang ? `Yes(${dubbingLang})` : dubbingRights) || undefined,
+        nature_of_rights: isHomeProd ? (natureOfRights as RightNature) || undefined : undefined,
+        territory: territory || undefined, remarks: remarks || undefined,
+        actionables: actionables || undefined,
+        wtp_library: wtpLibrary || undefined,
+        revenue_share: isJointlyOwned ? revenueShare : undefined,
+        joint_prod_buy_back_date: isJointlyOwned ? jointProdBuyBackDate : undefined,
+        jointly_exploitation_rights: isJointlyOwned ? jointlyExploitationRights : undefined,
+        recensor_flag: recensorFlag,
+        satellite_rights: satelliteRights || undefined,
+        internet_rights: internetRights || undefined,
+        negative_rights: negativeRights || undefined,
+        other_rights: otherRights || undefined,
+        satellite_rights_classification: satelliteRightsClassification || undefined,
+        internet_rights_classification: internetRightsClassification || undefined,
+        clip_rights: clipRights || undefined,
+        clip_rights_duration: clipRightsDuration || undefined,
+        holdbacks: holdbacks || undefined,
+        nature_of_satellite_rights: natureOfSatelliteRights || undefined,
+        nature_of_internet_rights: natureOfInternetRights || undefined,
+        nature_of_negative_rights: natureOfNegativeRights || undefined,
+        nature_of_other_rights: natureOfOtherRights || undefined,
+        satellite_rights_start_date: satelliteRightsStartDate || undefined,
+        satellite_rights_end_date: satelliteRightsEndDate || undefined,
+        internet_rights_start_date: internetRightsStartDate || undefined,
+        internet_rights_end_date: internetRightsEndDate || undefined,
+        negative_rights_start_date: negativeRightsStartDate || undefined,
+        negative_rights_end_date: negativeRightsEndDate || undefined,
+        other_rights_start_date: otherRightsStartDate || undefined,
+        other_rights_end_date: otherRightsEndDate || undefined,
+        syndication_internet_rights: syndicationInternetRights || undefined,
+      };
+      await updateMovie(movieId, movieData);
+      toast.success("Movie saved successfully.");
+      router.push(`/movies/${movieId}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save movie");
+    } finally { setSaving(false); }
+  };
+
+  if (loading || permLoading || !allowed) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-red-500" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* ── Cinematic Header ── */}
+      <div className="relative overflow-hidden rounded-xl bg-slate-900/60 border border-slate-800/60 backdrop-blur-xl p-6 shadow-2xl">
+        <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-amber-600 via-red-500 to-transparent" />
+        <div className="absolute -top-20 -right-20 w-56 h-56 bg-cyan-600/6 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="relative flex items-center gap-4">
+          <Link href="/movies">
+            <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 gap-1.5 h-8">
+              <ArrowLeft className="h-3.5 w-3.5" /> Back
+            </Button>
+          </Link>
+          <div className="h-4 w-px bg-slate-700/60" />
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 shadow-lg shadow-amber-500/10">
+              <Film className="h-5 w-5 text-amber-400" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
+                Edit Movie
+              </h1>
+              <p className="text-xs text-slate-400 mt-0.5">Updating <span className="text-slate-300">{title}</span></p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {shouldStage && (
+        <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-blue-500/10 border border-blue-500/30">
+          <GitPullRequest className="h-4 w-4 text-blue-400 mt-0.5 shrink-0" />
+          <p className="text-sm text-blue-300">
+            Changes you save will be <strong>submitted for review</strong> before being applied.
+          </p>
+        </div>
+      )}
+
+      <div className="relative overflow-hidden rounded-xl bg-slate-900/40 border border-slate-800/60 backdrop-blur-xl shadow-xl p-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-6 bg-transparent border-b border-slate-800/60 rounded-none p-0 h-auto gap-8">
+            <TabsTrigger value="basic" className="relative rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent bg-transparent text-slate-400 data-[state=active]:text-amber-400 px-0 py-3">Basic</TabsTrigger>
+            <TabsTrigger value="acquired" disabled={isHomeProd} className="relative rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent bg-transparent text-slate-400 data-[state=active]:text-amber-400 px-0 py-3 disabled:opacity-40">Acquired</TabsTrigger>
+            <TabsTrigger value="rights" disabled={isHomeProd} className="relative rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent bg-transparent text-slate-400 data-[state=active]:text-amber-400 px-0 py-3 disabled:opacity-40">
+              Rights{isHomeProd && <span className="ml-1.5 text-[9px] font-bold uppercase tracking-widest text-emerald-500 border border-emerald-500/40 rounded px-1 py-0.5">All Yes</span>}
+            </TabsTrigger>
+            <TabsTrigger value="notes" className="relative rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent bg-transparent text-slate-400 data-[state=active]:text-amber-400 px-0 py-3">Notes</TabsTrigger>
+            <TabsTrigger value="people" className="relative rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent bg-transparent text-slate-400 data-[state=active]:text-amber-400 px-0 py-3">Cast & Crew</TabsTrigger>
+            <TabsTrigger value="approval" className="relative rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent bg-transparent text-slate-400 data-[state=active]:text-amber-400 px-0 py-3">
+              Approval
+              {approvalStatus === "rejected" && (
+                <span className="absolute top-2 -right-2 h-2 w-2 rounded-full bg-red-500" />
+              )}
+              {approvalStatus === "pending" && (
+                <span className="absolute top-2 -right-2 h-2 w-2 rounded-full bg-amber-500" />
+              )}
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="basic" className="space-y-4 mt-4">
+            <SectionCard title="Movie Information">
+              <div className="grid gap-4 md:grid-cols-2">
+                <FormField label="Title" required>
+                  <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Film title" className={`${inputCls} h-12 text-base font-semibold`} />
+                </FormField>
+                <FormField label="Production No.">
+                  <Input value={productionNo} onChange={(e) => setProductionNo(e.target.value)} placeholder="e.g., SVF-2024-001" className={inputCls} />
+                </FormField>
+
+                <FormField label="Release Date">
+                  <Input type="date" value={releaseDate} onChange={(e) => { setReleaseDate(e.target.value); if (e.target.value) setReleaseYear(new Date(e.target.value).getFullYear().toString()); }} className={inputCls} />
+                </FormField>
+                <FormField label="Release Year">
+                  <Input type="number" value={releaseYear} onChange={(e) => setReleaseYear(e.target.value)} placeholder="e.g., 2024" className={inputCls} />
+                </FormField>
+                <FormField label="Language">
+                  <LanguageSelector value={language} onValueChange={setLanguage} />
+                </FormField>
+
+                {/* Color / B&W — toggle pill */}
+                <FormField label="Color / B&W">
+                  <div className="inline-flex bg-slate-950/50 border border-slate-700/50 rounded-full p-0.5 gap-0.5">
+                    {["Color", "B&W"].map((opt) => (
+                      <button key={opt} type="button" onClick={() => setColorOrBw(opt)}
+                        className={["px-4 py-1.5 rounded-full text-sm font-semibold transition-all duration-150",
+                          colorOrBw === opt ? "bg-emerald-500/20 text-emerald-400" : "text-slate-500 hover:text-slate-300",
+                        ].join(" ")}>
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                </FormField>
+
+                <FormField label="WTP / Library">
+                  <Select value={wtpLibrary} onValueChange={setWtpLibrary}>
+                    <SelectTrigger className={selectCls}><SelectValue placeholder="Select..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="WTP">WTP</SelectItem>
+                      <SelectItem value="WTP/BD">WTP/BD</SelectItem>
+                      <SelectItem value="Library">Library</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </FormField>
+                <FormField label="Trailer Link">
+                  <Input value={trailerLink} onChange={(e) => setTrailerLink(e.target.value)} placeholder="YouTube URL" className={inputCls} />
+                </FormField>
+
+                {/* Source — cards */}
+                <div className="md:col-span-2">
+                  <FormField label="Source" required>
+                    <div className="grid grid-cols-2 gap-3 mt-1">
+                      {[
+                        { value: "home_production", label: "Home Production", desc: "Film produced in-house by SVF" },
+                        { value: "acquired", label: "Acquired", desc: "Rights acquired from a third party" },
+                      ].map((opt) => {
+                        const sel = source === opt.value;
+                        return (
+                          <button key={opt.value} type="button"
+                            onClick={() => { setSource(opt.value as MovieSource); if (opt.value === 'home_production' && natureOfRights === 'Non-Exclusive') setNatureOfRights(''); }}
+                            className={["text-left p-4 rounded-lg border-[1.5px] transition-all duration-150 cursor-pointer",
+                              sel ? "border-amber-500/70 bg-amber-500/10 shadow-[0_0_0_1px] shadow-amber-500/30"
+                                : "border-slate-700/50 bg-slate-950/40 hover:border-amber-500/30 hover:bg-amber-500/5",
+                            ].join(" ")}>
+                            <strong className={`block text-sm font-bold mb-0.5 ${sel ? "text-amber-400" : "text-slate-200"}`}>{opt.label}</strong>
+                            <span className="text-xs text-slate-500">{opt.desc}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </FormField>
+                </div>
+
+                {/* Nature of Rights — pill options */}
+                {isHomeProd && (
+                  <div className="md:col-span-2">
+                    <FormField label="Nature of Rights">
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {HOME_NATURE_OPTIONS.map((opt) => {
+                          const sel = natureOfRights === opt.value;
+                          return (
+                            <button key={opt.value} type="button"
+                              onClick={() => {
+                                const newVal = sel ? "" : opt.value;
+                                setNatureOfRights(newVal);
+                                const jointly = newVal === "Jointly Owned";
+                                const svfId = productionHouses.find(h => h.name.toLowerCase() === 'svf')?.id ?? null;
+                                if (jointly && svfId) {
+                                  setSelectedHouseIds(ids => {
+                                    const rest = ids.filter(id => id !== svfId && id !== "");
+                                    return [svfId, ...rest];
+                                  });
+                                } else if (!jointly) {
+                                  setSelectedHouseIds(ids => [ids[0] === svfId ? "" : (ids[0] || "")]);
+                                }
+                              }}
+                              className={["px-4 py-2 rounded-full border text-[12.5px] font-semibold transition-all duration-120 select-none",
+                                sel ? "bg-amber-500/12 border-amber-500/60 text-amber-400"
+                                  : "bg-slate-950/40 border-slate-700/40 text-slate-500 hover:text-slate-300",
+                              ].join(" ")}>
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </FormField>
+                  </div>
+                )}
+
+                {selectedHouseIds.map((houseId, index) => {
+                  const svfId = productionHouses.find(h => h.name.toLowerCase() === 'svf')?.id ?? null;
+                  const isJointly = isJointlyOwned && isHomeProd;
+                  const isSvfLocked = isJointly && index === 0 && svfId !== null && houseId === svfId;
+                  return (
+                    <div key={index} className="animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <Label className={labelCls}>
+                          Production House {isJointly ? index + 1 : ''}
+                        </Label>
+                        {isJointly && !isSvfLocked && index > 0 && (
+                          <Button variant="ghost" size="sm" className="h-6 text-xs text-red-400 hover:text-red-300"
+                            onClick={() => setSelectedHouseIds(ids => ids.filter((_, i) => i !== index))}>
+                            Remove
+                          </Button>
+                        )}
+                      </div>
+                      {isSvfLocked ? (
+                        <div className={`${selectCls} flex items-center px-3 rounded-md border opacity-70 cursor-not-allowed`}>
+                          <span className="text-slate-300 text-sm">SVF</span>
+                          <span className="ml-auto text-[10px] text-slate-500 uppercase tracking-widest">Default</span>
+                        </div>
+                      ) : (
+                        <Select value={houseId} onValueChange={(val) => setSelectedHouseIds(ids => { const n = [...ids]; n[index] = val; return n; })}>
+                          <SelectTrigger className={selectCls}><SelectValue placeholder="Select..." /></SelectTrigger>
+                          <SelectContent>
+                            {productionHouses
+                              .filter(h => {
+                                // Don't show already-selected houses in other slots
+                                if (selectedHouseIds.includes(h.id) && h.id !== houseId) return false;
+                                // In jointly+home mode, hide SVF from slots other than index 0 (it's locked there)
+                                if (isJointly && source === 'home_production' && h.id === svfId && index !== 0) return false;
+                                return true;
+                              })
+                              .map((h) => (<SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {isJointlyOwned && isHomeProd && (
+                  <div className="md:col-span-2 pt-1">
+                    <Button variant="outline" size="sm" onClick={() => setSelectedHouseIds(ids => [...ids, ""])}
+                      className="w-full border-dashed border-slate-700/50 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60">
+                      <Plus className="h-3 w-3 mr-1" /> Add Production House
+                    </Button>
+                  </div>
+                )}
+
+                {isJointlyOwned && isHomeProd && (
+                  <>
+                    <FormField label="Revenue Share">
+                      <Input placeholder="e.g., 50% / 50%" value={revenueShare} onChange={(e) => setRevenueShare(e.target.value)} className={inputCls} />
+                    </FormField>
+                    <FormField label="Joint Prod. Buy-Back Date">
+                      <Input type="date" value={jointProdBuyBackDate} onChange={(e) => setJointProdBuyBackDate(e.target.value)} className={inputCls} />
+                    </FormField>
+                    <div className="md:col-span-2">
+                      <FormField label="Exploitation Rights Held By" hint="Which production house currently holds the rights to exploit this title">
+                        <Select value={jointlyExploitationRights} onValueChange={setJointlyExploitationRights}>
+                          <SelectTrigger className={selectCls}><SelectValue placeholder="Select house…" /></SelectTrigger>
+                          <SelectContent>
+                            {selectedHouseIds
+                              .map(id => productionHouses.find(h => h.id === id))
+                              .filter((h): h is ProductionHouse => !!h)
+                              .map(h => <SelectItem key={h.id} value={h.name}>{h.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </FormField>
+                    </div>
+                  </>
+                )}
+
+                {/* Certification — chips */}
+                <div className="md:col-span-2">
+                  <FormField label="Certification">
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {CERTIFICATIONS.map((c) => {
+                        const sel = certification === c;
+                        return (
+                          <button key={c} type="button"
+                            onClick={() => { const newVal = sel ? "" : c; setCertification(newVal); setRecensorFlag(newVal === "A"); }}
+                            className={["px-3 py-1.5 rounded-full border text-xs font-semibold transition-all duration-100 select-none",
+                              sel ? "bg-amber-500/12 border-amber-500/60 text-amber-400"
+                                : "bg-slate-950/40 border-slate-700/40 text-slate-500 hover:text-slate-300",
+                            ].join(" ")}>
+                            {c}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </FormField>
+                </div>
+
+                <div className="md:col-span-2">
+                  <Label className={labelCls}>Poster</Label>
+                  <div className="mt-2">
+                    <FileUpload bucket="images" folder={`movies/${movieId}`} variant="image" accept=".jpg,.jpeg,.png,.webp" maxSizeMB={0.5} currentUrl={posterUrl} onUpload={setPosterUrl} onRemove={() => setPosterUrl("")} label="Upload movie poster" />
+                  </div>
+                </div>
+              </div>
+            </SectionCard>
+          </TabsContent>
+
+          <TabsContent value="acquired" className="space-y-4 mt-4">
+            <SectionCard title="Acquisition Details">
+              <div className="grid gap-4 md:grid-cols-2">
+                <FormField label="Assignor / Licensor">
+                  <Input value={assignorLicensor} onChange={(e) => setAssignorLicensor(e.target.value)} className={inputCls} />
+                </FormField>
+                <FormField label="Licensee">
+                  <Input value={licensee} onChange={(e) => setLicensee(e.target.value)} className={inputCls} />
+                </FormField>
+                <FormField label="Agreement Date">
+                  <Input type="date" value={agreementDate} onChange={(e) => setAgreementDate(e.target.value)} className={inputCls} />
+                </FormField>
+                <FormField label="Agreement Start">
+                  <Input type="date" value={agreementStartDate} onChange={(e) => setAgreementStartDate(e.target.value)} className={inputCls} />
+                </FormField>
+                <FormField label="Agreement End">
+                  <Input type="date" value={agreementEndDate} onChange={(e) => setAgreementEndDate(e.target.value)} className={inputCls} />
+                </FormField>
+              </div>
+            </SectionCard>
+          </TabsContent>
+
+          <TabsContent value="rights" className="space-y-4 mt-4">
+            <SectionCard title="Primary Rights">
+              <p className="text-xs text-slate-500 mb-3">Toggle <strong className="text-slate-300">Yes</strong> to expand details for each rights type.</p>
+              <div className="grid gap-3 md:grid-cols-2">
+                {/* Satellite */}
+                <RightsCard title="Satellite Rights" value={satelliteRights} onChange={setSatelliteRights}>
+                  <div className="space-y-2.5">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Classification</p>
+                      <MultiChips options={["Pay TV", "Free TV", "Pay Per View", "DTH"]}
+                        value={satelliteRightsClassification} onChange={setSatelliteRightsClassification} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Nature</p>
+                      <Select value={natureOfSatelliteRights} onValueChange={setNatureOfSatelliteRights}>
+                        <SelectTrigger className={`${selectCls} h-8 text-xs`}><SelectValue placeholder="Select…" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Exclusive">Exclusive</SelectItem>
+                          <SelectItem value="Non-exclusive">Non-exclusive</SelectItem>
+                          <SelectItem value="Shared Exclusive">Shared Exclusive</SelectItem>
+                          <SelectItem value="N/A">N/A</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Start</p>
+                        <Input type="date" value={satelliteRightsStartDate} onChange={(e) => setSatelliteRightsStartDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
+                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">End</p>
+                        <Input type="date" value={satelliteRightsEndDate} onChange={(e) => setSatelliteRightsEndDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
+                    </div>
+                  </div>
+                </RightsCard>
+
+                {/* Internet */}
+                <RightsCard title="Internet Rights" value={internetRights} onChange={setInternetRights}>
+                  <div className="space-y-2.5">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Classification</p>
+                      <MultiChips options={["AVOD", "FVOD", "SVOD", "NVOD", "TVOD", "IPTV"]}
+                        value={internetRightsClassification} onChange={setInternetRightsClassification} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Nature</p>
+                      <Select value={natureOfInternetRights} onValueChange={setNatureOfInternetRights}>
+                        <SelectTrigger className={`${selectCls} h-8 text-xs`}><SelectValue placeholder="Select…" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Exclusive">Exclusive</SelectItem>
+                          <SelectItem value="Non-exclusive">Non-exclusive</SelectItem>
+                          <SelectItem value="Shared Exclusive">Shared Exclusive</SelectItem>
+                          <SelectItem value="N/A">N/A</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Start</p>
+                        <Input type="date" value={internetRightsStartDate} onChange={(e) => setInternetRightsStartDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
+                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">End</p>
+                        <Input type="date" value={internetRightsEndDate} onChange={(e) => setInternetRightsEndDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
+                    </div>
+                  </div>
+                </RightsCard>
+
+                {/* Negative */}
+                <RightsCard title="Negative Rights" value={negativeRights} onChange={setNegativeRights}>
+                  <div className="space-y-2.5">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Nature</p>
+                      <Select value={natureOfNegativeRights} onValueChange={setNatureOfNegativeRights}>
+                        <SelectTrigger className={`${selectCls} h-8 text-xs`}><SelectValue placeholder="Select…" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Exclusive">Exclusive</SelectItem>
+                          <SelectItem value="Non-exclusive">Non-exclusive</SelectItem>
+                          <SelectItem value="Shared Exclusive">Shared Exclusive</SelectItem>
+                          <SelectItem value="N/A">N/A</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Start</p>
+                        <Input type="date" value={negativeRightsStartDate} onChange={(e) => setNegativeRightsStartDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
+                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">End</p>
+                        <Input type="date" value={negativeRightsEndDate} onChange={(e) => setNegativeRightsEndDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
+                    </div>
+                  </div>
+                </RightsCard>
+
+                {/* Other */}
+                <RightsCard title="Other Rights" value={otherRights} onChange={setOtherRights}>
+                  <div className="space-y-2.5">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Nature</p>
+                      <Select value={natureOfOtherRights} onValueChange={setNatureOfOtherRights}>
+                        <SelectTrigger className={`${selectCls} h-8 text-xs`}><SelectValue placeholder="Select…" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Exclusive">Exclusive</SelectItem>
+                          <SelectItem value="Non-exclusive">Non-exclusive</SelectItem>
+                          <SelectItem value="Shared Exclusive">Shared Exclusive</SelectItem>
+                          <SelectItem value="N/A">N/A</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Start</p>
+                        <Input type="date" value={otherRightsStartDate} onChange={(e) => setOtherRightsStartDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
+                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">End</p>
+                        <Input type="date" value={otherRightsEndDate} onChange={(e) => setOtherRightsEndDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
+                    </div>
+                  </div>
+                </RightsCard>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-slate-800/50">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-200">Syndication – Internet Rights</p>
+                    <p className="text-xs text-slate-500 mt-0.5">Sub-licensing for internet syndication</p>
+                  </div>
+                  <TogglePill value={syndicationInternetRights} onChange={setSyndicationInternetRights} />
+                </div>
+              </div>
+            </SectionCard>
+
+            <SectionCard title="Clip Rights">
+              <div className="grid gap-4 md:grid-cols-2">
+                <FormField label="Clip Rights Acquired">
+                  <TogglePill value={clipRights} onChange={setClipRights} />
+                </FormField>
+                <FormField label="Clip Rights Duration">
+                  <DurationInput value={clipRightsDuration} onChange={setClipRightsDuration} className={inputCls} />
+                </FormField>
+              </div>
+            </SectionCard>
+
+            <SectionCard title="Derivative Rights">
+              <div>
+                <InlineRightsRow label="Prequel / Sequel Rights" value={prequelSequelRights} onChange={setPrequelSequelRights} />
+                <InlineRightsRow label="Character Rights" value={characterRights} onChange={setCharacterRights} />
+                <InlineRightsRow label="Sub-Titling Rights" value={subtitlingRights} onChange={(v) => { setSubtitlingRights(v); if (v !== "Yes") setSubtitlingLang(""); }}
+                  langValue={subtitlingLang} onLangChange={setSubtitlingLang} />
+                {subtitlingRights === "Yes" && subtitlingLang && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 mb-1 rounded-md bg-slate-950/60 border border-slate-800/60">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 shrink-0">DB value:</span>
+                    <span className="text-[11px] text-slate-400 font-mono">Yes: {subtitlingLang}</span>
+                  </div>
+                )}
+                <InlineRightsRow label="Dubbing Rights" value={dubbingRights} onChange={(v) => { setDubbingRights(v); if (v !== "Yes") setDubbingLang(""); }}
+                  langValue={dubbingLang} onLangChange={setDubbingLang} />
+                {dubbingRights === "Yes" && dubbingLang && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-slate-950/60 border border-slate-800/60">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 shrink-0">DB value:</span>
+                    <span className="text-[11px] text-slate-400 font-mono">Yes: {dubbingLang}</span>
+                  </div>
+                )}
+              </div>
+            </SectionCard>
+          </TabsContent>
+
+          <TabsContent value="notes" className="space-y-4 mt-4">
+            <SectionCard title="Notes & Holdbacks">
+              <div className="space-y-4">
+                <FormField label="Holdbacks apply to">
+                  <div className="mt-1">
+                    <HoldbackPicker value={holdbacks} onChange={setHoldbacks} />
+                  </div>
+                </FormField>
+                <FormField label="Remarks">
+                  <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={3} className={textareaCls} />
+                </FormField>
+                <FormField label="Actionables">
+                  <Textarea value={actionables} onChange={(e) => setActionables(e.target.value)} rows={3} className={textareaCls} />
+                </FormField>
+                <div className="flex items-start gap-3 rounded-lg border border-slate-800/60 p-3 bg-slate-950/20">
+                  <Checkbox
+                    id="recensor_flag"
+                    checked={recensorFlag}
+                    onCheckedChange={(v) => setRecensorFlag(Boolean(v))}
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <Label htmlFor="recensor_flag" className="cursor-pointer font-medium text-slate-200">Censor Flag</Label>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Auto-enabled for &quot;A&quot; certified movies. Monthly recensor reminders are sent to admins while this is on. Uncheck to stop notifications.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </SectionCard>
+          </TabsContent>
+
+          <TabsContent value="people" className="space-y-4 mt-4">
+            <SectionCard title="Cast & Crew">
+              <p className="text-xs text-slate-400 mb-4">
+                Search existing people and link them. To add a new person first go to the{" "}
+                <Link href="/people" className="underline underline-offset-2 hover:text-slate-300">People directory</Link>.
+              </p>
+
+              {/* Cast */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-semibold text-slate-200">Cast (Actors)</Label>
+                  <Button variant="ghost" size="sm" onClick={() => { setAddingRole(addingRole === "cast" ? null : "cast"); setPersonSearch(""); setPersonResults([]); }} className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 h-8 px-3">
+                    <Plus className="h-3 w-3 mr-1" />{addingRole === "cast" ? "Cancel" : "Add Actor"}
+                  </Button>
+                </div>
+                {addingRole === "cast" && (
+                  <div className="space-y-2 p-3 border border-slate-800/60 rounded-lg bg-slate-950/40">
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+                      <Input placeholder="Search people by name…" value={personSearch} onChange={(e) => handlePersonSearch(e.target.value)} className={`${inputCls} pl-8`} autoFocus />
+                    </div>
+                    {searchingPeople && <div className="flex items-center gap-2 text-sm text-slate-400"><Loader2 className="h-3 w-3 animate-spin" />Searching…</div>}
+                    {personResults.length > 0 && (
+                      <div className="border border-slate-800/60 rounded-lg max-h-40 overflow-y-auto bg-slate-950/20">
+                        {personResults.map((p) => (
+                          <button key={p.id} className="w-full px-3 py-1.5 text-left text-sm text-slate-200 hover:bg-slate-800/40 flex items-center justify-between border-b border-slate-800/40 last:border-0" onClick={() => handleAddCast(p)}>
+                            <span>{p.name}</span>
+                            {p.role && <span className="text-xs text-slate-500 capitalize">{p.role}</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {personSearch.length >= 2 && !searchingPeople && personResults.length === 0 && (
+                      <p className="text-xs text-slate-500 px-1">No results. <Link href="/people" className="underline underline-offset-2 text-slate-400 hover:text-slate-300">Create the person</Link> in the People directory first.</p>
+                    )}
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  {cast.map((m) => (
+                    <Badge key={m.id} variant="secondary" className="gap-1 pr-1 bg-amber-500/20 text-amber-300 border-amber-500/30">
+                      {m.person?.name || "Unknown"}
+                      <button onClick={() => handleRemoveCast(m)} className="ml-1 rounded-full hover:bg-amber-500/30 p-0.5"><X className="h-3 w-3" /></button>
+                    </Badge>
+                  ))}
+                  {cast.length === 0 && <span className="text-sm text-slate-500">No cast members linked</span>}
+                </div>
+              </div>
+
+              {/* Directors */}
+              <div className="space-y-4 pt-4 border-t border-slate-800/60">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-semibold text-slate-200">Directors</Label>
+                  <Button variant="ghost" size="sm" onClick={() => { setAddingRole(addingRole === "director" ? null : "director"); setPersonSearch(""); setPersonResults([]); }} className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 h-8 px-3">
+                    <Plus className="h-3 w-3 mr-1" />{addingRole === "director" ? "Cancel" : "Add Director"}
+                  </Button>
+                </div>
+                {addingRole === "director" && (
+                  <div className="space-y-2 p-3 border border-slate-800/60 rounded-lg bg-slate-950/40">
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+                      <Input placeholder="Search people by name…" value={personSearch} onChange={(e) => handlePersonSearch(e.target.value)} className={`${inputCls} pl-8`} autoFocus />
+                    </div>
+                    {searchingPeople && <div className="flex items-center gap-2 text-sm text-slate-400"><Loader2 className="h-3 w-3 animate-spin" />Searching…</div>}
+                    {personResults.length > 0 && (
+                      <div className="border border-slate-800/60 rounded-lg max-h-40 overflow-y-auto bg-slate-950/20">
+                        {personResults.map((p) => (
+                          <button key={p.id} className="w-full px-3 py-1.5 text-left text-sm text-slate-200 hover:bg-slate-800/40 flex items-center justify-between border-b border-slate-800/40 last:border-0" onClick={() => handleAddDirector(p)}>
+                            <span>{p.name}</span>
+                            {p.role && <span className="text-xs text-slate-500 capitalize">{p.role}</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {personSearch.length >= 2 && !searchingPeople && personResults.length === 0 && (
+                      <p className="text-xs text-slate-500 px-1">No results. <Link href="/people" className="underline underline-offset-2 text-slate-400 hover:text-slate-300">Create the person</Link> in the People directory first.</p>
+                    )}
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  {directors.map((d) => (
+                    <Badge key={d.id} variant="secondary" className="gap-1 pr-1 bg-blue-500/20 text-blue-300 border-blue-500/30">
+                      {d.person?.name || "Unknown"}
+                      <button onClick={() => handleRemoveDirector(d)} className="ml-1 rounded-full hover:bg-blue-500/30 p-0.5"><X className="h-3 w-3" /></button>
+                    </Badge>
+                  ))}
+                  {directors.length === 0 && <span className="text-sm text-slate-500">No directors linked</span>}
+                </div>
+              </div>
+            </SectionCard>
+          </TabsContent>
+
+          <TabsContent value="approval" className="space-y-6 mt-4">
+            <SectionCard title="Approval Status">
+              <div className="space-y-4">
+                {/* Current status */}
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-950/40 border border-slate-800/60">
+                  <span className="text-xs font-bold uppercase tracking-widest text-slate-500">Current Status:</span>
+                  {approvalStatus === "approved" && (
+                    <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-400">
+                      <CheckCircle className="h-4 w-4" /> Approved
+                    </span>
+                  )}
+                  {approvalStatus === "pending" && (
+                    <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-amber-400">
+                      <Clock className="h-4 w-4" /> Pending Review
+                    </span>
+                  )}
+                  {approvalStatus === "rejected" && (
+                    <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-red-400">
+                      <XCircle className="h-4 w-4" /> Rejected
+                    </span>
+                  )}
+                  {!approvalStatus && <span className="text-sm text-slate-500">—</span>}
+                </div>
+
+                {/* Rejection reason + resubmit */}
+                {approvalStatus === "rejected" && (() => {
+                  const lastRejection = approvalHistory.find(h => h.status === "rejected");
+                  return (
+                    <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 space-y-3">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <p className="text-sm font-semibold text-red-400">Rejection reason</p>
+                          {lastRejection?.reason ? (
+                            <p className="text-sm text-slate-300 italic">&quot;{lastRejection.reason}&quot;</p>
+                          ) : (
+                            <p className="text-sm text-slate-500">No reason provided.</p>
+                          )}
+                          {lastRejection?.reviewer_name && (
+                            <p className="text-xs text-slate-500">— {lastRejection.reviewer_name}</p>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        Fix the issues above using the other tabs, then resubmit for review.
+                      </p>
+                      <Button
+                        onClick={handleResubmit}
+                        disabled={resubmitting}
+                        size="sm"
+                        className="bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 border border-amber-500/30"
+                        variant="outline"
+                      >
+                        {resubmitting
+                          ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Resubmitting…</>
+                          : <><RotateCcw className="h-3.5 w-3.5 mr-1.5" />Resubmit for Approval</>
+                        }
+                      </Button>
+                    </div>
+                  );
+                })()}
+
+                {approvalStatus === "pending" && (() => {
+                  const lastRejection = approvalHistory.find(h => h.status === "rejected");
+                  return (
+                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 space-y-3">
+                      <div className="flex items-start gap-2">
+                        <Clock className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <p className="text-sm font-semibold text-amber-400">Awaiting legal review</p>
+                          <p className="text-xs text-slate-400">
+                            This movie is in the approval queue. If you make changes here, it will be resubmitted automatically when you save.
+                          </p>
+                          {lastRejection?.reason && (
+                            <p className="text-xs text-slate-400 mt-1 italic">
+                              Previous rejection: &quot;{lastRejection.reason}&quot;
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <Button
+                        onClick={handleResubmit}
+                        disabled={resubmitting}
+                        size="sm"
+                        className="bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 border border-amber-500/30"
+                        variant="outline"
+                      >
+                        {resubmitting
+                          ? <><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />Resubmitting…</>
+                          : <><RotateCcw className="h-3.5 w-3.5 mr-1.5" />Resubmit for Approval</>
+                        }
+                      </Button>
+                    </div>
+                  );
+                })()}
+
+                {approvalStatus === "approved" && (
+                  <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-300 flex items-start gap-2">
+                    <CheckCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <span>This movie has been approved and is live in the catalog. Approval status cannot be changed.</span>
+                  </div>
+                )}
+              </div>
+            </SectionCard>
+
+            {/* Pending field/people/rights changes */}
+            {pendingChanges.length > 0 && (
+              <SectionCard title="Pending Change Requests">
+                <div className="space-y-3">
+                  {pendingChanges.map((c) => (
+                    <div key={c.id} className={`p-3 rounded-lg border text-sm space-y-1 ${c.status === "pending" ? "bg-amber-500/10 border-amber-500/30" :
+                      c.status === "approved" ? "bg-emerald-500/10 border-emerald-500/30" :
+                        "bg-red-500/10 border-red-500/30"
+                      }`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium text-slate-200">{c.change_summary}</span>
+                        <span className={`text-xs font-semibold uppercase tracking-wide ${c.status === "pending" ? "text-amber-400" :
+                          c.status === "approved" ? "text-emerald-400" : "text-red-400"
+                          }`}>{c.status}</span>
+                      </div>
+                      {c.change_type === "movie_fields" && c.status === "pending" && (() => {
+                        const before = (c.payload.before || {}) as Record<string, unknown>;
+                        const after = (c.payload.after || {}) as Record<string, unknown>;
+                        const changed = Object.keys(after).filter(k => JSON.stringify(before[k]) !== JSON.stringify(after[k]));
+                        return (
+                          <div className="mt-2 space-y-1">
+                            {changed.map(k => (
+                              <div key={k} className="text-xs grid grid-cols-3 gap-2">
+                                <span className="text-slate-500 uppercase tracking-wide">{k.replace(/_/g, " ")}</span>
+                                <span className="text-red-400 line-through truncate">{String(before[k] ?? "—")}</span>
+                                <span className="text-emerald-400 truncate">{String(after[k] ?? "—")}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                      {c.reason && <p className="text-xs text-slate-400 italic">"{c.reason}"</p>}
+                      <p className="text-xs text-slate-500">
+                        {c.changed_by_name && `by ${c.changed_by_name} · `}
+                        {new Date(c.created_at).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </SectionCard>
+            )}
+
+            {/* Approval history */}
+            {approvalHistory.length > 0 && (
+              <SectionCard title="Approval History">
+                <div className="space-y-3">
+                  {approvalHistory.map((entry) => (
+                    <div key={entry.id} className="flex items-start gap-3 text-sm p-3 rounded-lg bg-slate-950/40 border border-slate-800/60">
+                      <div className="mt-0.5 shrink-0">
+                        {entry.status === "approved"
+                          ? <CheckCircle className="h-4 w-4 text-emerald-400" />
+                          : entry.status === "rejected"
+                            ? <XCircle className="h-4 w-4 text-red-400" />
+                            : <Clock className="h-4 w-4 text-amber-400" />}
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-slate-200 font-medium capitalize">{entry.status}</p>
+                        {entry.reviewer_name && <p className="text-slate-400 text-xs">by {entry.reviewer_name}</p>}
+                        {entry.reason && <p className="text-slate-400 text-xs mt-0.5 italic">&quot;{entry.reason}&quot;</p>}
+                        <p className="text-slate-500 text-xs mt-0.5">
+                          {entry.created_at
+                            ? new Date(entry.created_at).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
+                            : "—"}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </SectionCard>
+            )}
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      {/* ── Actions ── */}
+      <div className="flex justify-end gap-3">
+        <Link href="/movies">
+          <Button variant="outline" className="border-slate-700/50 text-slate-300 hover:bg-slate-800/60">
+            Cancel
+          </Button>
+        </Link>
+        <Button
+          onClick={handleSave}
+          disabled={saving || !title.trim()}
+          className="bg-amber-600 hover:bg-amber-500 text-white border-0 shadow-lg shadow-amber-900/30 min-w-[140px]"
+        >
+          {saving
+            ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{isApproved ? "Submitting..." : "Saving..."}</>
+            : isApproved ? <><GitPullRequest className="mr-2 h-4 w-4" />Submit for Approval</> : "Save Changes"}
+        </Button>
+      </div>
+    </div>
+  );
+}

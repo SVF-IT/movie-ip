@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/notifications/send-alerts",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/notifications/daily-digest",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/notifications/recensor-reminders",
+      "schedule": "0 9 1 * *"
+    }
+  ]
+}
