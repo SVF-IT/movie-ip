@@ -939,7 +939,7 @@ async function processHomeRow(
     nature_of_rights: natureOfRights,
     remarks: cleanString(row['Remarks']),
     actionables: cleanString(row['Actionable']),
-    holdbacks: parseHoldbacks(row['Holdbacks']),
+    holdbacks: parseHoldbacks(row['Holdbacks'] ?? row['Holdback']),
     territory: 'World',
     // Jointly owned extras
     jointly_exploitation_rights: jointExploitKey ? preserveRawText(row[jointExploitKey]) : null,
@@ -981,12 +981,15 @@ async function processHomeRow(
     created_by: userId,
   }
 
+  const castKey     = findColumnByPattern(keys, ['Cast Details', 'Cast'])
+  const directorKey = findColumnByPattern(keys, ['Director'])
+
   if (existingId && resolution === 'update') {
     await cache.updateMovie(existingId, movieData)
     const movieId = existingId
 
     // Re-link cast & directors on update too
-    await relinkPeople(row, cache, movieId)
+    await relinkPeople(row, cache, movieId, castKey, directorKey)
     return 'updated'
   }
 
@@ -996,7 +999,7 @@ async function processHomeRow(
   // Register in cache so duplicate rows in the same sheet are caught
   cache.movies.set(titleKey, movieId)
 
-  await relinkPeople(row, cache, movieId)
+  await relinkPeople(row, cache, movieId, castKey, directorKey)
   return 'created'
 }
 
