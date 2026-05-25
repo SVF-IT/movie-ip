@@ -349,11 +349,7 @@ class CacheStore {
     const key = cleaned.toLowerCase().trim()
     if (this.people.has(key)) return this.people.get(key)!
 
-    const { data, error } = await this.supabase
-      .from('people')
-      .insert({ name: cleaned.trim() })
-      .select('id')
-      .single()
+    const { data, error } = await this.supabase.from('people').insert({ name: cleaned.trim() }).select('id').single()
 
     if (error) {
       const { data: existing } = await this.supabase.from('people').select('id').ilike('name', cleaned.trim()).single()
@@ -452,6 +448,8 @@ class CacheStore {
       if (v !== undefined && v !== '') cleaned[k] = v
     }
 
+    if (!cleaned.wtp_library) cleaned.wtp_library = 'WTP'
+
     const { data, error } = await this.supabase.from('movies').insert(cleaned).select('id').single()
     if (error) throw new Error(`Failed to create movie "${title}": ${error.message}`)
 
@@ -521,7 +519,6 @@ class CacheStore {
     this.stats.platformRightsCreated++
     return data.id
   }
-
 }
 
 // ============================================
@@ -886,7 +883,12 @@ async function processHomeRow(
   // ── Language ─────────────────────────────────────────────────
   const langKey = findColumnByPattern(keys, ['Language'])
   const languageRaw = langKey ? row[langKey] : null
-  const language = languageRaw ? languageRaw.trim().replace(/\s*[Dd]ubbed\s*/g, '').trim() : null
+  const language = languageRaw
+    ? languageRaw
+        .trim()
+        .replace(/\s*[Dd]ubbed\s*/g, '')
+        .trim()
+    : null
 
   // ── Production houses ────────────────────────────────────────
   // Split by comma only (not & or -)
@@ -894,7 +896,10 @@ async function processHomeRow(
   const rawProductionHouse = cleanString(row['Production House'])
   if (rawProductionHouse) {
     productionHouseName = rawProductionHouse.trim()
-    const parts = rawProductionHouse.split(',').map((p) => p.trim()).filter(Boolean)
+    const parts = rawProductionHouse
+      .split(',')
+      .map((p) => p.trim())
+      .filter(Boolean)
     for (const part of parts) {
       await cache.getOrCreateProductionHouse(part)
     }
@@ -904,10 +909,8 @@ async function processHomeRow(
   const rawDate = cleanString(row['Theatrical Release Date'])
   // If it parses as a proper date, store formatted; otherwise store the raw text (e.g. "UNRELEASED")
   const parsedDate = rawDate ? parseDate(rawDate) : null
-  const releaseDate = parsedDate ?? rawDate  // raw text fallback
-  const releaseYear = parsedDate
-    ? parsedDate.split('-')[0]
-    : rawDate && /^\d{4}$/.test(rawDate.trim()) ? rawDate.trim() : null
+  const releaseDate = parsedDate ?? rawDate // raw text fallback
+  const releaseYear = parsedDate ? parsedDate.split('-')[0] : rawDate && /^\d{4}$/.test(rawDate.trim()) ? rawDate.trim() : null
 
   // ── Recensor flag ────────────────────────────────────────────
   const cert = normalizeCertification(row['Censor'])
@@ -981,7 +984,7 @@ async function processHomeRow(
     created_by: userId,
   }
 
-  const castKey     = findColumnByPattern(keys, ['Cast Details', 'Cast'])
+  const castKey = findColumnByPattern(keys, ['Cast Details', 'Cast'])
   const directorKey = findColumnByPattern(keys, ['Director'])
 
   if (existingId && resolution === 'update') {
@@ -1074,7 +1077,10 @@ async function processAcquiredRow(
   const rawProductionHouse = productionHouseKey ? cleanString(row[productionHouseKey]) : null
   if (rawProductionHouse) {
     if (rawProductionHouse.includes('&') || rawProductionHouse.includes('-') || rawProductionHouse.includes(',')) {
-      for (const part of rawProductionHouse.split(/[&,-]/).map((p) => p.trim()).filter(Boolean)) {
+      for (const part of rawProductionHouse
+        .split(/[&,-]/)
+        .map((p) => p.trim())
+        .filter(Boolean)) {
         await cache.getOrCreateProductionHouse(part)
       }
     } else {
@@ -1085,7 +1091,12 @@ async function processAcquiredRow(
   // ── Language ─────────────────────────────────────────────
   const langKey = findColumnByPattern(keys, ['Language'])
   const languageRaw = langKey ? row[langKey] : null
-  const language = languageRaw ? languageRaw.trim().replace(/\s*[Dd]ubbed\s*/g, '').trim() : null
+  const language = languageRaw
+    ? languageRaw
+        .trim()
+        .replace(/\s*[Dd]ubbed\s*/g, '')
+        .trim()
+    : null
 
   // ── Assignor / Licensor ──────────────────────────────────
   const assignorKey = findColumnByPattern(keys, ['Assignor', 'Licensor', 'Assignor/ Licensor', 'Assignor/Licensor'])
@@ -1096,28 +1107,24 @@ async function processAcquiredRow(
   const licenseeVal = cleanString(col(row, licenseeKey))
 
   // ── Agreement dates ──────────────────────────────────────
-  const agrmtDateKey    = findColumnByPattern(keys, ['Date of Agreement', 'Agreement Date'])
-  const agrmtStartKey   = findColumnByPattern(keys, ['Agreement Start Date'])
-  const agrmtEndKey     = findColumnByPattern(keys, ['Agreement End Date'])
+  const agrmtDateKey = findColumnByPattern(keys, ['Date of Agreement', 'Agreement Date'])
+  const agrmtStartKey = findColumnByPattern(keys, ['Agreement Start Date'])
+  const agrmtEndKey = findColumnByPattern(keys, ['Agreement End Date'])
 
   // ── Certification / color ────────────────────────────────
-  const certKey     = findColumnByPattern(keys, ['Certification', 'Censor'])
-  const colorKey    = findColumnByPattern(keys, ['Color/B/W', 'Color / B/W', 'Colour'])
+  const certKey = findColumnByPattern(keys, ['Certification', 'Certif'])
+  const colorKey = findColumnByPattern(keys, ['Color/B/W', 'Color / B/W', 'Colour'])
 
   // ── Primary Rights Yes/No flags ──────────────────────────
   // Blank cell = 'No' (not licensed). Other Rights may also contain a name (e.g. "Cable TV") — store as-is.
-  const satRightsKey  = findColumnByPattern(keys, ['Satellite Rights'])
-  const intRightsKey  = findColumnByPattern(keys, ['Internet Rights'])
-  const negRightsKey  = findColumnByPattern(keys, ['Negative Rights'])
-  const othRightsKey  = findColumnByPattern(keys, ['Other Rights', 'Others'])
+  const satRightsKey = findColumnByPattern(keys, ['Satellite Rights'])
+  const intRightsKey = findColumnByPattern(keys, ['Internet Rights'])
+  const negRightsKey = findColumnByPattern(keys, ['Negative Rights'])
+  const othRightsKey = findColumnByPattern(keys, ['Other Rights', 'Others'])
 
   // ── Rights sub-classifications ───────────────────────────
   const satClassKey = findColumnByPattern(keys, ['Satellite Rights Classification', 'Satellite Classification'])
-  const internetClassKey = findColumnByPattern(keys, [
-    'Internet Classification',
-    'Internet Rights - Classification',
-    'Internet Rights Classification',
-  ])
+  const internetClassKey = findColumnByPattern(keys, ['Internet Classification', 'Internet Rights - Classification', 'Internet Rights Classification'])
 
   // ── Holdbacks: explicit column first, then positional fallback after Internet Classification ──
   const hbKey = findColumnByPattern(keys, ['Holdbacks', 'Holdback'])
@@ -1136,33 +1143,33 @@ async function processAcquiredRow(
 
   // ── Per-right date ranges ────────────────────────────────
   const satStartKey = findColumnByPattern(keys, ['Satellite Rights Start Date', 'Satellite Start Date'])
-  const satEndKey   = findColumnByPattern(keys, ['Satellite Rights End Date',   'Satellite End Date'])
-  const intStartKey = findColumnByPattern(keys, ['Internet Rights Start Date',  'Internet Start Date'])
-  const intEndKey   = findColumnByPattern(keys, ['Internet Rights End Date',    'Internet End Date'])
-  const negStartKey = findColumnByPattern(keys, ['Negative Rights Start Date',  'Negative Start Date'])
-  const negEndKey   = findColumnByPattern(keys, ['Negative Rights End Date',    'Negative End Date'])
-  const othStartKey = findColumnByPattern(keys, ['Other Rights Start Date',     'Other Start Date'])
-  const othEndKey   = findColumnByPattern(keys, ['Other Rights End Date',       'Other End Date'])
+  const satEndKey = findColumnByPattern(keys, ['Satellite Rights End Date', 'Satellite End Date'])
+  const intStartKey = findColumnByPattern(keys, ['Internet Rights Start Date', 'Internet Start Date'])
+  const intEndKey = findColumnByPattern(keys, ['Internet Rights End Date', 'Internet End Date'])
+  const negStartKey = findColumnByPattern(keys, ['Negative Rights Start Date', 'Negative Start Date'])
+  const negEndKey = findColumnByPattern(keys, ['Negative Rights End Date', 'Negative End Date'])
+  const othStartKey = findColumnByPattern(keys, ['Other Rights Start Date', 'Other Start Date'])
+  const othEndKey = findColumnByPattern(keys, ['Other Rights End Date', 'Other End Date'])
 
   // ── Clip rights ──────────────────────────────────────────
-  const clipRightsKey  = findColumnByPattern(keys, ['Clip Rights'])
-  const clipDurKey     = findColumnByPattern(keys, ['Duration', 'Clip Rights Duration'])
+  const clipRightsKey = findColumnByPattern(keys, ['Clip Rights'])
+  const clipDurKey = findColumnByPattern(keys, ['Duration', 'Clip Rights Duration'])
 
   // ── Syndication ──────────────────────────────────────────
   const syndicationKey = findColumnByPattern(keys, ['Syndication- Internet Rights', 'Syndication - Internet Rights', 'Syndication'])
 
   // ── Derivative / secondary ───────────────────────────────
-  const preqSeqKey      = findColumnByPattern(keys, ['Prequel/ Sequel Rights', 'Prequel/Sequel Rights', 'Prequel Sequel'])
-  const charRightsKey   = findColumnByPattern(keys, ['Character Rights'])
-  const subtitleKey     = findColumnByPattern(keys, ['Sub-Titling Rights', 'Subtitling Rights', 'Sub Titling'])
-  const dubbingKey      = findColumnByPattern(keys, ['Dubbing Rights'])
+  const preqSeqKey = findColumnByPattern(keys, ['Prequel/ Sequel Rights', 'Prequel/Sequel Rights', 'Prequel Sequel'])
+  const charRightsKey = findColumnByPattern(keys, ['Character Rights'])
+  const subtitleKey = findColumnByPattern(keys, ['Sub-Titling Rights', 'Subtitling Rights', 'Sub Titling'])
+  const dubbingKey = findColumnByPattern(keys, ['Dubbing Rights'])
 
   // ── Other metadata ───────────────────────────────────────
-  const territoryKey    = findColumnByPattern(keys, ['Territory'])
-  const remarksKey      = findColumnByPattern(keys, ['Remarks'])
-  const actionablesKey  = findColumnByPattern(keys, ['Actionables', 'Actionable'])
-  const castKey         = findColumnByPattern(keys, ['Cast Details', 'Cast'])
-  const directorKey     = findColumnByPattern(keys, ['Director'])
+  const territoryKey = findColumnByPattern(keys, ['Territory'])
+  const remarksKey = findColumnByPattern(keys, ['Remarks'])
+  const actionablesKey = findColumnByPattern(keys, ['Actionables', 'Actionable'])
+  const castKey = findColumnByPattern(keys, ['Cast Details', 'Cast'])
+  const directorKey = findColumnByPattern(keys, ['Director'])
 
   // ── Build movie record ───────────────────────────────────
   const movieData: Record<string, unknown> = {
@@ -1262,10 +1269,7 @@ function detectCSVFormat(headers: string[]): 'home' | 'acquired' | 'unknown' {
   return 'unknown'
 }
 
-function validateHeaders(
-  headers: string[],
-  format: 'home' | 'acquired',
-): { valid: boolean; error?: string; warnings: string[] } {
+function validateHeaders(headers: string[], format: 'home' | 'acquired'): { valid: boolean; error?: string; warnings: string[] } {
   const headersLower = headers.map((h) => h.toLowerCase().trim())
   const warnings: string[] = []
 
@@ -1273,9 +1277,7 @@ function validateHeaders(
     if (!headersLower.some((h) => h === 'title')) {
       return {
         valid: false,
-        error:
-          "Home production CSV is missing the required 'Title' column. " +
-          `First columns found: ${headers.slice(0, 10).join(', ')}`,
+        error: "Home production CSV is missing the required 'Title' column. " + `First columns found: ${headers.slice(0, 10).join(', ')}`,
         warnings: [],
       }
     }
@@ -1287,16 +1289,11 @@ function validateHeaders(
     }
   } else {
     // Only Movie Name is required for acquired — every other column is optional
-    const hasMovieName =
-      headersLower.some((h) => h === 'movie name') ||
-      headersLower.some((h) => h === 'movie title') ||
-      headersLower.some((h) => h === 'title')
+    const hasMovieName = headersLower.some((h) => h === 'movie name') || headersLower.some((h) => h === 'movie title') || headersLower.some((h) => h === 'title')
     if (!hasMovieName) {
       return {
         valid: false,
-        error:
-          "Acquired CSV is missing the required 'Movie Name' column. " +
-          `First columns found: ${headers.slice(0, 10).join(', ')}`,
+        error: "Acquired CSV is missing the required 'Movie Name' column. " + `First columns found: ${headers.slice(0, 10).join(', ')}`,
         warnings: [],
       }
     }
@@ -1358,76 +1355,61 @@ export async function POST(request: Request) {
 
     // 3. Parse CSV
     const text = await file.text()
+    const cleanText = text.replace(/^﻿/, '') // strip BOM
 
-    // First pass: scan lines directly to find header structure.
-    // Acquired format has up to 3 preamble rows before data:
-    //   Line 0: section groupings (all-comma or sparse — no 'movie name')
-    //   Line 1: "Movie Name,,,,Primary Rights,,,..." — 'movie name' at col 0
-    //   Line 2: ",Assignor/ Licensor,Licensee,..." — first cell blank, real sub-column names
-    //   Line 3+: data rows
-    // Home format: first non-preamble line is "Title,Production No,..."
-    // We scan ALL lines (not just PapaParse rows) to avoid issues with PapaParse
-    // silently skipping comma-only lines in skipEmptyLines:false mode.
-    const textLines = text.replace(/^﻿/, '').split(/\r?\n/) // strip BOM if present
+    // Use PapaParse for all row extraction — it correctly handles quoted newlines
+    // (e.g. "Syndication- Internet Rights\n(Y/N)" stays as one cell, not two lines).
+    //
+    // Acquired format: up to 3 preamble rows before data
+    //   Row 0: section groupings (sparse — no 'movie name')
+    //   Row 1: "Movie Name,,,,Primary Rights,..." — primary header
+    //   Row 2: ",Assignor/ Licensor,Licensee,..." — sub-header (first cell empty)
+    //   Row 3+: data rows
+    // Home format: first non-preamble row is "Title,Production No,..."
 
-    // Parse each line into cells using a simple CSV split (handles quoted commas)
-    const parseCSVLine = (line: string): string[] => {
-      const result: string[] = []
-      let cur = ''
-      let inQuote = false
-      for (let i = 0; i < line.length; i++) {
-        const ch = line[i]
-        if (ch === '"') {
-          if (inQuote && line[i + 1] === '"') { cur += '"'; i++ }
-          else inQuote = !inQuote
-        } else if (ch === ',' && !inQuote) {
-          result.push(cur); cur = ''
-        } else {
-          cur += ch
-        }
-      }
-      result.push(cur)
-      return result
-    }
+    // Parse first 12 rows (enough to cover all preamble) without skipping empties
+    const preambleParsed = Papa.parse<string[]>(cleanText, {
+      header: false,
+      skipEmptyLines: false,
+      preview: 12,
+    })
+    const preambleRows: string[][] = preambleParsed.data as string[][]
 
-    // Find the line index of the primary header (contains 'movie name' or 'title')
-    let headerLineIndex = 0
-    for (let i = 0; i < Math.min(textLines.length, 8); i++) {
-      const cells = parseCSVLine(textLines[i]).map(c => c.toLowerCase().trim())
-      if (cells.some(c => c === 'movie name' || c === 'title' || c.includes('production no'))) {
-        headerLineIndex = i
+    // Find which row index contains the primary header
+    let headerRowIndex = 0
+    for (let i = 0; i < preambleRows.length; i++) {
+      const lower = preambleRows[i].map((c) => c.toLowerCase().trim())
+      if (lower.some((c) => c === 'movie name' || c === 'title' || c.includes('production no'))) {
+        headerRowIndex = i
         break
       }
     }
 
-    // Check if the NEXT line is a sub-header row (acquired pattern):
-    //   first cell empty + at least 3 non-empty real field names
+    // Check if the NEXT row is a sub-header (first cell empty + ≥3 real field names)
     const examplePatterns = ['yes/no', 'dd/mm/yyyy', 'yyyy', 'text', 'color/b/w']
-    let subHeaderLineIndex: number | null = null
-    const nextLineIdx = headerLineIndex + 1
-    if (nextLineIdx < textLines.length && textLines[nextLineIdx] !== '') {
-      const nextCells = parseCSVLine(textLines[nextLineIdx])
+    let subHeaderRowIndex: number | null = null
+    const nextRowIdx = headerRowIndex + 1
+    if (nextRowIdx < preambleRows.length) {
+      const nextCells = preambleRows[nextRowIdx]
       const firstEmpty = !nextCells[0] || nextCells[0].trim() === ''
-      const nonEmpty = nextCells.filter(c => c.trim() !== '')
-      const isExample = nonEmpty.filter(c =>
-        examplePatterns.some(p => c.toLowerCase().trim().startsWith(p))
-      ).length >= 3
+      const nonEmpty = nextCells.filter((c) => c.trim() !== '')
+      const isExample = nonEmpty.filter((c) => examplePatterns.some((p) => c.toLowerCase().trim().startsWith(p))).length >= 3
       if (firstEmpty && nonEmpty.length >= 3 && !isExample) {
-        subHeaderLineIndex = nextLineIdx
+        subHeaderRowIndex = nextRowIdx
       }
     }
 
-    // Build synthetic merged header: for each col, use sub-header cell if non-empty,
-    // else use primary header cell. De-duplicate repeated names with _2, _3 suffixes.
+    // Build synthetic merged header: sub-row cell wins when non-empty, else primary-row cell.
+    // Collapse embedded newlines inside cell values. De-duplicate with _2, _3 suffixes.
     let syntheticHeaders: string[] | null = null
-    if (subHeaderLineIndex !== null) {
-      const primaryCells = parseCSVLine(textLines[headerLineIndex])
-      const subCells = parseCSVLine(textLines[subHeaderLineIndex])
+    if (subHeaderRowIndex !== null) {
+      const primaryCells = preambleRows[headerRowIndex]
+      const subCells = preambleRows[subHeaderRowIndex]
       const maxLen = Math.max(primaryCells.length, subCells.length)
       const seen = new Map<string, number>()
       syntheticHeaders = Array.from({ length: maxLen }, (_, i) => {
-        const sub = (subCells[i] || '').trim()
-        const primary = (primaryCells[i] || '').trim()
+        const sub = (subCells[i] || '').replace(/\s*\n\s*/g, ' ').trim()
+        const primary = (primaryCells[i] || '').replace(/\s*\n\s*/g, ' ').trim()
         let name = sub || primary || `_col${i}`
         const count = seen.get(name) || 0
         seen.set(name, count + 1)
@@ -1436,29 +1418,39 @@ export async function POST(request: Request) {
       })
     }
 
-    // Data starts on the line after the last header line we consumed
-    const dataStartLineIndex = subHeaderLineIndex !== null ? subHeaderLineIndex + 1 : headerLineIndex + 1
+    // Parse the full file (no row limit), then slice off the preamble rows
+    const fullParsed = Papa.parse<string[]>(cleanText, { header: false, skipEmptyLines: false })
+    const fullRows: string[][] = fullParsed.data as string[][]
 
     let allRows: unknown[]
     let parseErrors: { type?: string; message: string; row?: number }[]
     let headers: string[]
 
     if (syntheticHeaders) {
-      const csvDataOnly = textLines.slice(dataStartLineIndex).join('\n')
-      const parsed = Papa.parse<string[]>(csvDataOnly, { header: false, skipEmptyLines: true })
-      parseErrors = parsed.errors as { type?: string; message: string; row?: number }[]
-      allRows = (parsed.data as string[][]).map((cols) => {
+      // Data starts after the sub-header row; drop all-empty rows
+      const dataRows = fullRows.slice(subHeaderRowIndex! + 1).filter((r) => r.some((c) => c.trim() !== ''))
+      parseErrors = fullParsed.errors as { type?: string; message: string; row?: number }[]
+      allRows = dataRows.map((cols) => {
         const obj: Record<string, string> = {}
-        syntheticHeaders!.forEach((h, i) => { obj[h] = cols[i] ?? '' })
+        syntheticHeaders!.forEach((h, i) => {
+          obj[h] = cols[i] ?? ''
+        })
         return obj
       })
       headers = syntheticHeaders
     } else {
-      const csvFromHeader = textLines.slice(headerLineIndex).join('\n')
-      const parsed = Papa.parse(csvFromHeader, { header: true, skipEmptyLines: true })
-      parseErrors = parsed.errors as { type?: string; message: string; row?: number }[]
-      allRows = parsed.data as unknown[]
-      headers = (parsed.meta.fields || []) as string[]
+      // Simple single-header format
+      const headerRow = preambleRows[headerRowIndex].map((h) => h.replace(/\s*\n\s*/g, ' ').trim())
+      const dataRows = fullRows.slice(headerRowIndex + 1).filter((r) => r.some((c) => c.trim() !== ''))
+      parseErrors = fullParsed.errors as { type?: string; message: string; row?: number }[]
+      allRows = dataRows.map((cols) => {
+        const obj: Record<string, string> = {}
+        headerRow.forEach((h, i) => {
+          obj[h] = cols[i] ?? ''
+        })
+        return obj
+      })
+      headers = headerRow
     }
 
     // Filter out "TooFewFields" / "TooManyFields" warnings — PapaParse still parses these rows fine
@@ -1468,7 +1460,7 @@ export async function POST(request: Request) {
         {
           message: 'CSV parsing failed',
           errors: fatalErrors.map((e: { row?: number; message: string }) => ({
-            row: (e.row ?? 0) + headerLineIndex + 1,
+            row: (e.row ?? 0) + headerRowIndex + 1,
             message: e.message,
           })),
         },
@@ -1560,7 +1552,8 @@ export async function POST(request: Request) {
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i] as Record<string, string>
-      const rowNum = i + dataStartLineIndex + 1  // account for header offset in original file
+      const dataStartRowIndex = subHeaderRowIndex !== null ? subHeaderRowIndex + 1 : headerRowIndex + 1
+      const rowNum = i + dataStartRowIndex + 1 // account for header offset in original file
 
       try {
         let result: 'created' | 'skipped' | 'updated'
@@ -1586,9 +1579,7 @@ export async function POST(request: Request) {
     }
 
     // 11. Return results
-    const warningMsg = validation.warnings.length > 0
-      ? `Missing optional columns (skipped): ${validation.warnings.join(', ')}`
-      : undefined
+    const warningMsg = validation.warnings.length > 0 ? `Missing optional columns (skipped): ${validation.warnings.join(', ')}` : undefined
 
     return NextResponse.json({
       success,
