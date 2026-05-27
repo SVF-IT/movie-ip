@@ -1,9 +1,9 @@
 "use client";
 
 import { RoleGate } from "@/components/role-gate";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -23,25 +23,28 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useAuth } from "@/contexts/auth-context";
 import { useSortableTable } from "@/hooks/use-sortable-table";
 import { getExpiringRights } from "@/lib/api/movies";
-import type { ExpiringRight } from "@/lib/types/database";
+import { getPlatforms } from "@/lib/api/dashboard";
+import { submitRightChange } from "@/lib/api/pending-changes";
+import type { ExpiringRight, Platform } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
 import { addDays as addDaysFns, format } from "date-fns";
 import {
   AlertTriangle,
-  ArrowRightLeft,
   Bell,
   Calendar,
   CheckCircle,
   Clock,
   Download,
+  Edit,
   Globe,
   Loader2,
-  RefreshCw,
   Satellite,
   Search,
   Shield,
+  Trash2,
   Tv,
   Wifi,
   X,
@@ -51,19 +54,12 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAppToast } from "@/hooks/use-app-toast";
 
-const PLATFORM_OPTIONS = [
-  { label: "Star", keyword: "star" },
-  { label: "Echo", keyword: "echo" },
-  { label: "Viacom 18", keyword: "viacom" },
-  { label: "Hoichoi", keyword: "hoichoi" },
-  { label: "YouTube", keyword: "youtube" },
-];
-const KNOWN_KEYWORDS = PLATFORM_OPTIONS.map((o) => o.keyword);
-
 export default function ExpiringRightsPage() {
   const [expiringRights, setExpiringRights] = useState<ExpiringRight[]>([]);
+  const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [loading, setLoading] = useState(true);
   const toast = useAppToast();
+  const { profile } = useAuth();
   const [activeFilter, setActiveFilter] = useState<"7d" | "30d" | "60d" | "90d" | "1y" | "all" | "custom">("1y");
   const [rightsTypeFilter, setRightsTypeFilter] = useState<"all" | "satellite" | "internet" | "other">("all");
   const [customFromDate, setCustomFromDate] = useState<Date>();
@@ -71,11 +67,36 @@ export default function ExpiringRightsPage() {
   const [platformFilter, setPlatformFilter] = useState<string>("all");
   const [subTypeFilter, setSubTypeFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [deletingRight, setDeletingRight] = useState<ExpiringRight | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const canDelete = profile?.role === "admin" || profile?.role === "editor";
+
+  const handleDeleteRequest = async () => {
+    if (!deletingRight || !profile) return;
+    setIsDeleting(true);
+    try {
+      await submitRightChange(
+        deletingRight.movie_id,
+        "right_delete",
+        deletingRight,
+        profile.full_name || profile.email,
+        profile.id,
+        deletingRight
+      );
+      toast.success("Deletion request submitted for approval");
+      setDeletingRight(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to submit deletion request");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const fetchExpiringRights = useCallback(async () => {
     try {
       setLoading(true);
-  
+
       const today = new Date();
       let fromDate = today.toISOString().split("T")[0];
       let toDate: string | undefined = "";
@@ -94,8 +115,9 @@ export default function ExpiringRightsPage() {
         toDate = addDaysFns(today, days).toISOString().split("T")[0];
       }
 
-      const data = await getExpiringRights(fromDate, toDate);
+      const [data, plats] = await Promise.all([getExpiringRights(fromDate, toDate), getPlatforms()]);
       setExpiringRights(data);
+      setPlatforms(plats);
     } catch (err) {
       console.error("Error fetching expiring rights:", err);
       toast.error(err instanceof Error ? err.message : "Failed to load expiring rights");
@@ -120,31 +142,24 @@ export default function ExpiringRightsPage() {
 
   const typeFiltered = useMemo(() => expiringRights.filter((right) => {
     if (rightsTypeFilter === "all") return true;
-    const typeName = (right.rights_type_name || "").toLowerCase();
-    const isOther = /air|ship|surface|hotel/i.test(typeName);
-    const isSatellite = typeName.includes("satellite");
-    if (rightsTypeFilter === "satellite") return isSatellite;
-    if (rightsTypeFilter === "other") return isOther;
-    if (rightsTypeFilter === "internet") return !isSatellite && !isOther;
+    const pt = (right.rights_type_name || "").toLowerCase();
+    const isSat = pt.includes("satellite") || pt.includes("dth") || pt.includes("terrestrial");
+    const isInternet = pt.includes("svod") || pt.includes("tvod") || pt.includes("avod") || pt.includes("fvod");
+    if (rightsTypeFilter === "satellite") return isSat;
+    if (rightsTypeFilter === "internet") return isInternet;
+    if (rightsTypeFilter === "other") return !isSat && !isInternet;
     return true;
   }), [expiringRights, rightsTypeFilter]);
 
   const subTypeOptions = useMemo(() => {
-    if (rightsTypeFilter !== "internet") return [];
+    if (rightsTypeFilter === "all") return [];
     const names = new Set<string>();
     typeFiltered.forEach((r) => { if (r.rights_type_name) names.add(r.rights_type_name); });
     return Array.from(names).sort();
   }, [typeFiltered, rightsTypeFilter]);
 
   const filteredRights = useMemo(() => typeFiltered.filter((right) => {
-    if (platformFilter !== "all") {
-      const name = (right.platform_name || "").toLowerCase();
-      if (platformFilter === "others") {
-        if (KNOWN_KEYWORDS.some((k) => name.includes(k))) return false;
-      } else {
-        if (!name.includes(platformFilter)) return false;
-      }
-    }
+    if (platformFilter !== "all" && right.platform_id !== platformFilter) return false;
     if (subTypeFilter !== "all" && right.rights_type_name !== subTypeFilter) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -407,22 +422,24 @@ export default function ExpiringRightsPage() {
           </div>
 
           <Select value={platformFilter} onValueChange={setPlatformFilter}>
-            <SelectTrigger className="h-9 bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm w-[180px]">
+            <SelectTrigger className="h-9 bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm w-50">
               <SelectValue placeholder="All Platforms" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Platforms</SelectItem>
-              {PLATFORM_OPTIONS.map((o) => (
-                <SelectItem key={o.keyword} value={o.keyword}>{o.label}</SelectItem>
+              {platforms.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  <span className="font-medium">{p.name}</span>
+                  {p.platform_type && <span className="text-slate-400 ml-2 text-xs">— {p.platform_type}</span>}
+                </SelectItem>
               ))}
-              <SelectItem value="others">Others</SelectItem>
             </SelectContent>
           </Select>
 
-          {rightsTypeFilter === "internet" && (
+          {rightsTypeFilter !== "all" && subTypeOptions.length > 0 && (
             <Select value={subTypeFilter} onValueChange={setSubTypeFilter}>
               <SelectTrigger className="h-9 bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm w-[180px]">
-                <SelectValue placeholder="All Types (SVOD/TVOD…)" />
+                <SelectValue placeholder="All Types" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Types</SelectItem>
@@ -588,20 +605,22 @@ export default function ExpiringRightsPage() {
                                 <div className="flex justify-end gap-0.5">
                                   <Tooltip>
                                     <TooltipTrigger asChild>
-                                      <Button size="icon" variant="ghost" className="h-7 w-7 hover:bg-emerald-500/10 hover:text-emerald-400" asChild aria-label="Renew right">
-                                        <Link href={`/rights/${right.id}/renew`}><RefreshCw className="h-3.5 w-3.5 text-emerald-500" /></Link>
+                                      <Button size="icon" variant="ghost" className="h-7 w-7 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10" asChild aria-label="Edit right">
+                                        <Link href={`/rights/${right.id}/edit`}><Edit className="h-3.5 w-3.5" /></Link>
                                       </Button>
                                     </TooltipTrigger>
-                                    <TooltipContent>Renew</TooltipContent>
+                                    <TooltipContent>Edit</TooltipContent>
                                   </Tooltip>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button size="icon" variant="ghost" className="h-7 w-7 hover:bg-blue-500/10 hover:text-blue-400" asChild aria-label="Transfer right">
-                                        <Link href={`/rights/${right.id}/transfer`}><ArrowRightLeft className="h-3.5 w-3.5 text-blue-500" /></Link>
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Transfer</TooltipContent>
-                                  </Tooltip>
+                                  {canDelete && (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button size="icon" variant="ghost" className="h-7 w-7 text-slate-400 hover:text-red-400 hover:bg-red-500/10" onClick={() => setDeletingRight(right)} aria-label="Delete right">
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>Request Deletion</TooltipContent>
+                                    </Tooltip>
+                                  )}
                                 </div>
                               </RoleGate>
                             </TableCell>
@@ -642,6 +661,16 @@ export default function ExpiringRightsPage() {
           );
         })}
       </Tabs>
+
+      <ConfirmDialog
+        open={!!deletingRight}
+        onOpenChange={(open) => !open && setDeletingRight(null)}
+        onConfirm={handleDeleteRequest}
+        title="Request Deletion"
+        description={`Are you sure you want to request deletion of this right for "${deletingRight?.movie_title}" on "${deletingRight?.platform_name}"? This will go through the approval process.`}
+        confirmText="Request Delete"
+        isLoading={isDeleting}
+      />
     </div>
   );
 }

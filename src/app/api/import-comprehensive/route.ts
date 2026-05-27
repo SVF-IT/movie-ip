@@ -96,19 +96,37 @@ function parseDate(dateStr: string | null | undefined): string | null {
     }
   }
 
-  // Try DD/MM/YYYY or DD-MM-YYYY or DD/MM/YY or DD-MM-YY
+  // Try numeric date: M/D/YYYY, D/M/YYYY, etc.
+  // When the year has 4 digits and first part ≤ 12 and second part > 12, it is unambiguously M/D/YYYY.
+  // When both parts ≤ 12 and year has 4 digits, treat as M/D/YYYY (matches the acquired sheet format).
+  // When year has only 2 digits, treat as D/M/YY (European shorthand).
   const numericRegex = /^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/
   match = cleaned.match(numericRegex)
   if (match) {
-    const day = parseInt(match[1], 10)
-    const month = parseInt(match[2], 10)
+    const a = parseInt(match[1], 10)
+    const b = parseInt(match[2], 10)
     let year = parseInt(match[3], 10)
+    if (year < 100) {
+      year += 2000
+      if (year > 2050) year -= 100
+    }
+    let month: number, day: number
+    const fullYear = match[3].length === 4
+    if (fullYear) {
+      // 4-digit year → M/D/YYYY convention (acquired sheet uses this)
+      month = a
+      day = b
+    } else {
+      // 2-digit year → D/M/YY convention
+      day = a
+      month = b
+    }
     if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-      if (year < 100) {
-        year += 2000
-        if (year > 2050) year -= 100
-      }
       return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    }
+    // Fallback: try swapping if above was invalid
+    if (b >= 1 && b <= 12 && a >= 1 && a <= 31) {
+      return `${year}-${String(b).padStart(2, '0')}-${String(a).padStart(2, '0')}`
     }
   }
 
@@ -290,7 +308,7 @@ class CacheStore {
     const [productionHouses, people, platforms, movies] = await Promise.all([
       this.supabase.from('production_houses').select('id, name'),
       this.supabase.from('people').select('id, name'),
-      this.supabase.from('platforms').select('id, name'),
+      this.supabase.from('platforms').select('id, name, platform_type'),
       this.supabase.from('movies').select('id, title, production_no'),
     ])
 
@@ -301,7 +319,8 @@ class CacheStore {
       this.people.set(row.name.toLowerCase().trim(), row.id)
     }
     for (const row of platforms.data || []) {
-      this.platforms.set(row.name.toLowerCase(), row.id)
+      const key = `${row.name.toLowerCase().trim()}|${row.platform_type ?? ''}`
+      this.platforms.set(key, row.id)
     }
     for (const row of movies.data || []) {
       this.movies.set(row.title.toLowerCase().trim(), row.id)
@@ -368,7 +387,7 @@ class CacheStore {
     const cleaned = cleanString(name)
     if (!cleaned) return null
 
-    // Normalize platform names
+    // Normalize well-known platform names
     const nameMap: Record<string, string> = {
       viacom: 'Viacom 18',
       'viacom 18': 'Viacom 18',
@@ -391,7 +410,8 @@ class CacheStore {
     }
 
     const normalized = nameMap[cleaned.toLowerCase().trim()] || cleaned.trim()
-    const key = normalized.toLowerCase()
+    // Uniqueness key is (name, platform_type) — same name can exist with different types
+    const key = `${normalized.toLowerCase().trim()}|${platformType ?? ''}`
     if (this.platforms.has(key)) return this.platforms.get(key)!
 
     const insertData: Record<string, string> = { name: normalized }
@@ -400,7 +420,11 @@ class CacheStore {
     const { data, error } = await this.supabase.from('platforms').insert(insertData).select('id').single()
 
     if (error) {
-      const { data: existing } = await this.supabase.from('platforms').select('id').ilike('name', normalized).single()
+      // Row may already exist (race condition or pre-seeded) — fetch by (name, platform_type)
+      let query = this.supabase.from('platforms').select('id').ilike('name', normalized)
+      if (platformType) query = query.eq('platform_type', platformType)
+      else query = query.is('platform_type', null)
+      const { data: existing } = await query.single()
       if (existing) {
         this.platforms.set(key, existing.id)
         return existing.id
@@ -856,6 +880,216 @@ async function extractAllPlatformRights(row: Record<string, string>, keys: strin
 }
 
 // ============================================
+// Acquired Sheet — 3-row header platform rights parser
+// ============================================
+
+/**
+ * Maps a Row-2 label to a canonical platform_type stored in the DB.
+ * Returns [dbType, isHistory].
+ */
+function resolvePlatformType(row2Label: string): [string, boolean] {
+  const label = row2Label.trim()
+  const isHistory = /history/i.test(label)
+  const base = label.replace(/\s*history\s*/i, '').trim().toLowerCase()
+
+  const typeMap: Record<string, string> = {
+    'satellite tv': 'Satellite TV',
+    'satellite': 'Satellite TV',
+    'dth vod': 'DTH VOD',
+    'dth': 'DTH VOD',
+    'terrestrial tv': 'Terrestrial TV',
+    'terrestrial': 'Terrestrial TV',
+    'svod': 'SVOD',
+    'tvod': 'TVOD',
+    'avod': 'AVOD',
+  }
+
+  const dbType = typeMap[base] ?? label.replace(/\s*history\s*/i, '').trim()
+  if (!(base in typeMap)) {
+    console.warn(`[import] Unknown Row-2 platform label: "${label}" — using "${dbType}"`)
+  }
+  return [dbType, isHistory]
+}
+
+interface PlatformSlot {
+  /** Column index in the data row array */
+  colIndex: number
+  /** Row-2 platform_type string (e.g. "Satellite TV", "SVOD") */
+  platformType: string
+  /** true when Row-2 label contained "History" → force is_current = false */
+  isHistory: boolean
+  /** When non-null, platform name is fixed from the header ("Platform - <Name>"). Data cell is a presence marker. */
+  hardcodedName: string | null
+  /** Row-2 label for error reporting */
+  row2Label: string
+  /** Slot index within the Row-2 group (0-based) */
+  slotIndex: number
+}
+
+/**
+ * Parses the 3 preamble header rows of an Acquired CSV into a list of 6-column platform slots.
+ *
+ * Row 0 (bannerRow): sparse section labels — "SATELLITE RIGHTS", "INTERNET RIGHTS", etc.
+ *   We scan for non-empty cells and record their column range until the next non-empty cell.
+ * Row 1 (typeRow): platform_type labels within each section — "Satellite TV", "SVOD", etc.
+ *   Each label may span multiple 6-column slots.
+ * Row 2 (fieldRow): field headers — exactly 6 per slot:
+ *   Platform/License (or "Platform - <Name>") | Category | Start Date | End Date | Territory | Nature Of Rights
+ *
+ * Returns null if the rows don't look like an Acquired 3-row header.
+ */
+function parsePlatformRightsSections(
+  bannerRow: string[],
+  typeRow: string[],
+  fieldRow: string[],
+): PlatformSlot[] | null {
+  // Detect known section banners (case-insensitive)
+  const knownSections = ['satellite rights', 'internet rights']
+  const hasBanner = bannerRow.some((c) => knownSections.some((s) => c.toLowerCase().trim().includes(s)))
+  if (!hasBanner) return null
+
+  const slots: PlatformSlot[] = []
+
+  // Walk fieldRow looking for "Platform/License" or "Platform - <Name>" headers.
+  // Each found position starts a 6-column slot.
+  for (let col = 0; col < fieldRow.length; col++) {
+    const field = (fieldRow[col] || '').trim()
+    const fieldLower = field.toLowerCase()
+
+    const isPlatformHeader =
+      fieldLower === 'platform/license' ||
+      fieldLower === 'platform / license' ||
+      fieldLower.startsWith('platform -') ||
+      fieldLower.startsWith('platform–')
+
+    if (!isPlatformHeader) continue
+
+    // Determine if hardcoded name ("Platform - <Name>")
+    let hardcodedName: string | null = null
+    if (fieldLower.startsWith('platform -') || fieldLower.startsWith('platform–')) {
+      const sep = field.indexOf('-')
+      hardcodedName = field.slice(sep + 1).trim() || null
+    }
+
+    // Walk back through typeRow to find the nearest non-empty cell at or before col
+    let row2Label = ''
+    for (let t = col; t >= 0; t--) {
+      const cell = (typeRow[t] || '').trim()
+      if (cell) {
+        row2Label = cell
+        break
+      }
+    }
+    if (!row2Label) continue // no type label found — skip this slot
+
+    const [platformType, isHistory] = resolvePlatformType(row2Label)
+
+    // Count which slot this is within its Row-2 group
+    const slotIndex = slots.filter((s) => s.row2Label === row2Label).length
+
+    slots.push({
+      colIndex: col,
+      platformType,
+      isHistory,
+      hardcodedName,
+      row2Label,
+      slotIndex,
+    })
+  }
+
+  return slots.length > 0 ? slots : null
+}
+
+interface PlatformRightsRowError {
+  row2Label: string
+  slotIndex: number
+  colRange: [number, number]
+  message: string
+}
+
+/**
+ * For a single data row, iterate every slot in the slot map and insert
+ * platform_rights rows where the slot is active.
+ *
+ * slotErrors is populated (not thrown) on per-slot failures.
+ */
+async function extractAcquiredPlatformRights(
+  dataCols: string[],
+  slots: PlatformSlot[],
+  cache: CacheStore,
+  movieId: string,
+  slotErrors: PlatformRightsRowError[],
+): Promise<void> {
+  const today = new Date().toISOString().split('T')[0]
+
+  for (const slot of slots) {
+    const { colIndex, platformType, isHistory, hardcodedName, row2Label, slotIndex } = slot
+    // The 6 columns of this slot: [0]=platform/license, [1]=category, [2]=start, [3]=end, [4]=territory, [5]=nature
+    const colRange: [number, number] = [colIndex, colIndex + 5]
+
+    try {
+      const cell0 = (dataCols[colIndex] ?? '').trim()
+
+      let platformName: string | null
+      if (hardcodedName) {
+        // Hardcoded header: data cell is a presence marker — skip if blank, 'No', 'Open', or 'N/A'
+        if (!cell0) continue
+        const cell0Lower = cell0.toLowerCase()
+        if (['no', 'n', 'open', 'n/a', 'na', '-'].includes(cell0Lower)) continue
+        platformName = hardcodedName
+      } else {
+        // Generic header: platform name comes from the data cell
+        platformName = cell0 || null
+        if (!platformName) continue
+      }
+
+      const platformId = await cache.getOrCreatePlatform(platformName, platformType)
+      if (!platformId) {
+        slotErrors.push({ row2Label, slotIndex, colRange, message: `Could not resolve platform "${platformName}"` })
+        continue
+      }
+
+      const categoryRaw = (dataCols[colIndex + 1] ?? '').trim()
+      const startRaw = (dataCols[colIndex + 2] ?? '').trim()
+      const endRaw = (dataCols[colIndex + 3] ?? '').trim()
+      const territoryRaw = (dataCols[colIndex + 4] ?? '').trim()
+      const natureRaw = (dataCols[colIndex + 5] ?? '').trim()
+
+      const startDate = parseDate(startRaw)
+      const endDate = parseDate(endRaw)
+
+      // Determine is_current
+      let isCurrent: boolean
+      if (isHistory) {
+        isCurrent = false
+      } else if (endDate && endDate !== '3099-12-31' && endDate < today) {
+        isCurrent = false
+      } else {
+        isCurrent = true
+      }
+
+      await cache.insertPlatformRights({
+        movie_id: movieId,
+        platform_id: platformId,
+        category: cleanString(categoryRaw) ?? null,
+        start_date: startDate,
+        end_date: endDate,
+        territory: cleanString(territoryRaw) ?? null,
+        nature: cleanString(natureRaw) ?? null,
+        is_current: isCurrent,
+      })
+    } catch (err) {
+      slotErrors.push({
+        row2Label,
+        slotIndex,
+        colRange,
+        message: err instanceof Error ? err.message : String(err),
+      })
+    }
+  }
+}
+
+// ============================================
 // CSV Row Processing
 // ============================================
 
@@ -866,6 +1100,9 @@ async function processHomeRow(
   userId: string,
   userRole: string,
   resolution: 'skip' | 'update' | null,
+  platformSlots: PlatformSlot[] | null,
+  rawDataCols: string[],
+  slotErrors: PlatformRightsRowError[],
 ): Promise<'created' | 'skipped' | 'updated'> {
   const title = cleanString(row['Title'])
   if (!title) throw new Error('Title is required')
@@ -990,19 +1227,23 @@ async function processHomeRow(
   if (existingId && resolution === 'update') {
     await cache.updateMovie(existingId, movieData)
     const movieId = existingId
-
-    // Re-link cast & directors on update too
     await relinkPeople(row, cache, movieId, castKey, directorKey)
+    if (platformSlots) {
+      await cache.clearMoviePlatformRights(movieId)
+      await extractAcquiredPlatformRights(rawDataCols, platformSlots, cache, movieId, slotErrors)
+    }
     return 'updated'
   }
 
   const movieId = await cache.insertMovieRaw(movieData)
   if (!movieId) return 'skipped'
 
-  // Register in cache so duplicate rows in the same sheet are caught
   cache.movies.set(titleKey, movieId)
 
   await relinkPeople(row, cache, movieId, castKey, directorKey)
+  if (platformSlots) {
+    await extractAcquiredPlatformRights(rawDataCols, platformSlots, cache, movieId, slotErrors)
+  }
   return 'created'
 }
 
@@ -1052,6 +1293,9 @@ async function processAcquiredRow(
   userId: string,
   userRole: string,
   resolution: 'skip' | 'update' | null,
+  platformSlots: PlatformSlot[] | null,
+  rawDataCols: string[],
+  slotErrors: PlatformRightsRowError[],
 ): Promise<'created' | 'skipped' | 'updated'> {
   // ── Required field ───────────────────────────────────────
   const movieNameKey = findColumnByPattern(keys, ['Movie Name', 'Movie Title', 'Title'])
@@ -1230,11 +1474,11 @@ async function processAcquiredRow(
 
   if (existingId && resolution === 'update') {
     await cache.updateMovie(existingId, movieData)
-    // Re-link people (wipes old links first)
     await relinkPeople(row, cache, existingId, castKey, directorKey)
-    // Platform rights import disabled for acquired — skipping
-    // await cache.clearMoviePlatformRights(existingId)
-    // await extractAllPlatformRights(row, keys, cache, existingId)
+    if (platformSlots) {
+      await cache.clearMoviePlatformRights(existingId)
+      await extractAcquiredPlatformRights(rawDataCols, platformSlots, cache, existingId, slotErrors)
+    }
     return 'updated'
   }
 
@@ -1242,11 +1486,12 @@ async function processAcquiredRow(
   const movieId = await cache.insertMovie(movieData)
   if (!movieId) return 'skipped'
 
-  // ── Cast + Directors ──────────────────────────────────────
-  await relinkPeople(row, cache, movieId, castKey, directorKey)
+  cache.movies.set(titleKey, movieId)
 
-  // Platform rights import disabled for acquired — skipping
-  // await extractAllPlatformRights(row, keys, cache, movieId)
+  await relinkPeople(row, cache, movieId, castKey, directorKey)
+  if (platformSlots) {
+    await extractAcquiredPlatformRights(rawDataCols, platformSlots, cache, movieId, slotErrors)
+  }
 
   return 'created'
 }
@@ -1423,6 +1668,7 @@ export async function POST(request: Request) {
     const fullRows: string[][] = fullParsed.data as string[][]
 
     let allRows: unknown[]
+    let rawDataColArrays: string[][] = [] // parallel to allRows — raw column arrays per data row
     let parseErrors: { type?: string; message: string; row?: number }[]
     let headers: string[]
 
@@ -1437,6 +1683,7 @@ export async function POST(request: Request) {
         })
         return obj
       })
+      rawDataColArrays = dataRows
       headers = syntheticHeaders
     } else {
       // Simple single-header format
@@ -1450,6 +1697,7 @@ export async function POST(request: Request) {
         })
         return obj
       })
+      rawDataColArrays = dataRows
       headers = headerRow
     }
 
@@ -1487,6 +1735,32 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: validation.error }, { status: 400 })
     }
 
+    // 5a. Parse platform slot map for both acquired and home formats.
+    //
+    // Acquired (3-row preamble + sub-header):
+    //   Banner row = preambleRows[headerRowIndex - 1]
+    //   Type row   = preambleRows[headerRowIndex]
+    //   Field row  = preambleRows[subHeaderRowIndex]
+    //
+    // Home (2-row preamble above the field header):
+    //   Banner row = preambleRows[headerRowIndex - 2]
+    //   Type row   = preambleRows[headerRowIndex - 1]
+    //   Field row  = preambleRows[headerRowIndex]   ← same row as metadata headers
+    let acquiredPlatformSlots: PlatformSlot[] | null = null
+    if (detectedFormat === 'acquired' && subHeaderRowIndex !== null) {
+      const bannerRow = headerRowIndex > 0 ? preambleRows[headerRowIndex - 1] : []
+      const typeRow = preambleRows[headerRowIndex]
+      const fieldRow = preambleRows[subHeaderRowIndex]
+      acquiredPlatformSlots = parsePlatformRightsSections(bannerRow, typeRow, fieldRow)
+    }
+    let homePlatformSlots: PlatformSlot[] | null = null
+    if (detectedFormat === 'home' && headerRowIndex >= 2) {
+      const bannerRow = preambleRows[headerRowIndex - 2] ?? []
+      const typeRow = preambleRows[headerRowIndex - 1] ?? []
+      const fieldRow = preambleRows[headerRowIndex]
+      homePlatformSlots = parsePlatformRightsSections(bannerRow, typeRow, fieldRow)
+    }
+
     // 6. Strip the "accepted values" example row (row immediately after the header that
     //    contains strings like "Yes/No", "DD/MM/YYYY", "Text" — not real data).
     const isExampleRow = (r: Record<string, string>): boolean => {
@@ -1496,7 +1770,13 @@ export async function POST(request: Request) {
       return matchCount >= 3
     }
 
-    const rows = (allRows as Record<string, string>[]).filter((r) => !isExampleRow(r))
+    // Keep parallel rawDataColArrays in sync with rows after example-row filtering
+    const allRowsTyped = allRows as Record<string, string>[]
+    const filteredPairs = allRowsTyped
+      .map((r, i) => ({ r, cols: rawDataColArrays[i] }))
+      .filter(({ r }) => !isExampleRow(r))
+    const rows = filteredPairs.map((p) => p.r)
+    const rawCols = filteredPairs.map((p) => p.cols)
 
     // 7. Create supabase admin client
     const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { autoRefreshToken: false, persistSession: false } })
@@ -1550,22 +1830,50 @@ export async function POST(request: Request) {
     let skipped = 0
     let updated = 0
 
+    const dataStartRowIndex = subHeaderRowIndex !== null ? subHeaderRowIndex + 1 : headerRowIndex + 1
+
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i] as Record<string, string>
-      const dataStartRowIndex = subHeaderRowIndex !== null ? subHeaderRowIndex + 1 : headerRowIndex + 1
-      const rowNum = i + dataStartRowIndex + 1 // account for header offset in original file
+      const rowNum = i + dataStartRowIndex + 1 // 1-based line number in original file
 
       try {
         let result: 'created' | 'skipped' | 'updated'
         if (detectedFormat === 'home') {
           const homeTitle = cleanString(row['Title']) || ''
           const homeResolution = homeTitle ? (resolutions[homeTitle] ?? null) : null
-          result = await processHomeRow(row, headers, cache, user.id, profile.role, homeResolution)
+          const homeSlotErrors: PlatformRightsRowError[] = []
+          result = await processHomeRow(row, headers, cache, user.id, profile.role, homeResolution, homePlatformSlots, rawCols[i] ?? [], homeSlotErrors)
+          for (const se of homeSlotErrors) {
+            errors.push({
+              row: rowNum,
+              field: `${se.row2Label} slot ${se.slotIndex} (cols ${se.colRange[0]}-${se.colRange[1]})`,
+              message: se.message,
+            })
+          }
         } else {
           const movieNameKey = findColumnByPattern(headers, ['Movie Name', 'Movie Title', 'Title'])
           const title = cleanString(col(row, movieNameKey) ?? row['Movie Name']) || ''
           const resolution = resolutions[title] ?? null
-          result = await processAcquiredRow(row, headers, cache, user.id, profile.role, resolution)
+          const slotErrors: PlatformRightsRowError[] = []
+          result = await processAcquiredRow(
+            row,
+            headers,
+            cache,
+            user.id,
+            profile.role,
+            resolution,
+            acquiredPlatformSlots,
+            rawCols[i] ?? [],
+            slotErrors,
+          )
+          // Fold per-slot errors into the row error list
+          for (const se of slotErrors) {
+            errors.push({
+              row: rowNum,
+              field: `${se.row2Label} slot ${se.slotIndex} (cols ${se.colRange[0]}-${se.colRange[1]})`,
+              message: se.message,
+            })
+          }
         }
 
         if (result === 'created') success++

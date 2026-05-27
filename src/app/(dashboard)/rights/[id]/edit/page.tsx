@@ -117,7 +117,7 @@ export default function EditRightPage() {
       <Card>
         <CardContent className="pt-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2"><Label>Platform</Label><Select value={platformId} onValueChange={setPlatformId}><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger><SelectContent>{platforms.map((p) => (<SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>))}</SelectContent></Select></div>
+            <div className="space-y-2"><Label>Platform</Label><Select value={platformId} onValueChange={setPlatformId}><SelectTrigger><SelectValue placeholder="Select...">{platformId && (() => { const p = platforms.find(x => x.id === platformId); return p ? <span>{p.name}{p.platform_type ? <span className="text-slate-500 ml-1.5 text-xs">({p.platform_type})</span> : null}</span> : null; })()}</SelectValue></SelectTrigger><SelectContent>{platforms.map((p) => (<SelectItem key={p.id} value={p.id}><span className="font-medium">{p.name}</span>{p.platform_type && <span className="text-slate-400 ml-2 text-xs">— {p.platform_type}</span>}</SelectItem>))}</SelectContent></Select></div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">

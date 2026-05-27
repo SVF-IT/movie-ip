@@ -35,7 +35,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/auth-context";
 import { useAppToast } from "@/hooks/use-app-toast";
-import { deleteMovie, getMovieById, getMovieRights, getMovieVersions } from "@/lib/api/movies";
+import { deleteMovie, getMovieById, getMovieRights, getMovieExpiredRights, getMovieVersions } from "@/lib/api/movies";
 import { deleteRight } from "@/lib/api/rights";
 import { submitRightChange } from "@/lib/api/pending-changes";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -51,6 +51,7 @@ import {
   FileText,
   Film,
   Globe,
+  History,
   Info,
   Languages,
   Loader2,
@@ -69,6 +70,7 @@ import { useEffect, useState } from "react";
 
 interface RightWithDetails extends PlatformRight {
   platforms?: { name: string; platform_type?: string };
+  category?: string | null;
 }
 
 
@@ -108,6 +110,7 @@ export default function MovieDetailPage() {
   const [languageVersions, setLanguageVersions] = useState<MovieLanguageVersion[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string>(movieId);
   const [rights, setRights] = useState<RightWithDetails[]>([]);
+  const [expiredRights, setExpiredRights] = useState<RightWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const toast = useAppToast();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -173,8 +176,12 @@ export default function MovieDetailPage() {
         } else {
           setLanguageVersions([]);
         }
-        const rightsData = await getMovieRights(movieId);
+        const [rightsData, expiredData] = await Promise.all([
+          getMovieRights(movieId),
+          getMovieExpiredRights(movieId),
+        ]);
         setRights(rightsData as RightWithDetails[]);
+        setExpiredRights(expiredData as RightWithDetails[]);
       } catch (err) {
         console.error("Error fetching movie data:", err);
         toast.error(err instanceof Error ? err.message : "Failed to load movie");
@@ -190,12 +197,14 @@ export default function MovieDetailPage() {
     try {
       setLoading(true);
       setSelectedVersionId(versionId);
-      const [movieData, rightsData] = await Promise.all([
+      const [movieData, rightsData, expiredData] = await Promise.all([
         getMovieById(versionId),
         getMovieRights(versionId),
+        getMovieExpiredRights(versionId),
       ]);
       setMovie(movieData);
       setRights(rightsData as RightWithDetails[]);
+      setExpiredRights(expiredData as RightWithDetails[]);
       router.push(`/movies/${versionId}`, { scroll: false });
     } catch (err) {
       console.error("Error switching version:", err);
@@ -371,7 +380,7 @@ export default function MovieDetailPage() {
                   <span className="text-slate-400 line-clamp-2">{movie.cast_names}</span>
                 </div>
               )}
-              {movie.production_house_name && (
+              {movie.source !== "acquired" && movie.production_house_name && (
                 <div className="flex items-start gap-2 text-sm">
                   <span className="text-slate-400 min-w-17.5 text-xs pt-0.5">Production</span>
                   <span className="text-slate-300 font-medium">{movie.production_house_name}</span>
@@ -419,6 +428,10 @@ export default function MovieDetailPage() {
             <FileText className="h-3.5 w-3.5" />Rights Exploitation
             {rights.length > 0 && <Badge className="ml-0.5 bg-red-600/80 text-white text-[10px] px-1.5 py-0 h-4">{rights.length}</Badge>}
           </TabsTrigger>
+          <TabsTrigger value="history" className="gap-2 text-xs data-[state=active]:bg-slate-800 data-[state=active]:text-slate-100 text-slate-400 h-8 px-4">
+            <History className="h-3.5 w-3.5" />Rights History
+            {expiredRights.length > 0 && <Badge className="ml-0.5 bg-slate-600/80 text-white text-[10px] px-1.5 py-0 h-4">{expiredRights.length}</Badge>}
+          </TabsTrigger>
         </TabsList>
 
         {/* Details Tab */}
@@ -426,7 +439,7 @@ export default function MovieDetailPage() {
           <div className="grid gap-4 md:grid-cols-2">
             <SectionCard icon={Film} title="Basic Information">
               <div className="grid grid-cols-2 gap-4">
-<InfoRow label="Production No" value={currentVersion.production_no} mono />
+                {movie.source !== "acquired" && <InfoRow label="Production No" value={currentVersion.production_no} mono />}
                 <InfoRow label="Language" value={currentVersion.language} />
                 <InfoRow label="Release Date" value={formatDate(currentVersion.release_date)} />
                 <InfoRow label="Release Year" value={currentVersion.release_year?.toString()} />
@@ -436,9 +449,11 @@ export default function MovieDetailPage() {
                     <Badge variant="outline" className="text-xs w-fit font-bold bg-slate-800/60 text-slate-300 border-slate-700/50 mt-0.5">{currentVersion.certification}</Badge>
                   ) : <span className="text-slate-400 text-sm">—</span>}
                 </div>
-                <div className="col-span-2">
-                  <InfoRow label="Production House" value={currentVersion.production_house_name} />
-                </div>
+                {movie.source !== "acquired" && (
+                  <div className="col-span-2">
+                    <InfoRow label="Production House" value={currentVersion.production_house_name} />
+                  </div>
+                )}
                 <div className="col-span-2">
                   <InfoRow label="Color / B&W" value={currentVersion.color_or_bw} />
                 </div>
@@ -667,20 +682,19 @@ export default function MovieDetailPage() {
         {/* Rights Tab */}
         <TabsContent value="rights" className="mt-0">
           {(() => {
-            const isSatellite = (name: string) =>
-              name.includes("satellite") || name.includes("dth") || name.includes("terrestrial");
-            const isInternet = (name: string) =>
-              name.includes("svod") || name.includes("avod") || name.includes("tvod") ||
-              name.includes("internet") || name.includes("digital") || name.includes("ott");
+            const isSatellite = (pt: string) =>
+              pt.includes("satellite") || pt.includes("dth") || pt.includes("terrestrial");
+            const isInternet = (pt: string) =>
+              pt.includes("svod") || pt.includes("tvod") || pt.includes("avod") || pt.includes("fvod");
 
             const satelliteRights = rights.filter((r) => isSatellite((r.platforms?.platform_type || "").toLowerCase()));
             const internetRights = rights.filter((r) => {
-              const name = (r.platforms?.platform_type || "").toLowerCase();
-              return !isSatellite(name) && isInternet(name);
+              const pt = (r.platforms?.platform_type || "").toLowerCase();
+              return !isSatellite(pt) && isInternet(pt);
             });
             const otherRights = rights.filter((r) => {
-              const name = (r.platforms?.platform_type || "").toLowerCase();
-              return !isSatellite(name) && !isInternet(name);
+              const pt = (r.platforms?.platform_type || "").toLowerCase();
+              return !isSatellite(pt) && !isInternet(pt);
             });
 
             const RightsTable = ({ items }: { items: RightWithDetails[] }) =>
@@ -697,6 +711,7 @@ export default function MovieDetailPage() {
                     <TableRow className="border-slate-800/60 hover:bg-transparent">
                       <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Platform</TableHead>
                       <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Type</TableHead>
+                      <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Category</TableHead>
                       <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Nature</TableHead>
                       <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Start Date</TableHead>
                       <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400">End Date</TableHead>
@@ -710,6 +725,7 @@ export default function MovieDetailPage() {
                       <TableRow key={right.id} className="border-slate-800/40 hover:bg-slate-800/30 transition-colors">
                         <TableCell className="font-semibold text-sm text-slate-200">{right.platforms?.name || "—"}</TableCell>
                         <TableCell className="text-sm text-slate-400">{right.platforms?.platform_type || "—"}</TableCell>
+                        <TableCell className="text-xs text-slate-400">{right.category || "—"}</TableCell>
                         <TableCell>
                           {right.nature ? (
                             <Badge variant="outline" className={cn("text-[10px] font-semibold px-2 py-0.5",
@@ -806,6 +822,122 @@ export default function MovieDetailPage() {
                     </TabsContent>
                     <TabsContent value="other" className="mt-0 overflow-x-auto">
                       <RightsTable items={otherRights} />
+                    </TabsContent>
+                  </Tabs>
+                </CardContent>
+              </Card>
+            );
+          })()}
+        </TabsContent>
+
+        {/* Rights History Tab */}
+        <TabsContent value="history" className="mt-0">
+          {(() => {
+            const isSatellite = (pt: string) =>
+              pt.includes("satellite") || pt.includes("dth") || pt.includes("terrestrial");
+            const isInternet = (pt: string) =>
+              pt.includes("svod") || pt.includes("tvod") || pt.includes("avod") || pt.includes("fvod");
+
+            const expiredSatellite = expiredRights.filter((r) => isSatellite((r.platforms?.platform_type || "").toLowerCase()));
+            const expiredInternet = expiredRights.filter((r) => {
+              const pt = (r.platforms?.platform_type || "").toLowerCase();
+              return !isSatellite(pt) && isInternet(pt);
+            });
+            const expiredOther = expiredRights.filter((r) => {
+              const pt = (r.platforms?.platform_type || "").toLowerCase();
+              return !isSatellite(pt) && !isInternet(pt);
+            });
+
+            const HistoryTable = ({ items }: { items: RightWithDetails[] }) =>
+              items.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-3">
+                  <div className="p-3 rounded-full bg-slate-800/50 border border-slate-700/40">
+                    <History className="h-6 w-6 text-slate-400" />
+                  </div>
+                  <p className="text-slate-400 text-sm">No expired rights in this category</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-slate-800/60 hover:bg-transparent">
+                      <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Platform</TableHead>
+                      <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Type</TableHead>
+                      <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Category</TableHead>
+                      <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Nature</TableHead>
+                      <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Start Date</TableHead>
+                      <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400">End Date</TableHead>
+                      <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Territory</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {items.map((right) => (
+                      <TableRow key={right.id} className="border-slate-800/40 hover:bg-slate-800/20 transition-colors opacity-75">
+                        <TableCell className="font-semibold text-sm text-slate-300">{right.platforms?.name || "—"}</TableCell>
+                        <TableCell className="text-sm text-slate-400">{right.platforms?.platform_type || "—"}</TableCell>
+                        <TableCell className="text-xs text-slate-400">{right.category || "—"}</TableCell>
+                        <TableCell>
+                          {right.nature ? (
+                            <Badge variant="outline" className={cn("text-[10px] font-semibold px-2 py-0.5",
+                              right.nature.toLowerCase().includes("exclusive")
+                                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
+                                : "bg-slate-800/60 text-slate-400 border-slate-700/50"
+                            )}>
+                              {right.nature.replace(/_/g, '-').replace(/\b\w/g, c => c.toUpperCase())}
+                            </Badge>
+                          ) : <span className="text-slate-400 text-xs">—</span>}
+                        </TableCell>
+                        <TableCell className="text-xs tabular-nums text-slate-400">{formatDate(right.start_date)}</TableCell>
+                        <TableCell className="text-xs tabular-nums text-slate-500">{formatDate(right.end_date)}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1 text-xs text-slate-400">
+                            <Globe className="h-3 w-3 text-slate-400" />{right.territory || "World"}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              );
+
+            return (
+              <Card className="glass-card border-slate-800/60">
+                <CardHeader className="pb-3 pt-5 px-5 border-b border-slate-800/50">
+                  <CardTitle className="text-sm font-bold text-slate-200 flex items-center gap-2.5">
+                    <div className="p-1.5 rounded-md bg-slate-700/50 border border-slate-600/40">
+                      <History className="h-3.5 w-3.5 text-slate-400" />
+                    </div>
+                    Rights History
+                  </CardTitle>
+                  <CardDescription className="mt-1 text-slate-400 text-xs">
+                    Expired licenses and past distribution rights for this version
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
+                  <Tabs defaultValue="satellite">
+                    <div className="px-5 pt-4 border-b border-slate-800/50">
+                      <TabsList className="bg-transparent p-0 h-auto gap-0 border-b-0">
+                        <TabsTrigger value="satellite" className="gap-2 text-xs rounded-none border-b-2 border-transparent data-[state=active]:border-slate-500 data-[state=active]:text-slate-300 data-[state=active]:bg-transparent text-slate-500 h-9 px-4 pb-3">
+                          <Tv className="h-3.5 w-3.5" />Satellite
+                          {expiredSatellite.length > 0 && <span className="text-[10px] text-slate-500">({expiredSatellite.length})</span>}
+                        </TabsTrigger>
+                        <TabsTrigger value="internet" className="gap-2 text-xs rounded-none border-b-2 border-transparent data-[state=active]:border-slate-500 data-[state=active]:text-slate-300 data-[state=active]:bg-transparent text-slate-500 h-9 px-4 pb-3">
+                          <Wifi className="h-3.5 w-3.5" />Internet
+                          {expiredInternet.length > 0 && <span className="text-[10px] text-slate-500">({expiredInternet.length})</span>}
+                        </TabsTrigger>
+                        <TabsTrigger value="other" className="gap-2 text-xs rounded-none border-b-2 border-transparent data-[state=active]:border-slate-500 data-[state=active]:text-slate-300 data-[state=active]:bg-transparent text-slate-500 h-9 px-4 pb-3">
+                          <MoreHorizontal className="h-3.5 w-3.5" />Other
+                          {expiredOther.length > 0 && <span className="text-[10px] text-slate-500">({expiredOther.length})</span>}
+                        </TabsTrigger>
+                      </TabsList>
+                    </div>
+                    <TabsContent value="satellite" className="mt-0 overflow-x-auto">
+                      <HistoryTable items={expiredSatellite} />
+                    </TabsContent>
+                    <TabsContent value="internet" className="mt-0 overflow-x-auto">
+                      <HistoryTable items={expiredInternet} />
+                    </TabsContent>
+                    <TabsContent value="other" className="mt-0 overflow-x-auto">
+                      <HistoryTable items={expiredOther} />
                     </TabsContent>
                   </Tabs>
                 </CardContent>

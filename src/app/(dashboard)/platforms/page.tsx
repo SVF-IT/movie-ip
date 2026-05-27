@@ -45,9 +45,14 @@ const PLATFORM_EXPORT_FIELDS: ExportFieldDef[] = [
 
 const typeStyle = (t: string | null | undefined) => {
   if (!t) return "bg-slate-700/50 text-slate-400 border-slate-600/30";
-  if (t === "OTT") return "bg-violet-500/15 text-violet-400 border-violet-500/30";
-  if (t === "Satellite") return "bg-cyan-500/15 text-cyan-400 border-cyan-500/30";
-  if (t === "Theatrical") return "bg-pink-500/15 text-pink-400 border-pink-500/30";
+  const lower = t.toLowerCase();
+  if (lower.includes("satellite")) return "bg-cyan-500/15 text-cyan-400 border-cyan-500/30";
+  if (lower.includes("dth")) return "bg-sky-500/15 text-sky-400 border-sky-500/30";
+  if (lower.includes("terrestrial")) return "bg-blue-500/15 text-blue-400 border-blue-500/30";
+  if (lower === "svod") return "bg-violet-500/15 text-violet-400 border-violet-500/30";
+  if (lower === "tvod") return "bg-amber-500/15 text-amber-400 border-amber-500/30";
+  if (lower === "avod" || lower === "fvod") return "bg-emerald-500/15 text-emerald-400 border-emerald-500/30";
+  if (lower === "theatrical") return "bg-pink-500/15 text-pink-400 border-pink-500/30";
   return "bg-slate-700/40 text-slate-300 border-slate-600/30";
 };
 

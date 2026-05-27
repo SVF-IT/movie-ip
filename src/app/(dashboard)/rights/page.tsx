@@ -74,6 +74,7 @@ const RIGHTS_EXPORT_FIELDS: ExportFieldDef[] = [
   { key: "movie_title", label: "Movie", getter: (r) => (r.movies as any)?.title || "" },
   { key: "platform_name", label: "Platform", getter: (r) => (r.platforms as any)?.name || "" },
   { key: "rights_type", label: "Rights Type", getter: (r) => (r.platforms as any)?.platform_type || "" },
+  { key: "category", label: "Category" },
   { key: "license_type", label: "License Type" },
   { key: "nature", label: "Nature" },
   { key: "start_date", label: "Start Date" },
@@ -85,6 +86,7 @@ const RIGHTS_EXPORT_FIELDS: ExportFieldDef[] = [
 interface RightWithDetails extends PlatformRight {
   movies?: { id: string; title: string; source: string };
   platforms?: { id: string; name: string; platform_type?: string };
+  category?: string | null;
 }
 
 type RightsTypeFilter = "all" | "satellite" | "internet" | "other";
@@ -143,11 +145,12 @@ export default function RightsPage() {
       if (rightsTypeFilter !== "all") {
         grouped = grouped.filter((r) => {
           const pt = (r.platforms?.platform_type || "").toLowerCase();
-          const isSat = pt.includes("satellite") || pt.includes("dth") || pt.includes("terrestrial") || pt.includes("cable");
-          const isOtherType = /air|ship|surface|hotel/i.test(pt);
+          const isSat = pt.includes("satellite") || pt.includes("dth") || pt.includes("terrestrial");
+          const isInternet = pt.includes("svod") || pt.includes("tvod") || pt.includes("avod") || pt.includes("fvod");
           if (rightsTypeFilter === "satellite") return isSat;
-          if (rightsTypeFilter === "other") return isOtherType;
-          return !isSat && !isOtherType;
+          if (rightsTypeFilter === "internet") return isInternet;
+          if (rightsTypeFilter === "other") return !isSat && !isInternet;
+          return true;
         });
       }
 
@@ -219,11 +222,12 @@ export default function RightsPage() {
       if (rightsTypeFilter !== "all") {
         exportData2 = exportData2.filter((r) => {
           const pt = (r.platforms?.platform_type || "").toLowerCase();
-          const isSat = pt.includes("satellite") || pt.includes("dth") || pt.includes("terrestrial") || pt.includes("cable");
-          const isOtherType = /air|ship|surface|hotel/i.test(pt);
+          const isSat = pt.includes("satellite") || pt.includes("dth") || pt.includes("terrestrial");
+          const isInternet = pt.includes("svod") || pt.includes("tvod") || pt.includes("avod") || pt.includes("fvod");
           if (rightsTypeFilter === "satellite") return isSat;
-          if (rightsTypeFilter === "other") return isOtherType;
-          return !isSat && !isOtherType;
+          if (rightsTypeFilter === "internet") return isInternet;
+          if (rightsTypeFilter === "other") return !isSat && !isInternet;
+          return true;
         });
       }
       const exportFiltered = isOthers
@@ -434,6 +438,7 @@ export default function RightsPage() {
                       <SortableHeader column="movies" label="Movie" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-slate-400" />
                       <SortableHeader column="platforms" label="Platform" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hidden md:table-cell" />
                       <SortableHeader column="license_type" label="Type" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hidden lg:table-cell" />
+                      <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hidden lg:table-cell">Category</TableHead>
                       <SortableHeader column="start_date" label="Start Date" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hidden lg:table-cell" />
                       <SortableHeader column="end_date" label="End Date" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-slate-400" />
                       <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Status</TableHead>
@@ -468,6 +473,9 @@ export default function RightsPage() {
                           </TableCell>
                           <TableCell className="hidden lg:table-cell text-sm text-slate-400 py-3.5">
                             {right.platforms?.platform_type || "—"}
+                          </TableCell>
+                          <TableCell className="hidden lg:table-cell text-xs text-slate-400 py-3.5">
+                            {right.category || "—"}
                           </TableCell>
                           <TableCell className="hidden lg:table-cell tabular-nums text-xs text-emerald-400 font-medium py-3.5">
                             {right.start_date ? format(new Date(right.start_date), "dd MMM yy") : "—"}

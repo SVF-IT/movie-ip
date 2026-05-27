@@ -213,6 +213,22 @@ export async function getMovieRights(movieId: string): Promise<PlatformRight[]> 
   return data || [];
 }
 
+export async function getMovieExpiredRights(movieId: string): Promise<PlatformRight[]> {
+  const { data, error } = await supabase
+    .from("platform_rights")
+    .select(`
+      *,
+      platforms(name, platform_type)
+    `)
+    .eq("movie_id", movieId)
+    .not("end_date", "is", null)
+    .lt("end_date", new Date().toISOString().split("T")[0])
+    .order("end_date", { ascending: false });
+
+  if (error) throw sanitizeError(error);
+  return data || [];
+}
+
 export async function getMoviePeople(movieId: string): Promise<MoviePeople[]> {
   const { data, error } = await supabase
     .from("movie_people")
