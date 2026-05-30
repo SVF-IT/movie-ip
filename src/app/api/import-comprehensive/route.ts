@@ -233,24 +233,9 @@ function normalizeCertification(cert: string | null | undefined): string | null 
   return v
 }
 
-// For platform rights nature — normalise known patterns, fall back to raw value as-is
+// For platform rights nature — store raw value as-is so nothing is lost
 function normalizeNature(nature: string | null | undefined): string | null {
-  const cleaned = cleanString(nature)
-  if (!cleaned) return null
-  const lower = cleaned.toLowerCase()
-
-  if (lower.includes('non') && lower.includes('exclusive')) return 'Non-Exclusive'
-  if (lower.includes('jointly') && lower.includes('owned')) return 'Jointly Production'
-  if (lower.includes('joint')) return 'Jointly Production'
-  if (lower.includes('sold') || lower.includes('grassroot')) return 'Sold/Expired'
-  if (lower.includes('co-production') || lower.includes('coproduction')) return 'Jointly Production'
-  if (lower.includes('licensed') || lower.includes('license')) return 'Non-Exclusive'
-  if (lower.includes('assignment') || lower.includes('assigned')) return 'Exclusive'
-  // Only map bare "exclusive" — not "Shared-Exclusive", "Semi-Exclusive", etc.
-  if (lower.trim() === 'exclusive') return 'Exclusive'
-
-  // Anything else — store the raw value so nothing is lost
-  return cleaned
+  return cleanString(nature)
 }
 
 // For movie-level nature_of_rights - preserve raw text as-is
@@ -601,7 +586,7 @@ async function extractDthRights(row: Record<string, string>, keys: string[], cac
   if (!dthKey) return
 
   const dthLicense = cleanString(row[dthKey])
-  if (!dthLicense || ['open', 'no'].includes(dthLicense.toLowerCase())) return
+  if (!dthLicense || ['open', 'no', 'n/a', 'na'].includes(dthLicense.toLowerCase())) return
 
   const platformId = await cache.getOrCreatePlatform(dthLicense, 'DTH')
   if (!platformId) return
@@ -622,7 +607,7 @@ async function extractTerrestrialRights(row: Record<string, string>, keys: strin
   if (!terrKey) return
 
   const terrLicense = cleanString(row[terrKey])
-  if (!terrLicense || ['open', 'no'].includes(terrLicense.toLowerCase())) return
+  if (!terrLicense || ['open', 'no', 'n/a', 'na'].includes(terrLicense.toLowerCase())) return
 
   const platformId = await cache.getOrCreatePlatform(terrLicense, 'Terrestrial')
   if (!platformId) return
@@ -646,7 +631,7 @@ async function extractSvodRightsPositional(row: Record<string, string>, keys: st
   if (!anchorKey) return
 
   const anchorVal = cleanString(row[anchorKey])
-  if (!anchorVal || ['no', 'open'].includes(anchorVal.toLowerCase())) return
+  if (!anchorVal || ['no', 'open', 'n/a', 'na'].includes(anchorVal.toLowerCase())) return
 
   const platformId = await cache.getOrCreatePlatform(platformName, 'SVOD')
   if (!platformId) return
@@ -711,7 +696,7 @@ async function extractHoichoiRights(row: Record<string, string>, keys: string[],
   if (!anchorKey) return
 
   const anchorVal = cleanString(row[anchorKey])
-  if (!anchorVal || ['no', 'open'].includes(anchorVal.toLowerCase())) return
+  if (!anchorVal || ['no', 'open', 'n/a', 'na'].includes(anchorVal.toLowerCase())) return
 
   const platformId = await cache.getOrCreatePlatform('Hoichoi', 'SVOD')
   if (!platformId) return
@@ -736,7 +721,7 @@ async function extractHungamaRights(row: Record<string, string>, keys: string[],
   if (!anchorKey) return
 
   const anchorVal = cleanString(row[anchorKey])
-  if (!anchorVal || ['no', 'open'].includes(anchorVal.toLowerCase())) return
+  if (!anchorVal || ['no', 'open', 'n/a', 'na'].includes(anchorVal.toLowerCase())) return
 
   const platformId = await cache.getOrCreatePlatform('Hungama', 'SVOD')
   if (!platformId) return
@@ -761,7 +746,7 @@ async function extractTvodRights(row: Record<string, string>, keys: string[], ca
   if (!tvodKey) return
 
   const tvod = cleanString(row[tvodKey])
-  if (!tvod || ['no', 'open'].includes(tvod.toLowerCase())) return
+  if (!tvod || ['no', 'open', 'n/a', 'na'].includes(tvod.toLowerCase())) return
 
   await cache.insertPlatformRights({
     movie_id: movieId,
@@ -777,7 +762,7 @@ async function extractAvodRights(row: Record<string, string>, keys: string[], ca
   if (!avodKey) return
 
   const avod = cleanString(row[avodKey])
-  if (!avod || ['no', 'open'].includes(avod.toLowerCase())) return
+  if (!avod || ['no', 'open', 'n/a', 'na'].includes(avod.toLowerCase())) return
 
   await cache.insertPlatformRights({
     movie_id: movieId,
@@ -793,7 +778,7 @@ async function extractYoutubeRights(row: Record<string, string>, keys: string[],
   if (!ytKey) return
 
   const yt = cleanString(row[ytKey])
-  if (!yt || ['no', 'open'].includes(yt.toLowerCase())) return
+  if (!yt || ['no', 'open', 'n/a', 'na'].includes(yt.toLowerCase())) return
 
   const platformId = await cache.getOrCreatePlatform('YouTube', 'AVOD')
   if (!platformId) return
@@ -812,7 +797,7 @@ async function extractOtherRights(row: Record<string, string>, keys: string[], c
 
   if (othersKey) {
     const others = cleanString(row[othersKey])
-    if (others && !['no', 'open'].includes(others.toLowerCase())) {
+    if (others && !['no', 'open', 'n/a', 'na'].includes(others.toLowerCase())) {
       const platformId = await cache.getOrCreatePlatform(others)
       if (platformId) {
         await cache.insertPlatformRights({
@@ -827,7 +812,7 @@ async function extractOtherRights(row: Record<string, string>, keys: string[], c
 
   if (rightsGrantedKey) {
     const rightsGranted = cleanString(row[rightsGrantedKey])
-    if (rightsGranted && !['no', 'open'].includes(rightsGranted.toLowerCase())) {
+    if (rightsGranted && !['no', 'open', 'n/a', 'na'].includes(rightsGranted.toLowerCase())) {
       const rgIdx = keys.indexOf(rightsGrantedKey)
       let natureVal: string | null = null
       let startDateVal: string | null = null
@@ -1041,6 +1026,7 @@ async function extractAcquiredPlatformRights(
         // Generic header: platform name comes from the data cell
         platformName = cell0 || null
         if (!platformName) continue
+        if (['no', 'n', 'open', 'n/a', 'na', '-'].includes(platformName.toLowerCase())) continue
       }
 
       const platformId = await cache.getOrCreatePlatform(platformName, platformType)
@@ -1671,6 +1657,7 @@ export async function POST(request: Request) {
     let rawDataColArrays: string[][] = [] // parallel to allRows — raw column arrays per data row
     let parseErrors: { type?: string; message: string; row?: number }[]
     let headers: string[]
+    let effectiveDataStartRow = headerRowIndex + 1 // updated below when sub-rows are skipped
 
     if (syntheticHeaders) {
       // Data starts after the sub-header row; drop all-empty rows
@@ -1688,7 +1675,27 @@ export async function POST(request: Request) {
     } else {
       // Simple single-header format
       const headerRow = preambleRows[headerRowIndex].map((h) => h.replace(/\s*\n\s*/g, ' ').trim())
-      const dataRows = fullRows.slice(headerRowIndex + 1).filter((r) => r.some((c) => c.trim() !== ''))
+      // For home format, rows immediately after the header may be platform type/field sub-headers
+      // (rows 1 and 2 in the standard home layout). Skip them by detecting known section banners.
+      const knownSections = ['satellite rights', 'internet rights']
+      let dataStartOffset = headerRowIndex + 1
+      for (let si = dataStartOffset; si < Math.min(dataStartOffset + 3, preambleRows.length); si++) {
+        const rowCells = preambleRows[si]
+        const hasSection = rowCells.some((c) => knownSections.some((s) => c.toLowerCase().trim().includes(s)))
+        const hasPlatformHeader = rowCells.some((c) => {
+          const cl = c.toLowerCase().trim()
+          return cl === 'platform/license' || cl === 'platform / license' || cl.startsWith('platform -')
+        })
+        const hasPlatformType = rowCells.some((c) => {
+          const cl = c.toLowerCase().trim()
+          return ['satellite tv', 'svod', 'tvod', 'avod', 'dth vod', 'terrestrial tv'].includes(cl)
+        })
+        if (hasSection || hasPlatformHeader || hasPlatformType) {
+          dataStartOffset = si + 1
+        }
+      }
+      effectiveDataStartRow = dataStartOffset
+      const dataRows = fullRows.slice(dataStartOffset).filter((r) => r.some((c) => c.trim() !== ''))
       parseErrors = fullParsed.errors as { type?: string; message: string; row?: number }[]
       allRows = dataRows.map((cols) => {
         const obj: Record<string, string> = {}
@@ -1754,11 +1761,24 @@ export async function POST(request: Request) {
       acquiredPlatformSlots = parsePlatformRightsSections(bannerRow, typeRow, fieldRow)
     }
     let homePlatformSlots: PlatformSlot[] | null = null
-    if (detectedFormat === 'home' && headerRowIndex >= 2) {
-      const bannerRow = preambleRows[headerRowIndex - 2] ?? []
-      const typeRow = preambleRows[headerRowIndex - 1] ?? []
-      const fieldRow = preambleRows[headerRowIndex]
-      homePlatformSlots = parsePlatformRightsSections(bannerRow, typeRow, fieldRow)
+    if (detectedFormat === 'home') {
+      // Home CSV layout: row 0 = metadata headers + banner labels (SATELLITE RIGHTS, INTERNET RIGHTS...)
+      //                  row 1 = platform type labels (Satellite TV, SVOD, ...)
+      //                  row 2 = platform field headers (Platform/License, Category, Start Date, ...)
+      // headerRowIndex is 0 in this layout, so we always use rows [0,1,2] as [banner,type,field].
+      if (headerRowIndex >= 2) {
+        // Legacy layout where preamble rows sit above the header
+        const bannerRow = preambleRows[headerRowIndex - 2] ?? []
+        const typeRow = preambleRows[headerRowIndex - 1] ?? []
+        const fieldRow = preambleRows[headerRowIndex]
+        homePlatformSlots = parsePlatformRightsSections(bannerRow, typeRow, fieldRow)
+      } else {
+        // Standard home layout: header row IS row 0; platform sub-rows are rows 1 and 2
+        const bannerRow = preambleRows[headerRowIndex] ?? []       // row 0 — also the metadata header
+        const typeRow = preambleRows[headerRowIndex + 1] ?? []     // row 1 — platform type labels
+        const fieldRow = preambleRows[headerRowIndex + 2] ?? []    // row 2 — Platform/License, Category…
+        homePlatformSlots = parsePlatformRightsSections(bannerRow, typeRow, fieldRow)
+      }
     }
 
     // 6. Strip the "accepted values" example row (row immediately after the header that
@@ -1830,7 +1850,7 @@ export async function POST(request: Request) {
     let skipped = 0
     let updated = 0
 
-    const dataStartRowIndex = subHeaderRowIndex !== null ? subHeaderRowIndex + 1 : headerRowIndex + 1
+    const dataStartRowIndex = subHeaderRowIndex !== null ? subHeaderRowIndex + 1 : effectiveDataStartRow
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i] as Record<string, string>

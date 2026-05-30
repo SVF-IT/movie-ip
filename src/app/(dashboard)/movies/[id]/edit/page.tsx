@@ -300,16 +300,27 @@ function HoldbackPicker({ value, onChange }: { value: string; onChange: (v: stri
 }
 
 function DurationInput({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
-  const format = (raw: string) => {
-    const digits = raw.replace(/\D/g, "").slice(0, 6);
-    if (digits.length <= 2) return digits;
-    if (digits.length <= 4) return `${digits.slice(0, 2)}:${digits.slice(2)}`;
-    return `${digits.slice(0, 2)}:${digits.slice(2, 4)}:${digits.slice(4)}`;
-  };
   return (
-    <div className="relative">
-      <Input value={value} onChange={(e) => onChange(format(e.target.value))} placeholder="hh:mm:ss" maxLength={8} className={className} />
-      {value && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold uppercase tracking-widest text-slate-500 pointer-events-none">hh:mm:ss</span>}
+    <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder="e.g. 2 mins, 30 sec, 00:02:30" className={className} />
+  );
+}
+
+const RIGHTS_NATURE_OPTIONS = ["Exclusive", "Non-exclusive", "Shared Exclusive", "N/A"];
+
+function RightsNatureSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const isCustom = value !== "" && !RIGHTS_NATURE_OPTIONS.includes(value);
+  return (
+    <div className="space-y-1.5">
+      <Select value={isCustom ? "__custom__" : value} onValueChange={(v) => { if (v === "__custom__") onChange(""); else onChange(v); }}>
+        <SelectTrigger className={`${selectCls} h-8 text-xs`}><SelectValue placeholder="Select…" /></SelectTrigger>
+        <SelectContent>
+          {RIGHTS_NATURE_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+          <SelectItem value="__custom__">Custom…</SelectItem>
+        </SelectContent>
+      </Select>
+      {isCustom && (
+        <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder="Enter custom nature…" className={`${inputCls} h-8 text-xs`} autoFocus />
+      )}
     </div>
   );
 }
@@ -866,9 +877,11 @@ export default function EditMoviePage() {
                 <FormField label="Title" required>
                   <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Film title" className={`${inputCls} h-12 text-base font-semibold`} />
                 </FormField>
-                <FormField label="Production No.">
-                  <Input value={productionNo} onChange={(e) => setProductionNo(e.target.value)} placeholder="e.g., SVF-2024-001" className={inputCls} />
-                </FormField>
+                {source !== "acquired" && (
+                  <FormField label="Production No.">
+                    <Input value={productionNo} onChange={(e) => setProductionNo(e.target.value)} placeholder="e.g., SVF-2024-001" className={inputCls} />
+                  </FormField>
+                )}
 
                 <FormField label="Release Date">
                   <Input type="date" value={releaseDate} onChange={(e) => { setReleaseDate(e.target.value); if (e.target.value) setReleaseYear(new Date(e.target.value).getFullYear().toString()); }} className={inputCls} />
@@ -969,7 +982,7 @@ export default function EditMoviePage() {
                   </div>
                 )}
 
-                {selectedHouseIds.map((houseId, index) => {
+                {isHomeProd && selectedHouseIds.map((houseId, index) => {
                   const svfId = productionHouses.find(h => h.name.toLowerCase() === 'svf')?.id ?? null;
                   const isJointly = isJointlyOwned && isHomeProd;
                   const isSvfLocked = isJointly && index === 0 && svfId !== null && houseId === svfId;
@@ -1111,15 +1124,7 @@ export default function EditMoviePage() {
                     </div>
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Nature</p>
-                      <Select value={natureOfSatelliteRights} onValueChange={setNatureOfSatelliteRights}>
-                        <SelectTrigger className={`${selectCls} h-8 text-xs`}><SelectValue placeholder="Select…" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Exclusive">Exclusive</SelectItem>
-                          <SelectItem value="Non-exclusive">Non-exclusive</SelectItem>
-                          <SelectItem value="Shared Exclusive">Shared Exclusive</SelectItem>
-                          <SelectItem value="N/A">N/A</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <RightsNatureSelect value={natureOfSatelliteRights} onChange={setNatureOfSatelliteRights} />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Start</p>
@@ -1140,15 +1145,7 @@ export default function EditMoviePage() {
                     </div>
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Nature</p>
-                      <Select value={natureOfInternetRights} onValueChange={setNatureOfInternetRights}>
-                        <SelectTrigger className={`${selectCls} h-8 text-xs`}><SelectValue placeholder="Select…" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Exclusive">Exclusive</SelectItem>
-                          <SelectItem value="Non-exclusive">Non-exclusive</SelectItem>
-                          <SelectItem value="Shared Exclusive">Shared Exclusive</SelectItem>
-                          <SelectItem value="N/A">N/A</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <RightsNatureSelect value={natureOfInternetRights} onChange={setNatureOfInternetRights} />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Start</p>
@@ -1164,15 +1161,7 @@ export default function EditMoviePage() {
                   <div className="space-y-2.5">
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Nature</p>
-                      <Select value={natureOfNegativeRights} onValueChange={setNatureOfNegativeRights}>
-                        <SelectTrigger className={`${selectCls} h-8 text-xs`}><SelectValue placeholder="Select…" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Exclusive">Exclusive</SelectItem>
-                          <SelectItem value="Non-exclusive">Non-exclusive</SelectItem>
-                          <SelectItem value="Shared Exclusive">Shared Exclusive</SelectItem>
-                          <SelectItem value="N/A">N/A</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <RightsNatureSelect value={natureOfNegativeRights} onChange={setNatureOfNegativeRights} />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Start</p>
@@ -1188,15 +1177,7 @@ export default function EditMoviePage() {
                   <div className="space-y-2.5">
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Nature</p>
-                      <Select value={natureOfOtherRights} onValueChange={setNatureOfOtherRights}>
-                        <SelectTrigger className={`${selectCls} h-8 text-xs`}><SelectValue placeholder="Select…" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Exclusive">Exclusive</SelectItem>
-                          <SelectItem value="Non-exclusive">Non-exclusive</SelectItem>
-                          <SelectItem value="Shared Exclusive">Shared Exclusive</SelectItem>
-                          <SelectItem value="N/A">N/A</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <RightsNatureSelect value={natureOfOtherRights} onChange={setNatureOfOtherRights} />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Start</p>

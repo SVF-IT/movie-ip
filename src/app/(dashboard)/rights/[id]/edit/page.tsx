@@ -14,9 +14,10 @@ import { useRequirePermission } from "@/hooks/use-require-permission";
 import { useAuth } from "@/contexts/auth-context";
 import { useAppToast } from "@/hooks/use-app-toast";
 import { getRightById, updateRight } from "@/lib/api/rights";
-import { getPlatforms, getRightsNatureTypes } from "@/lib/api/dashboard";
+import { getPlatforms } from "@/lib/api/dashboard";
 import { submitRightChange } from "@/lib/api/pending-changes";
-import type { Platform, RightsNatureType, PlatformRight } from "@/lib/types/database";
+import { NatureSelector } from "@/components/forms/nature-selector";
+import type { Platform, PlatformRight } from "@/lib/types/database";
 
 export default function EditRightPage() {
   const router = useRouter();
@@ -28,7 +29,6 @@ export default function EditRightPage() {
   const [loading, setLoading] = useState(true);
   const toast = useAppToast();
   const [platforms, setPlatforms] = useState<Platform[]>([]);
-  const [natureTypes, setNatureTypes] = useState<RightsNatureType[]>([]);
   const [originalRight, setOriginalRight] = useState<PlatformRight | null>(null);
   const [movieApprovalStatus, setMovieApprovalStatus] = useState<string | null>(null);
   const [platformId, setPlatformId] = useState("");
@@ -42,13 +42,11 @@ export default function EditRightPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [right, plats, natureTs] = await Promise.all([
+        const [right, plats] = await Promise.all([
           getRightById(rightId),
           getPlatforms(),
-          getRightsNatureTypes(),
         ]);
         setPlatforms(plats);
-        setNatureTypes(natureTs);
         if (!right) { toast.error("Right not found"); setLoading(false); return; }
         setOriginalRight(right);
         if (right.movie_id) {
@@ -122,14 +120,12 @@ export default function EditRightPage() {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label className="text-sm font-bold">Nature of Right</Label>
-              <Select value={nature} onValueChange={setNature}>
-                <SelectTrigger className="h-11 focus-ring"><SelectValue placeholder="Choose Nature..." /></SelectTrigger>
-                <SelectContent>
-                  {natureTypes.map((nt) => (
-                    <SelectItem key={nt.id} value={nt.name}>{nt.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <NatureSelector
+                value={nature}
+                onValueChange={setNature}
+                extraOptions={['Shared Exclusive']}
+                excludeOptions={['Jointly Owned']}
+              />
               <p className="text-[11px] text-muted-foreground ml-1">Exclusivity or specific ownership terms.</p>
             </div>
             <div className="space-y-2"><Label>Territory</Label><Input value={territory} onChange={(e) => setTerritory(e.target.value)} /></div>

@@ -3,6 +3,25 @@ import type { DashboardStats, MovieWithDetails, Person, Platform, RightsNatureTy
 
 const supabase = createClient()
 
+const CHUNK_SIZE = 200
+
+async function fetchPlatformRightsChunked(
+  movieIds: string[],
+  select: string,
+  extraFilters?: (q: ReturnType<typeof supabase.from>) => ReturnType<typeof supabase.from>
+): Promise<any[]> {
+  if (movieIds.length === 0) return []
+  const results: any[] = []
+  for (let i = 0; i < movieIds.length; i += CHUNK_SIZE) {
+    const chunk = movieIds.slice(i, i + CHUNK_SIZE)
+    let q = supabase.from('platform_rights').select(select).in('movie_id', chunk)
+    if (extraFilters) q = extraFilters(q) as any
+    const { data } = await q
+    if (data) results.push(...data)
+  }
+  return results
+}
+
 function isSatellitePlatformType(pt: string): boolean {
   const n = pt.toLowerCase()
   return n.includes('satellite') || n.includes('dth') || n.includes('terrestrial') || n.includes('cable')
@@ -13,6 +32,27 @@ function isInternetPlatformType(pt: string): boolean {
   const isOther = /air|ship|surface|hotel/i.test(n)
   return !isSatellitePlatformType(pt) && !isOther
 }
+
+// Precise helpers for rights dashboard stats
+function isHomeSatellitePlatform(pt: string): boolean {
+  const n = pt.trim().toLowerCase()
+  return n === 'satellite tv' || n === 'dth vod' || n === 'terrestrial tv'
+}
+
+function isAcquiredSatellitePlatform(pt: string): boolean {
+  const n = pt.toLowerCase()
+  return n.includes('satellite') || n.includes('terrestrial') || n.includes('dth')
+}
+
+function isInternetPlatform(pt: string): boolean {
+  const n = pt.trim().toLowerCase()
+  return n === 'svod' || n === 'tvod' || n === 'avod' || n === 'fvod'
+}
+
+function isHoichoiPlatform(name: string): boolean {
+  return name.toLowerCase().includes('hoichoi')
+}
+
 
 //test
 export async function getDashboardStats(): Promise<DashboardStats> {
@@ -307,15 +347,15 @@ export async function getRightsModeStats(mode: RightsMode, language?: string): P
       const homeMovieIds = homeMovies.map((m: any) => m.id)
 
       // Home open: no active satellite platform_right, cert != A
+      // platform_type in (Satellite TV, DTH VOD, Terrestrial TV)
       let moviesWithActiveSatRights = new Set<string>()
       if (homeMovieIds.length > 0) {
-        const { data: satRights } = await supabase
-          .from('platform_rights')
-          .select('movie_id, platforms(platform_type)')
-          .eq('is_current', true)
-          .in('movie_id', homeMovieIds)
+        const satRights = await fetchPlatformRightsChunked(
+          homeMovieIds, 'movie_id, platforms(platform_type)',
+          (q) => q.eq('is_current', true)
+        )
         moviesWithActiveSatRights = new Set(
-          (satRights || []).filter((r: any) => isSatellitePlatformType(r.platforms?.platform_type || '')).map((r: any) => r.movie_id)
+          satRights.filter((r: any) => isHomeSatellitePlatform(r.platforms?.platform_type || '')).map((r: any) => r.movie_id)
         )
       }
       openHomeCount = homeMovies.filter((m: any) =>
@@ -324,7 +364,7 @@ export async function getRightsModeStats(mode: RightsMode, language?: string): P
 
       // Acquired open: satellite_rights=Yes OR negative_rights=Yes,
       // cert != A, not expired (satellite_rights_end_date if present, else agreement_end_date),
-      // and no active satellite platform_right
+      // and no active satellite platform_right where platform_type include satellite/terrestrial/dth AND (end_date is null or >= today)
       const acquiredMovies = validMovies.filter((m: any) => {
         if (m.source !== 'acquired') return false
         if (m.satellite_rights !== 'Yes' && m.negative_rights !== 'Yes') return false
@@ -337,12 +377,9 @@ export async function getRightsModeStats(mode: RightsMode, language?: string): P
       const acquiredMovieIds = acquiredMovies.map((m: any) => m.id)
       const moviesWithActiveSatPlatformRight = new Set<string>()
       if (acquiredMovieIds.length > 0) {
-        const { data: acqSatRights } = await supabase
-          .from('platform_rights')
-          .select('movie_id, platforms(platform_type), end_date')
-          .in('movie_id', acquiredMovieIds)
-        ;(acqSatRights || []).forEach((r: any) => {
-          if (!isSatellitePlatformType(r.platforms?.platform_type || '')) return
+        const acqSatRights = await fetchPlatformRightsChunked(acquiredMovieIds, 'movie_id, platforms(platform_type), end_date')
+        acqSatRights.forEach((r: any) => {
+          if (!isAcquiredSatellitePlatform(r.platforms?.platform_type || '')) return
           if (!r.end_date || r.end_date >= today) moviesWithActiveSatPlatformRight.add(r.movie_id)
         })
       }
@@ -353,16 +390,16 @@ export async function getRightsModeStats(mode: RightsMode, language?: string): P
       const homeMovieIds = homeMovies.map((m: any) => m.id)
 
       // Home open: no active internet platform_right (excluding Hoichoi)
+      // platform_type in (SVOD, TVOD, AVOD, FVOD), is_current=true, (end_date is null or >= today)
       let moviesWithActiveIntRights = new Set<string>()
       if (homeMovieIds.length > 0) {
-        const { data: intRights } = await supabase
-          .from('platform_rights')
-          .select('movie_id, platforms(name, platform_type)')
-          .eq('is_current', true)
-          .in('movie_id', homeMovieIds)
+        const intRights = await fetchPlatformRightsChunked(
+          homeMovieIds, 'movie_id, platforms(name, platform_type), end_date',
+          (q) => q.eq('is_current', true)
+        )
         moviesWithActiveIntRights = new Set(
-          (intRights || [])
-            .filter((r: any) => isInternetPlatformType(r.platforms?.platform_type || '') && !(r.platforms?.name || '').toLowerCase().includes('hoichoi'))
+          intRights
+            .filter((r: any) => isInternetPlatform(r.platforms?.platform_type || '') && !isHoichoiPlatform(r.platforms?.name || '') && (!r.end_date || r.end_date >= today))
             .map((r: any) => r.movie_id)
         )
       }
@@ -381,14 +418,12 @@ export async function getRightsModeStats(mode: RightsMode, language?: string): P
       const acquiredMovieIds = acquiredMovies.map((m: any) => m.id)
       const moviesWithActiveIntPlatformRight = new Set<string>()
       if (acquiredMovieIds.length > 0) {
-        const { data: acqIntRights } = await supabase
-          .from('platform_rights')
-          .select('movie_id, platforms(name, platform_type), end_date')
-          .in('movie_id', acquiredMovieIds)
-        ;(acqIntRights || []).forEach((r: any) => {
-          const platformType = r.platforms?.platform_type || ''
-          const platformName = (r.platforms?.name || '').toLowerCase()
-          if (!isInternetPlatformType(platformType) || platformName.includes('hoichoi')) return
+        const acqIntRights = await fetchPlatformRightsChunked(
+          acquiredMovieIds, 'movie_id, platforms(name, platform_type), end_date',
+          (q) => q.eq('is_current', true)
+        )
+        acqIntRights.forEach((r: any) => {
+          if (!isInternetPlatform(r.platforms?.platform_type || '') || isHoichoiPlatform(r.platforms?.name || '')) return
           if (!r.end_date || r.end_date >= today) moviesWithActiveIntPlatformRight.add(r.movie_id)
         })
       }
@@ -409,38 +444,16 @@ export async function getRightsModeStats(mode: RightsMode, language?: string): P
     // Expiring rights — count unique movies with a matching platform_right expiring in current year
     let expiringCount = 0
 
-    if (mode === 'satellite') {
-      const allValidMovieIds = validMovies.map((m: any) => m.id)
-      if (allValidMovieIds.length > 0) {
-        const { data: expiringRights } = await supabase
-          .from('platform_rights')
-          .select('movie_id, platforms(platform_type)')
-          .eq('is_current', true)
-          .gte('end_date', currentYearStart)
-          .lte('end_date', currentYearEnd)
-          .in('movie_id', allValidMovieIds)
-        expiringCount = new Set(
-          (expiringRights || [])
-            .filter((r: any) => isSatellitePlatformType(r.platforms?.platform_type || ''))
-            .map((r: any) => r.movie_id)
-        ).size
-      }
-    } else {
-      // Internet: unique movies with an internet platform_right expiring in current year
-      const validMovieIds = validMovies.map((m: any) => m.id)
-      let intExpQuery = supabase
-        .from('platform_rights')
-        .select('movie_id, platforms(platform_type)')
-        .eq('is_current', true)
-        .gte('end_date', currentYearStart)
-        .lte('end_date', currentYearEnd)
-      if (language && validMovieIds.length > 0) intExpQuery = intExpQuery.in('movie_id', validMovieIds)
-      const { data: expiringRights } = await intExpQuery
-      expiringCount = new Set(
-        (expiringRights || [])
-          .filter((r: any) => isInternetPlatformType(r.platforms?.platform_type || ''))
-          .map((r: any) => r.movie_id)
-      ).size
+    const allValidMovieIds = validMovies.map((m: any) => m.id)
+    if (allValidMovieIds.length > 0) {
+      const expiringRights = await fetchPlatformRightsChunked(
+        allValidMovieIds, 'movie_id, platforms(platform_type)',
+        (q) => q.eq('is_current', true).gte('end_date', currentYearStart).lte('end_date', currentYearEnd)
+      )
+      const filterFn = mode === 'satellite'
+        ? (r: any) => isSatellitePlatformType(r.platforms?.platform_type || '')
+        : (r: any) => isInternetPlatform(r.platforms?.platform_type || '')
+      expiringCount = new Set(expiringRights.filter(filterFn).map((r: any) => r.movie_id)).size
     }
 
     // Upcoming movies count (same for both)
@@ -540,15 +553,17 @@ export async function getOpenTitlesForMode(
       const homeMovieIds = homeMovies.map((m: any) => m.id)
 
       // Home: no active satellite platform_right, cert != A
+      // platform_type in (Satellite TV, DTH VOD, Terrestrial TV)
       let moviesWithActiveSatRights = new Set<string>()
       if (homeMovieIds.length > 0) {
-        const { data: satRights } = await supabase.from('platform_rights').select('movie_id, platforms(platform_type)').eq('is_current', true).in('movie_id', homeMovieIds)
-        moviesWithActiveSatRights = new Set((satRights || []).filter((r: any) => isSatellitePlatformType(r.platforms?.platform_type || '')).map((r: any) => r.movie_id))
+        const satRights = await fetchPlatformRightsChunked(homeMovieIds, 'movie_id, platforms(platform_type)', (q) => q.eq('is_current', true))
+        moviesWithActiveSatRights = new Set(satRights.filter((r: any) => isHomeSatellitePlatform(r.platforms?.platform_type || '')).map((r: any) => r.movie_id))
       }
       const openHomeMovies = homeMovies.filter((m: any) => !moviesWithActiveSatRights.has(m.id) && (m.certification || '').trim().toUpperCase() !== 'A')
 
       // Acquired: satellite_rights=Yes OR negative_rights=Yes, cert != A,
       // not expired (satellite_rights_end_date ?? agreement_end_date), no active satellite platform_right
+      // where platform_type include satellite/terrestrial/dth AND (end_date is null or >= today)
       const acquiredMovies = validMovies.filter((m: any) => {
         if (m.source !== 'acquired') return false
         if (m.satellite_rights !== 'Yes' && m.negative_rights !== 'Yes') return false
@@ -560,12 +575,9 @@ export async function getOpenTitlesForMode(
       const acquiredMovieIds = acquiredMovies.map((m: any) => m.id)
       const moviesWithActiveSatPlatformRight2 = new Set<string>()
       if (acquiredMovieIds.length > 0) {
-        const { data: acqSatRights } = await supabase
-          .from('platform_rights')
-          .select('movie_id, platforms(platform_type), end_date')
-          .in('movie_id', acquiredMovieIds)
-        ;(acqSatRights || []).forEach((r: any) => {
-          if (!isSatellitePlatformType(r.platforms?.platform_type || '')) return
+        const acqSatRights = await fetchPlatformRightsChunked(acquiredMovieIds, 'movie_id, platforms(platform_type), end_date')
+        acqSatRights.forEach((r: any) => {
+          if (!isAcquiredSatellitePlatform(r.platforms?.platform_type || '')) return
           if (!r.end_date || r.end_date >= today) moviesWithActiveSatPlatformRight2.add(r.movie_id)
         })
       }
@@ -581,12 +593,16 @@ export async function getOpenTitlesForMode(
       const homeMovieIds = homeMovies.map((m: any) => m.id)
 
       // Home: no active internet platform_right (excluding Hoichoi)
+      // platform_type in (SVOD, TVOD, AVOD, FVOD), is_current=true, (end_date is null or >= today)
       let moviesWithActiveIntRights = new Set<string>()
       if (homeMovieIds.length > 0) {
-        const { data: intRights } = await supabase.from('platform_rights').select('movie_id, platforms(name, platform_type)').eq('is_current', true).in('movie_id', homeMovieIds)
+        const intRights = await fetchPlatformRightsChunked(
+          homeMovieIds, 'movie_id, platforms(name, platform_type), end_date',
+          (q) => q.eq('is_current', true)
+        )
         moviesWithActiveIntRights = new Set(
-          (intRights || [])
-            .filter((r: any) => isInternetPlatformType(r.platforms?.platform_type || '') && !(r.platforms?.name || '').toLowerCase().includes('hoichoi'))
+          intRights
+            .filter((r: any) => isInternetPlatform(r.platforms?.platform_type || '') && !isHoichoiPlatform(r.platforms?.name || '') && (!r.end_date || r.end_date >= today))
             .map((r: any) => r.movie_id)
         )
       }
@@ -604,14 +620,9 @@ export async function getOpenTitlesForMode(
       const acquiredMovieIds = acquiredMovies.map((m: any) => m.id)
       const moviesWithActiveIntPlatformRight2 = new Set<string>()
       if (acquiredMovieIds.length > 0) {
-        const { data: acqIntRights } = await supabase
-          .from('platform_rights')
-          .select('movie_id, platforms(name, platform_type), end_date')
-          .in('movie_id', acquiredMovieIds)
-        ;(acqIntRights || []).forEach((r: any) => {
-          const platformType = r.platforms?.platform_type || ''
-          const platformName = (r.platforms?.name || '').toLowerCase()
-          if (!isInternetPlatformType(platformType) || platformName.includes('hoichoi')) return
+        const acqIntRights = await fetchPlatformRightsChunked(acquiredMovieIds, 'movie_id, platforms(name, platform_type), end_date', (q) => q.eq('is_current', true))
+        acqIntRights.forEach((r: any) => {
+          if (!isInternetPlatform(r.platforms?.platform_type || '') || isHoichoiPlatform(r.platforms?.name || '')) return
           if (!r.end_date || r.end_date >= today) moviesWithActiveIntPlatformRight2.add(r.movie_id)
         })
       }
@@ -729,15 +740,19 @@ export async function getExpiringSatelliteTitles(options?: {
     const movieById = new Map<string, any>(validMovies.map((m: any) => [m.id, m]))
 
     if (allValidMovieIds.length > 0) {
-      let satRightsQuery = supabase
-        .from('platform_rights')
-        .select('id, movie_id, start_date, end_date, nature, territory, platforms(name, platform_type)')
-        .eq('is_current', true)
-        .in('movie_id', allValidMovieIds)
-      if (fromDate) satRightsQuery = satRightsQuery.gte('end_date', fromDate)
-      if (toDate) satRightsQuery = satRightsQuery.lte('end_date', toDate)
-
-      const { data: satRights } = await satRightsQuery
+      const satRights: any[] = []
+      for (let i = 0; i < allValidMovieIds.length; i += CHUNK_SIZE) {
+        const chunk = allValidMovieIds.slice(i, i + CHUNK_SIZE)
+        let q = supabase
+          .from('platform_rights')
+          .select('id, movie_id, start_date, end_date, nature, territory, platforms(name, platform_type)')
+          .eq('is_current', true)
+          .in('movie_id', chunk)
+        if (fromDate) q = q.gte('end_date', fromDate)
+        if (toDate) q = q.lte('end_date', toDate)
+        const { data } = await q
+        if (data) satRights.push(...data)
+      }
 
       const earliestExpiryPerMovie = new Map<string, string>()
       const rightsPerMovie = new Map<string, SatelliteRight[]>()
@@ -880,20 +895,25 @@ export async function getExpiringInternetTitles(options?: {
     if (movieIds.length === 0) return { data: [], count: 0 }
 
     // Find internet platform rights expiring in range (or all if no range)
-    let rightsQuery = supabase
-      .from('platform_rights')
-      .select('movie_id, id, start_date, end_date, nature, territory, platforms(name, platform_type)')
-      .eq('is_current', true)
-      .in('movie_id', movieIds)
-    if (fromDate) rightsQuery = rightsQuery.gte('end_date', fromDate)
-    if (toDate) rightsQuery = rightsQuery.lte('end_date', toDate)
-    const { data: expiringRights } = await rightsQuery
+    const expiringRights: any[] = []
+    for (let i = 0; i < movieIds.length; i += CHUNK_SIZE) {
+      const chunk = movieIds.slice(i, i + CHUNK_SIZE)
+      let q = supabase
+        .from('platform_rights')
+        .select('movie_id, id, start_date, end_date, nature, territory, platforms(name, platform_type)')
+        .eq('is_current', true)
+        .in('movie_id', chunk)
+      if (fromDate) q = q.gte('end_date', fromDate)
+      if (toDate) q = q.lte('end_date', toDate)
+      const { data } = await q
+      if (data) expiringRights.push(...data)
+    }
 
     // Group rights by movie_id, keeping only internet-type rights
     const movieRightsMap = new Map<string, InternetRight[]>()
     ;(expiringRights || []).forEach((r: any) => {
       const platformType = r.platforms?.platform_type || ''
-      if (!isInternetPlatformType(platformType)) return
+      if (!isInternetPlatform(platformType)) return
       const right: InternetRight = {
         id: r.id,
         platform_name: r.platforms?.name || 'Unknown',
@@ -1003,19 +1023,17 @@ export async function getActiveInternetTitles(options?: {
     if (movieIds.length === 0) return { data: [], count: 0 }
 
     // Fetch all active internet platform rights for these movies
-    const { data: activeRights } = await supabase
-      .from('platform_rights')
-      .select('movie_id, id, start_date, end_date, nature, territory, platforms(name, platform_type)')
-      .eq('is_current', true)
-      .in('movie_id', movieIds)
+    const activeRights = await fetchPlatformRightsChunked(
+      movieIds, 'movie_id, id, start_date, end_date, nature, territory, platforms(name, platform_type)',
+      (q) => q.eq('is_current', true)
+    )
 
     const movieRightsMap = new Map<string, InternetRight[]>()
-    ;(activeRights || []).forEach((r: any) => {
+    activeRights.forEach((r: any) => {
       const platformType = r.platforms?.platform_type || ''
-      if (!isInternetPlatformType(platformType)) return
-      const platformName = (r.platforms?.name || '').toLowerCase()
-      // Exclude Hoichoi from "active internet" per business rule
-      if (platformName.includes('hoichoi')) return
+      if (!isInternetPlatform(platformType)) return
+      if (isHoichoiPlatform(r.platforms?.name || '')) return
+      if (r.end_date && r.end_date < today) return
       const right: InternetRight = {
         id: r.id,
         platform_name: r.platforms?.name || 'Unknown',
@@ -1080,44 +1098,56 @@ export async function getActiveInternetTitlesCount(language?: string): Promise<{
   try {
     const today = new Date().toISOString().split('T')[0]
 
-    // Get approved movie IDs (language-filtered) split by source
+    // Fetch all approved movies (language-filtered)
     let moviesQuery = supabase
       .from('movies')
-      .select('id, source, nature_of_rights')
+      .select('id, source, nature_of_rights, internet_rights, negative_rights, internet_rights_end_date')
       .eq('approval_status', 'approved')
     if (language) moviesQuery = moviesQuery.eq('language', language)
     const { data: allMovies } = await moviesQuery
 
-    const homeIds = new Set<string>()
-    const acquiredIds = new Set<string>()
-    ;(allMovies || []).forEach((m: any) => {
+    const validMovies = (allMovies || []).filter((m: any) => {
       if (m.source === 'home_production') {
         const nature = (m.nature_of_rights || '').toLowerCase()
-        if (!nature.includes('sold') && !nature.includes('grassroot')) homeIds.add(m.id)
-      } else {
-        acquiredIds.add(m.id)
+        return !nature.includes('sold') && !nature.includes('grassroot')
       }
+      return true
     })
 
-    const allIds = [...homeIds, ...acquiredIds]
-    if (allIds.length === 0) return { total: 0, home: 0, acquired: 0 }
+    const movieIds = validMovies.map((m: any) => m.id)
+    if (movieIds.length === 0) return { total: 0, home: 0, acquired: 0 }
 
-    // Count active SVOD platform_rights (excluding Hoichoi), split by movie source
-    const { data: activeRights } = await supabase
-      .from('platform_rights')
-      .select('movie_id, platforms(name, platform_type)')
-      .eq('is_current', true)
-      .or(`end_date.is.null,end_date.gte.${today}`)
-      .in('movie_id', allIds)
+    // Fetch all active platform_rights (is_current = true) for these movies
+    const activeRights = await fetchPlatformRightsChunked(
+      movieIds, 'movie_id, platforms(name, platform_type), end_date',
+      (q) => q.eq('is_current', true)
+    )
+
+    const moviesWithActivePlatformRights = new Set<string>()
+    activeRights.forEach((r: any) => {
+      const platformType = r.platforms?.platform_type || ''
+      const platformName = (r.platforms?.name || '').toLowerCase()
+      if (!isInternetPlatform(platformType) || isHoichoiPlatform(platformName)) return
+      if (r.end_date && r.end_date < today) return
+      moviesWithActivePlatformRights.add(r.movie_id)
+    })
 
     const homeWithActive = new Set<string>()
     const acquiredWithActive = new Set<string>()
-    ;(activeRights || []).forEach((r: any) => {
-      const platformType = r.platforms?.platform_type || ''
-      const platformName = (r.platforms?.name || '').toLowerCase()
-      if (!isInternetPlatformType(platformType) || platformName.includes('hoichoi')) return
-      if (homeIds.has(r.movie_id)) homeWithActive.add(r.movie_id)
-      else if (acquiredIds.has(r.movie_id)) acquiredWithActive.add(r.movie_id)
+
+    validMovies.forEach((m: any) => {
+      const hasPlatformRight = moviesWithActivePlatformRights.has(m.id)
+      const hasMovieLevelRight = m.source === 'acquired' && 
+        (m.internet_rights === 'Yes' || m.negative_rights === 'Yes') &&
+        (!m.internet_rights_end_date || m.internet_rights_end_date >= today)
+
+      if (hasPlatformRight || hasMovieLevelRight) {
+        if (m.source === 'home_production') {
+          homeWithActive.add(m.id)
+        } else if (m.source === 'acquired') {
+          acquiredWithActive.add(m.id)
+        }
+      }
     })
 
     return {

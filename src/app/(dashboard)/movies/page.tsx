@@ -1,7 +1,7 @@
 "use client";
 
 import { ComprehensiveCSVImportDialog } from "@/components/import-export/comprehensive-csv-import-dialog";
-import { DataExportDialog, type ExportFieldDef } from "@/components/import-export/data-export-dialog";
+import type { ExportFieldDef } from "@/components/import-export/data-export-dialog";
 import { BulkPostersUploadDialog } from "@/components/movies/bulk-posters-upload-dialog";
 import { RoleGate } from "@/components/role-gate";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -32,9 +32,10 @@ import {
 } from "@/components/ui/table";
 import { useAuth } from "@/contexts/auth-context";
 import { useAppToast } from "@/hooks/use-app-toast";
-import { getDistinctCertifications, getRightsNatureTypes } from "@/lib/api/dashboard";
-import { getGroupedMovies, getLanguages } from "@/lib/api/movies";
-import type { ApprovalStatus, GroupedMovie, MovieLanguageVersion, RightsNatureType } from "@/lib/types/database";
+import { getDistinctCertifications, getPlatforms, getRightsNatureTypes } from "@/lib/api/dashboard";
+import { getBulkMoviePlatformRights, getGroupedMovies, getLanguages } from "@/lib/api/movies";
+import type { ApprovalStatus, GroupedMovie, MovieLanguageVersion, Platform, PlatformRight, RightsNatureType } from "@/lib/types/database";
+import * as XLSX from "xlsx";
 import { cn } from "@/lib/utils";
 import {
   Activity,
@@ -80,7 +81,9 @@ export default function MoviesPage() {
   const [agreementExpiryYear, setAgreementExpiryYear] = useState<string>("all");
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
-  const [exportMovieFormat, setExportMovieFormat] = useState<"home" | "acquired" | "all">("all");
+  const [exportMovieFormat, setExportMovieFormat] = useState<"home" | "acquired">("acquired");
+  const [exportWithPlatformRights, setExportWithPlatformRights] = useState(false);
+  const [exportingXlsx, setExportingXlsx] = useState(false);
   const [showBulkPostersDialog, setShowBulkPostersDialog] = useState(false);
   const pageSize = 50;
 
@@ -168,6 +171,219 @@ export default function MoviesPage() {
       setAgreementExpiryYear("all");
     }
     setPage(0);
+  };
+
+  const handleExportXlsx = async () => {
+    setExportingXlsx(true);
+    try {
+      type RightWithPlatform = PlatformRight & { category?: string | null; is_current?: boolean; platforms?: { name?: string; platform_type?: string } };
+
+      // Collect versions matching the selected format
+      const versions: MovieLanguageVersion[] = [];
+      for (const group of allFilteredMovies) {
+        const vs: MovieLanguageVersion[] = group.versions?.length
+          ? group.versions
+          : group.primary_version ? [group.primary_version] : [];
+        for (const v of vs) {
+          if (exportMovieFormat === "home" && v.source !== "home_production") continue;
+          if (exportMovieFormat === "acquired" && v.source !== "acquired") continue;
+          versions.push(v);
+        }
+      }
+
+      const fmtDate = (d: string | null | undefined) => {
+        if (!d) return null;
+        if (d === "3099-12-31") return "Perpetual";
+        return d;
+      };
+
+      // ── Flat export (no platform rights) ─────────────────────────────────────
+      if (!exportWithPlatformRights) {
+        const fields = exportMovieFormat === "home" ? HOME_EXPORT_FIELDS : ACQUIRED_META_FIELDS;
+        const rows = versions.map(v => {
+          const row: Record<string, unknown> = {};
+          for (const f of fields) {
+            const val = f.getter ? f.getter(v as unknown as Record<string, unknown>) : (v as unknown as Record<string, unknown>)[f.key];
+            const strVal = val != null && val !== "" ? String(val) : null;
+            row[f.label] = strVal ? fmtDate(strVal) : null;
+          }
+          return row;
+        });
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, exportMovieFormat === "home" ? "Home" : "Acquired");
+        XLSX.writeFile(wb, `movies_${exportMovieFormat}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+        setShowExportDialog(false);
+        return;
+      }
+
+      // ── With platform rights: 3-row header (home) or 4-row header (acquired) ─
+      const allPlatforms = await getPlatforms();
+      const movieIds = versions.map(v => v.id);
+      const rightsMap = await getBulkMoviePlatformRights(movieIds);
+      const allRights = Object.values(rightsMap).flat() as RightWithPlatform[];
+
+      const SAT_TYPES = ["Satellite TV", "DTH VOD", "Terrestrial TV"];
+      const INTERNET_TYPES = ["SVOD", "TVOD", "AVOD", "FVOD"];
+
+      interface SlotGroup { type: string; isHistory: boolean; label: string; banner: string | null }
+
+      const presentKeys = new Set(allRights.map(r => `${r.platforms?.platform_type ?? "Other"}|${r.is_current === false ? "hist" : "curr"}`));
+      const slotGroups: SlotGroup[] = [];
+      const addGroup = (type: string, banner: string | null) => {
+        if (presentKeys.has(`${type}|curr`)) slotGroups.push({ type, isHistory: false, label: type, banner });
+        if (presentKeys.has(`${type}|hist`)) slotGroups.push({ type, isHistory: true, label: `${type} History`, banner });
+      };
+      SAT_TYPES.forEach(t => addGroup(t, "SATELLITE RIGHTS"));
+      INTERNET_TYPES.forEach(t => addGroup(t, "INTERNET RIGHTS"));
+      const knownTypes = new Set([...SAT_TYPES, ...INTERNET_TYPES]);
+      const otherTypeSet = new Set(allRights.map(r => r.platforms?.platform_type ?? "Other").filter(t => !knownTypes.has(t)));
+      otherTypeSet.forEach(t => addGroup(t, null));
+
+      const platformsByGroup = new Map<string, Platform[]>();
+      for (const sg of slotGroups) {
+        const pSet = new Map<string, Platform>();
+        for (const r of allRights) {
+          const matchType = (r.platforms?.platform_type ?? "Other") === sg.type;
+          const matchHist = sg.isHistory ? r.is_current === false : r.is_current !== false;
+          if (matchType && matchHist) {
+            const p = allPlatforms.find(pl => pl.id === r.platform_id);
+            if (p) pSet.set(p.id, p);
+          }
+        }
+        platformsByGroup.set(sg.label, [...pSet.values()].sort((a, b) => a.name.localeCompare(b.name)));
+      }
+
+      const isHome = exportMovieFormat === "home";
+      const metaFields = isHome ? HOME_EXPORT_FIELDS : ACQUIRED_META_FIELDS;
+      const metaCount = metaFields.length;
+      const merges: XLSX.Range[] = [];
+
+      // ── Row layout ────────────────────────────────────────────────────────────
+      // Home (3 rows):  bannerRow | typeRow  | fieldRow | data...
+      // Acquired (4 rows): groupRow | bannerRow | typeRow | fieldRow | data...
+      //
+      // bannerRow = SATELLITE RIGHTS / INTERNET RIGHTS (+ for acquired: meta group labels)
+      // typeRow   = Satellite TV / DTH VOD / SVOD etc. (+ for acquired: metadata col names)
+      // fieldRow  = Platform - <Name>, Category, Start Date, End Date, Territory, Nature Of Rights
+      //             (+ for acquired: blank for meta cols since typeRow already names them)
+      //             (+ for home: metadata col names, since no separate typeRow for meta)
+
+      // For home: bannerRow + typeRow are purely for platform rights section (meta cols = null)
+      //           fieldRow has metadata col names + platform slot sub-headers
+      // For acquired: groupRow handles meta group labels + banner
+      //               typeRow has meta col names + platform type labels
+      //               fieldRow has blank meta + platform slot sub-headers
+
+      const bannerRow: (string | null)[] = Array(metaCount).fill(null);
+      const typeRow: (string | null)[] = isHome ? Array(metaCount).fill(null) : metaFields.map(f => f.label);
+      const fieldRow: (string | null)[] = isHome ? metaFields.map(f => f.label) : Array(metaCount).fill(null);
+
+      // For acquired only: groupRow with meta group labels
+      let groupRow: (string | null)[] | null = null;
+      if (!isHome) {
+        groupRow = Array(metaCount).fill(null);
+        const metaGroupSpans: [string, string, string][] = [
+          ["Primary Rights", "satellite_rights", "other_rights"],
+          ["Secondary Rights", "satellite_rights_classification", "internet_rights_classification"],
+          ["Holdbacks & Clip Rights", "holdbacks", "clip_rights_duration"],
+          ["Derivative Rights", "prequel_sequel_rights", "character_rights"],
+          ["Ancillary Rights", "subtitling_rights", "dubbing_rights"],
+          ["Nature of Rights", "nature_of_satellite_rights", "nature_of_other_rights"],
+          ["Details of Film", "territory", "color_or_bw"],
+        ];
+        // groupRow row index = 0 for acquired
+        for (const [label, firstKey, lastKey] of metaGroupSpans) {
+          const s = metaFields.findIndex(f => f.key === firstKey);
+          const e = metaFields.findIndex(f => f.key === lastKey);
+          if (s >= 0) groupRow[s] = label;
+          if (s >= 0 && e > s) merges.push({ s: { r: 0, c: s }, e: { r: 0, c: e } });
+          void lastKey;
+        }
+      }
+
+      // Row indices for merges
+      const bannerRowIdx = isHome ? 0 : 1;
+      const typeRowIdx = isHome ? 1 : 2;
+
+      // Platform rights columns — push onto bannerRow, typeRow, fieldRow
+      let colCursor = metaCount;
+      const bannerSections = new Map<string, { start: number; end: number }>();
+
+      for (const sg of slotGroups) {
+        const plist = platformsByGroup.get(sg.label) ?? [];
+        if (plist.length === 0) continue;
+        const sgStart = colCursor;
+        const typeGroupCols = plist.length * 6;
+
+        // type label merges across all slots of this group
+        if (typeGroupCols > 1) merges.push({ s: { r: typeRowIdx, c: sgStart }, e: { r: typeRowIdx, c: sgStart + typeGroupCols - 1 } });
+
+        // track banner section extents
+        if (sg.banner) {
+          if (!bannerSections.has(sg.banner)) bannerSections.set(sg.banner, { start: sgStart, end: sgStart });
+          else bannerSections.get(sg.banner)!.end = sgStart + typeGroupCols - 1;
+        }
+
+        if (!isHome) groupRow!.push(...Array(typeGroupCols).fill(null));
+
+        for (let pi = 0; pi < plist.length; pi++) {
+          const platform = plist[pi];
+          bannerRow.push(null, null, null, null, null, null);
+          typeRow.push(pi === 0 ? sg.label : null, null, null, null, null, null);
+          fieldRow.push(`Platform - ${platform.name}`, "Category", "Start Date", "End Date", "Territory", "Nature Of Rights");
+          colCursor += 6;
+        }
+      }
+
+      // Write banner labels into bannerRow at section starts and add their merges
+      for (const [banner, { start, end }] of bannerSections.entries()) {
+        bannerRow[start] = banner;
+        if (end > start) merges.push({ s: { r: bannerRowIdx, c: start }, e: { r: bannerRowIdx, c: end } });
+      }
+
+      // Data rows
+      const dataRows: (string | null)[][] = versions.map(v => {
+        const metaRow: (string | null)[] = metaFields.map(f => {
+          const val = f.getter ? f.getter(v as unknown as Record<string, unknown>) : (v as unknown as Record<string, unknown>)[f.key];
+          return fmtDate(val != null && val !== "" ? String(val) : null);
+        });
+        const movieRights = (rightsMap[v.id] ?? []) as RightWithPlatform[];
+        const rightsCols: (string | null)[] = [];
+        for (const sg of slotGroups) {
+          for (const platform of platformsByGroup.get(sg.label) ?? []) {
+            const right = movieRights.find(r => {
+              const matchType = (r.platforms?.platform_type ?? "Other") === sg.type;
+              const matchHist = sg.isHistory ? r.is_current === false : r.is_current !== false;
+              return r.platform_id === platform.id && matchType && matchHist;
+            });
+            if (right) {
+              rightsCols.push(platform.name, right.category ?? null, fmtDate(right.start_date), fmtDate(right.end_date), right.territory ?? null, right.nature ?? null);
+            } else {
+              rightsCols.push(null, null, null, null, null, null);
+            }
+          }
+        }
+        return [...metaRow, ...rightsCols];
+      });
+
+      const aoa = isHome
+        ? [bannerRow, typeRow, fieldRow, ...dataRows]
+        : [groupRow!, bannerRow, typeRow, fieldRow, ...dataRows];
+
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      if (!ws["!merges"]) ws["!merges"] = [];
+      ws["!merges"].push(...merges);
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, isHome ? "Home" : "Acquired");
+      XLSX.writeFile(wb, `movies_${exportMovieFormat}_with_rights_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      setShowExportDialog(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setExportingXlsx(false);
+    }
   };
 
   const hasFilters = searchQuery || sourceFilter !== "all" || versionFilter !== "all" || natureFilter !== "all"
@@ -722,52 +938,63 @@ export default function MoviesPage() {
 
       <BulkPostersUploadDialog open={showBulkPostersDialog} onOpenChange={setShowBulkPostersDialog} onSuccess={() => fetchMovies()} />
       <ComprehensiveCSVImportDialog open={showImportDialog} onOpenChange={setShowImportDialog} onSuccess={() => fetchMovies()} />
-      <DataExportDialog
-        open={showExportDialog}
-        onOpenChange={setShowExportDialog}
-        data={allFilteredMovies as unknown as Record<string, unknown>[]}
-        filename={`movies_${exportMovieFormat}`}
-        fields={exportMovieFormat === "home" ? HOME_EXPORT_FIELDS : exportMovieFormat === "acquired" ? ACQUIRED_EXPORT_FIELDS : ALL_EXPORT_FIELDS}
-        headerContent={
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Movie format</label>
-            <Select value={exportMovieFormat} onValueChange={(v) => setExportMovieFormat(v as "home" | "acquired" | "all")}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Movies</SelectItem>
-                <SelectItem value="home">Home Production only</SelectItem>
-                <SelectItem value="acquired">Acquired only</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">Each dubbed / multi-language version is exported as a separate row.</p>
+
+      {/* Export dialog */}
+      {showExportDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowExportDialog(false)} />
+          <div className="relative z-10 w-full max-w-sm mx-4 rounded-xl bg-slate-900 border border-slate-700/60 shadow-2xl p-6 space-y-5">
+            <div>
+              <h2 className="text-base font-semibold text-slate-100">Export Movies</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Each language version is exported as a separate row.</p>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5 block">Movie Format</label>
+                <Select value={exportMovieFormat} onValueChange={(v) => setExportMovieFormat(v as "home" | "acquired")}>
+                  <SelectTrigger className="h-9 bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="home">Home Production</SelectItem>
+                    <SelectItem value="acquired">Acquired</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <label className="flex items-start gap-3 cursor-pointer group">
+                <Checkbox
+                  checked={exportWithPlatformRights}
+                  onCheckedChange={(v) => setExportWithPlatformRights(!!v)}
+                  className="mt-0.5"
+                />
+                <div>
+                  <p className="text-sm font-medium text-slate-200 group-hover:text-white transition-colors">Include Platform Rights</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Exports with SATELLITE RIGHTS / INTERNET RIGHTS sections in the same header format used for import. Dates like 3099-12-31 are written as "Perpetual".</p>
+                </div>
+              </label>
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" size="sm" className="flex-1 h-9 bg-slate-800/60 border-slate-700/50 text-slate-300" onClick={() => setShowExportDialog(false)}>
+                Cancel
+              </Button>
+              <Button size="sm" className="flex-1 h-9 bg-red-600 hover:bg-red-500 text-white gap-2" onClick={handleExportXlsx} disabled={exportingXlsx}>
+                {exportingXlsx ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                {exportingXlsx ? "Exporting…" : "Export XLSX"}
+              </Button>
+            </div>
           </div>
-        }
-        onPrepareData={async (_selectedKeys, rawData) => {
-          // Flatten GroupedMovie[] → one row per version
-          const rows: Record<string, unknown>[] = [];
-          for (const group of rawData as unknown as GroupedMovie[]) {
-            const versions: MovieLanguageVersion[] = group.versions?.length
-              ? group.versions
-              : group.primary_version
-                ? [group.primary_version]
-                : [];
-            for (const v of versions) {
-              if (exportMovieFormat === "home" && v.source !== "home_production") continue;
-              if (exportMovieFormat === "acquired" && v.source !== "acquired") continue;
-              rows.push(v as unknown as Record<string, unknown>);
-            }
-          }
-          return { data: rows };
-        }}
-      />
+        </div>
+      )}
     </div>
   );
 }
 
-// ── Export field definitions ──────────────────────────────────────────────────
+// ── Export field definitions — column names match the import template exactly ─
 
+// Home production flat export — matches home_sample.csv column order
 const HOME_EXPORT_FIELDS: ExportFieldDef[] = [
   { key: "production_no", label: "Production No" },
   { key: "title", label: "Title" },
@@ -776,7 +1003,6 @@ const HOME_EXPORT_FIELDS: ExportFieldDef[] = [
   { key: "language", label: "Language" },
   { key: "production_house_name", label: "Production House" },
   { key: "release_date", label: "Theatrical Release Date" },
-  { key: "release_year", label: "Release Year" },
   { key: "trailer_link", label: "YT Trailer Link" },
   { key: "certification", label: "Censor" },
   { key: "nature_of_rights", label: "Nature of Right" },
@@ -786,76 +1012,47 @@ const HOME_EXPORT_FIELDS: ExportFieldDef[] = [
   { key: "jointly_exploitation_rights", label: "Joint Exploitation Rights" },
   { key: "revenue_share", label: "Revenue Share" },
   { key: "joint_prod_buy_back_date", label: "Joint Buy Back Date" },
-  { key: "wtp_library", label: "WTP / Library" },
 ];
 
-const ACQUIRED_EXPORT_FIELDS: ExportFieldDef[] = [
+// Acquired metadata columns — matches the exact column order of the import template
+// (rows 1-2 of the CSV: the flat/secondary header section before the platform rights 3-row header)
+const ACQUIRED_META_FIELDS: ExportFieldDef[] = [
   { key: "title", label: "Movie Name" },
+  { key: "assignor_licensor", label: "Assignor/ Licensor" },
+  { key: "licensee", label: "Licensee" },
+  { key: "agreement_date", label: "Date of Agreement" },
+  { key: "satellite_rights", label: "Satellite Rights" },
+  { key: "internet_rights", label: "Internet Rights" },
+  { key: "negative_rights", label: "Negative Rights" },
+  { key: "other_rights", label: "Other Rights" },
+  { key: "satellite_rights_classification", label: "Satellite Rights Classification" },
+  { key: "internet_rights_classification", label: "Internet Classification" },
+  { key: "holdbacks", label: "Holdbacks" },
+  { key: "clip_rights", label: "Clip Rights" },
+  { key: "clip_rights_duration", label: "Duration" },
+  { key: "prequel_sequel_rights", label: "Prequel/ Sequel Rights" },
+  { key: "character_rights", label: "Character Rights" },
+  { key: "subtitling_rights", label: "Sub-Titling Rights" },
+  { key: "dubbing_rights", label: "Dubbing Rights" },
+  { key: "nature_of_satellite_rights", label: "Nature of Satellite Rights" },
+  { key: "nature_of_internet_rights", label: "Nature of Internet Rights" },
+  { key: "nature_of_negative_rights", label: "Nature of Negative Rights" },
+  { key: "nature_of_other_rights", label: "Nature of Other Rights" },
+  { key: "territory", label: "Territory" },
   { key: "cast_names", label: "Cast Details" },
   { key: "director_names", label: "Director" },
-  { key: "production_no", label: "Production No" },
-  { key: "language", label: "Language" },
-  { key: "production_house_name", label: "Production House" },
-  { key: "release_date", label: "Release Date" },
   { key: "release_year", label: "Release Year" },
   { key: "certification", label: "Certification" },
-  { key: "territory", label: "Territory" },
-  { key: "assignor_licensor", label: "Assignor / Licensor" },
-  { key: "licensee", label: "Licensee" },
-  { key: "agreement_date", label: "Agreement Date" },
+  { key: "color_or_bw", label: "Color/B/W" },
   { key: "agreement_start_date", label: "Agreement Start Date" },
   { key: "agreement_end_date", label: "Agreement End Date" },
-  { key: "satellite_rights", label: "Satellite Rights" },
-  { key: "satellite_rights_start_date", label: "Satellite Rights Start Date" },
-  { key: "satellite_rights_end_date", label: "Satellite Rights End Date" },
-  { key: "satellite_rights_classification", label: "Satellite Rights Classification" },
-  { key: "nature_of_satellite_rights", label: "Nature of Satellite Rights" },
-  { key: "internet_rights", label: "Internet Rights" },
-  { key: "internet_rights_start_date", label: "Internet Rights Start Date" },
-  { key: "internet_rights_end_date", label: "Internet Rights End Date" },
-  { key: "internet_rights_classification", label: "Internet Rights Classification" },
-  { key: "nature_of_internet_rights", label: "Nature of Internet Rights" },
-  { key: "syndication_internet_rights", label: "Syndication Internet Rights" },
-  { key: "negative_rights", label: "Negative Rights" },
-  { key: "negative_rights_start_date", label: "Negative Rights Start Date" },
-  { key: "negative_rights_end_date", label: "Negative Rights End Date" },
-  { key: "nature_of_negative_rights", label: "Nature of Negative Rights" },
-  { key: "other_rights", label: "Other Rights" },
-  { key: "other_rights_start_date", label: "Other Rights Start Date" },
-  { key: "other_rights_end_date", label: "Other Rights End Date" },
-  { key: "nature_of_other_rights", label: "Nature of Other Rights" },
-  { key: "clip_rights", label: "Clip Rights" },
-  { key: "clip_rights_duration", label: "Clip Rights Duration" },
-  { key: "holdbacks", label: "Holdbacks" },
-  { key: "prequel_sequel_rights", label: "Prequel / Sequel Rights" },
-  { key: "character_rights", label: "Character Rights" },
-  { key: "subtitling_rights", label: "Subtitling Rights" },
-  { key: "dubbing_rights", label: "Dubbing Rights" },
-  { key: "nature_of_rights", label: "Nature of Rights" },
-  { key: "wtp_library", label: "WTP / Library" },
-  { key: "remarks", label: "Remarks" },
-  { key: "actionables", label: "Actionable" }];
-
-// Combined for "all movies" export
-const ALL_EXPORT_FIELDS: ExportFieldDef[] = [
-  { key: "production_no", label: "Production No" },
-  { key: "title", label: "Title" },
-  { key: "source", label: "Source", getter: (r) => r.source === "home_production" ? "Home Production" : "Acquired" },
-  { key: "cast_names", label: "Cast" },
-  { key: "director_names", label: "Director" },
-  { key: "language", label: "Language" },
-  { key: "production_house_name", label: "Production House" },
-  { key: "release_date", label: "Release Date" },
-  { key: "release_year", label: "Release Year" },
-  { key: "certification", label: "Censor" },
-  { key: "territory", label: "Territory" },
-  { key: "nature_of_rights", label: "Nature of Rights" },
-  { key: "holdbacks", label: "Holdbacks" },
-  { key: "assignor_licensor", label: "Assignor / Licensor" },
-  { key: "agreement_end_date", label: "Agreement End Date" },
-  { key: "jointly_exploitation_rights", label: "Joint Exploitation Rights" },
-  { key: "revenue_share", label: "Revenue Share" },
-  { key: "wtp_library", label: "WTP / Library" },
-  { key: "remarks", label: "Remarks" },
-  { key: "actionables", label: "Actionable" },
+  { key: "satellite_rights_start_date", label: "Satellite Rights\nStart Date" },
+  { key: "satellite_rights_end_date", label: "Satellite Rights\nEnd Date" },
+  { key: "internet_rights_start_date", label: "Internet Rights\nStart Date" },
+  { key: "internet_rights_end_date", label: "Internet Rights\nEnd Date" },
+  { key: "negative_rights_start_date", label: "Negative Rights\nStart Date" },
+  { key: "negative_rights_end_date", label: "Negative Rights\nEnd Date" },
+  { key: "other_rights_start_date", label: "Other Rights\nStart Date" },
+  { key: "other_rights_end_date", label: "Other Rights\nEnd Date" },
+  { key: "syndication_internet_rights", label: "Syndication-\nInternet Rights" },
 ];

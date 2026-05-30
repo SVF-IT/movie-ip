@@ -229,6 +229,22 @@ export async function getMovieExpiredRights(movieId: string): Promise<PlatformRi
   return data || [];
 }
 
+export async function getBulkMoviePlatformRights(movieIds: string[]): Promise<Record<string, PlatformRight[]>> {
+  if (movieIds.length === 0) return {};
+  const { data, error } = await supabase
+    .from("platform_rights")
+    .select(`*, platforms(name, platform_type)`)
+    .in("movie_id", movieIds)
+    .order("start_date", { ascending: true });
+  if (error) throw sanitizeError(error);
+  const map: Record<string, PlatformRight[]> = {};
+  for (const r of data || []) {
+    if (!map[r.movie_id]) map[r.movie_id] = [];
+    map[r.movie_id].push(r);
+  }
+  return map;
+}
+
 export async function getMoviePeople(movieId: string): Promise<MoviePeople[]> {
   const { data, error } = await supabase
     .from("movie_people")
