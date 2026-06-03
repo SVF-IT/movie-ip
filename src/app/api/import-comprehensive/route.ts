@@ -941,19 +941,27 @@ function parsePlatformRightsSections(
     const field = (fieldRow[col] || '').trim()
     const fieldLower = field.toLowerCase()
 
+    const isTypeHeader = fieldLower.startsWith('type -') || fieldLower.startsWith('type–')
     const isPlatformHeader =
       fieldLower === 'platform/license' ||
       fieldLower === 'platform / license' ||
       fieldLower.startsWith('platform -') ||
-      fieldLower.startsWith('platform–')
+      fieldLower.startsWith('platform–') ||
+      isTypeHeader
 
     if (!isPlatformHeader) continue
 
-    // Determine if hardcoded name ("Platform - <Name>")
+    // "Platform - <Name>" slots: platform name is hardcoded in the header, data cell is a presence marker.
+    // "Type - <Name>" slots: the text after "Type -" is the platform_type; data cell is the actual platform name.
+    // Generic "Platform/License" slots: data cell is the platform name; type comes from row2Label.
     let hardcodedName: string | null = null
+    let typeOverride: string | null = null
     if (fieldLower.startsWith('platform -') || fieldLower.startsWith('platform–')) {
       const sep = field.indexOf('-')
       hardcodedName = field.slice(sep + 1).trim() || null
+    } else if (isTypeHeader) {
+      const sep = field.indexOf('-')
+      typeOverride = field.slice(sep + 1).trim() || null
     }
 
     // Walk back through typeRow to find the nearest non-empty cell at or before col
@@ -965,9 +973,10 @@ function parsePlatformRightsSections(
         break
       }
     }
-    if (!row2Label) continue // no type label found — skip this slot
+    if (!row2Label && !typeOverride) continue // no type label found — skip this slot
 
-    const [platformType, isHistory] = resolvePlatformType(row2Label)
+    const [resolvedType, isHistory] = row2Label ? resolvePlatformType(row2Label) : ['Other', false]
+    const platformType = typeOverride ?? resolvedType
 
     // Count which slot this is within its Row-2 group
     const slotIndex = slots.filter((s) => s.row2Label === row2Label).length
