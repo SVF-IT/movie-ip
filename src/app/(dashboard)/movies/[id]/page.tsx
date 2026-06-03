@@ -317,7 +317,7 @@ export default function MovieDetailPage() {
   const isExpired = movie.agreement_end_date && new Date(movie.agreement_end_date) < new Date();
 
   const isSatellite = (pt: string) => pt.includes("satellite") || pt.includes("dth") || pt.includes("terrestrial");
-  const isInternet = (pt: string) => pt.includes("svod") || pt.includes("tvod") || pt.includes("avod") || pt.includes("fvod");
+  const isInternet = (pt: string) => pt.includes("svod") || pt.includes("tvod") || pt.includes("avod") || pt.includes("fvod") || pt.includes("nvod") || pt.includes("iptv");
 
   const satelliteRights = rights.filter(r => isSatellite((r.platforms?.platform_type || "").toLowerCase()));
   const internetRights = rights.filter(r => { const pt = (r.platforms?.platform_type || "").toLowerCase(); return !isSatellite(pt) && isInternet(pt); });

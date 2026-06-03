@@ -3,11 +3,12 @@ import type { ExpiringRight, PlatformRight } from '@/lib/types/database'
 import { sanitizeError } from '@/lib/utils/sanitize-error'
 
 const supabase = createClient()
-const MAX_LIMIT = 200
+const MAX_LIMIT = 10000
 
 export async function getAllRights(options?: {
   platformId?: string
   platformNameContains?: string
+  platformTypeCategory?: 'satellite' | 'internet' | 'other'
   isExpired?: boolean
   nature?: string
   territory?: string
@@ -29,20 +30,43 @@ export async function getAllRights(options?: {
     movieIds = matchingMovieIds
   }
 
-  let starPlatformIds: string[] | null = null
-  if (options?.platformNameContains) {
-    const { data: matchedPlatforms, error: platError } = await supabase.from('platforms').select('id').ilike('name', `%${options.platformNameContains}%`)
+  // Resolve platform IDs from name or type-category filter
+  let filteredPlatformIds: string[] | null = null
 
+  if (options?.platformId) {
+    filteredPlatformIds = [options.platformId]
+  } else if (options?.platformNameContains || options?.platformTypeCategory) {
+    let platQuery = supabase.from('platforms').select('id, platform_type')
+    if (options.platformNameContains) {
+      platQuery = platQuery.ilike('name', `%${options.platformNameContains}%`)
+    }
+    const { data: matchedPlatforms, error: platError } = await platQuery
     if (platError) throw sanitizeError(platError)
-    const ids = (matchedPlatforms || []).map((p: { id: string }) => p.id)
+
+    let candidates = matchedPlatforms || []
+
+    // If a type category is requested, filter platforms by their platform_type
+    if (options.platformTypeCategory) {
+      const cat = options.platformTypeCategory
+      candidates = candidates.filter((p: { platform_type?: string }) => {
+        const pt = (p.platform_type || '').toLowerCase()
+        const isSat = pt.includes('satellite') || pt.includes('dth') || pt.includes('terrestrial')
+        const isNet = pt.includes('svod') || pt.includes('tvod') || pt.includes('avod') || pt.includes('fvod') || pt.includes('nvod') || pt.includes('iptv')
+        if (cat === 'satellite') return isSat
+        if (cat === 'internet') return isNet
+        if (cat === 'other') return !isSat && !isNet
+        return true
+      })
+    }
+
+    const ids = candidates.map((p: { id: string }) => p.id)
     if (ids.length === 0) return { data: [], count: 0 }
-    starPlatformIds = ids
+    filteredPlatformIds = ids
   }
 
   let query = supabase.from('platform_rights').select(`*, movies(id, title, source), platforms(id, name, platform_type)`, { count: 'exact' })
 
-  if (starPlatformIds) query = query.in('platform_id', starPlatformIds)
-  else if (options?.platformId) query = query.eq('platform_id', options.platformId)
+  if (filteredPlatformIds) query = query.in('platform_id', filteredPlatformIds)
 
   if (options?.isExpired === true) {
     query = query.lt('end_date', new Date().toISOString().split('T')[0])

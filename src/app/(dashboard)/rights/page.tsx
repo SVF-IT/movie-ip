@@ -44,12 +44,12 @@ import type { PlatformRight } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
 import { differenceInDays, format } from "date-fns";
 import {
-  AlertTriangle,
   Download,
   Edit,
   FileText,
   Filter,
   Loader2,
+  MoreHorizontal,
   Plus,
   Satellite,
   Trash2,
@@ -59,16 +59,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-
-
-const PLATFORM_OPTIONS = [
-  { label: "Star", keyword: "star" },
-  { label: "Echo", keyword: "echo" },
-  { label: "Viacom 18", keyword: "viacom" },
-  { label: "Hoichoi", keyword: "hoichoi" },
-  { label: "YouTube", keyword: "youtube" },
-];
-const KNOWN_KEYWORDS = PLATFORM_OPTIONS.map((o) => o.keyword);
+import { createClient } from "@/lib/supabase/client";
 
 const RIGHTS_EXPORT_FIELDS: ExportFieldDef[] = [
   { key: "movie_title", label: "Movie", getter: (r) => (r.movies as any)?.title || "" },
@@ -89,22 +80,36 @@ interface RightWithDetails extends PlatformRight {
   category?: string | null;
 }
 
+interface PlatformOption { id: string; name: string; platform_type?: string }
+
 type RightsTypeFilter = "all" | "satellite" | "internet" | "other";
 
 const rightsTypePills: { id: RightsTypeFilter; label: string; icon: React.ElementType }[] = [
-  { id: "all", label: "All Rights", icon: FileText },
-  { id: "satellite", label: "Satellite", icon: Tv },
-  { id: "internet", label: "Internet", icon: Wifi },
-  { id: "other", label: "Other", icon: Satellite },
+  { id: "all",       label: "All Rights", icon: FileText },
+  { id: "satellite", label: "Satellite",  icon: Tv },
+  { id: "internet",  label: "Internet",   icon: Wifi },
+  { id: "other",     label: "Other",      icon: MoreHorizontal },
 ];
+
+function platformTypeCategory(platformType: string): "satellite" | "internet" | "other" {
+  const pt = platformType.toLowerCase();
+  if (pt.includes("satellite") || pt.includes("dth") || pt.includes("terrestrial")) return "satellite";
+  if (pt.includes("svod") || pt.includes("tvod") || pt.includes("avod") || pt.includes("fvod") || pt.includes("nvod") || pt.includes("iptv")) return "internet";
+  return "other";
+}
 
 export default function RightsPage() {
   const [rights, setRights] = useState<RightWithDetails[]>([]);
   const [totalCount, setTotalCount] = useState(0);
+
+  // Type filter: satellite | internet | other | all
+  const [rightsTypeFilter, setRightsTypeFilter] = useState<RightsTypeFilter>("all");
+  // Platform name filter — populated dynamically from DB, scoped to selected type
   const [platformFilter, setPlatformFilter] = useState("all");
+  const [platformOptions, setPlatformOptions] = useState<PlatformOption[]>([]);
+
   const [movieIdFilter, setMovieIdFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "expired">("active");
-  const [rightsTypeFilter, setRightsTypeFilter] = useState<RightsTypeFilter>("all");
   const [loading, setLoading] = useState(true);
   const toast = useAppToast();
   const [page, setPage] = useState(0);
@@ -116,53 +121,42 @@ export default function RightsPage() {
   const { profile } = useAuth();
   const canRequestDelete = profile?.role === "admin" || profile?.role === "editor";
 
-
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [exportData, setExportData] = useState<RightWithDetails[]>([]);
   const [exportLoading, setExportLoading] = useState(false);
 
+  // Load platforms from DB, filtered to the currently selected type category
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.from("platforms").select("id, name, platform_type").order("name").then(({ data }: { data: PlatformOption[] | null }) => {
+      let opts: PlatformOption[] = data || [];
+      if (rightsTypeFilter !== "all") {
+        opts = opts.filter((p) => platformTypeCategory(p.platform_type || "") === rightsTypeFilter);
+      }
+      setPlatformOptions(opts);
+      // Reset platform name filter when type changes — the previous platform may not exist in the new type
+      setPlatformFilter("all");
+    });
+  }, [rightsTypeFilter]);
+
   const fetchRights = useCallback(async () => {
     try {
       setLoading(true);
-  
-      const isOthers = platformFilter === "others";
-      const keyword = PLATFORM_OPTIONS.find((o) => o.keyword === platformFilter)?.keyword;
 
       const isExpiredValue = statusFilter === "active" ? false : statusFilter === "expired" ? true : undefined;
 
       const { data, count } = await getAllRights({
-        platformNameContains: keyword,
+        platformId: platformFilter !== "all" ? platformFilter : undefined,
+        platformTypeCategory: rightsTypeFilter !== "all" ? rightsTypeFilter : undefined,
         movieId: movieIdFilter !== "all" ? movieIdFilter : undefined,
         isExpired: isExpiredValue,
-        limit: isOthers ? 10000 : (rightsTypeFilter !== "all" ? 10000 : pageSize),
-        offset: isOthers ? 0 : (rightsTypeFilter !== "all" ? 0 : page * pageSize),
+        limit: rightsTypeFilter !== "all" || platformFilter !== "all" ? 10000 : pageSize,
+        offset: rightsTypeFilter !== "all" || platformFilter !== "all" ? 0 : page * pageSize,
       });
 
-      let grouped = data as RightWithDetails[];
-
-      // Client-side filter by platform_type category
-      if (rightsTypeFilter !== "all") {
-        grouped = grouped.filter((r) => {
-          const pt = (r.platforms?.platform_type || "").toLowerCase();
-          const isSat = pt.includes("satellite") || pt.includes("dth") || pt.includes("terrestrial");
-          const isInternet = pt.includes("svod") || pt.includes("tvod") || pt.includes("avod") || pt.includes("fvod");
-          if (rightsTypeFilter === "satellite") return isSat;
-          if (rightsTypeFilter === "internet") return isInternet;
-          if (rightsTypeFilter === "other") return !isSat && !isInternet;
-          return true;
-        });
-      }
-
-      const filtered = isOthers
-        ? grouped.filter((r) => {
-          const name = (r.platforms?.name || "").toLowerCase();
-          return !KNOWN_KEYWORDS.some((k) => name.includes(k));
-        })
-        : grouped;
-
-      setRights(filtered);
-      setTotalCount(isOthers ? filtered.length : count);
+      setRights(data as RightWithDetails[]);
+      setTotalCount(count);
       setSelectedIds(new Set());
     } catch (err) {
       console.error("Error fetching rights:", err);
@@ -183,10 +177,9 @@ export default function RightsPage() {
     return { label: "Active", color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/25" };
   };
 
-  const handleFilterChange = (type: "platform" | "movieId" | "status", value: string) => {
-    if (type === "platform") setPlatformFilter(value);
-    else if (type === "movieId") setMovieIdFilter(value);
-    else if (type === "status") setStatusFilter(value as any);
+  const handleFilterChange = (type: "movieId" | "status", value: string) => {
+    if (type === "movieId") setMovieIdFilter(value);
+    else if (type === "status") setStatusFilter(value as "all" | "active" | "expired");
     setPage(0);
   };
 
@@ -207,36 +200,15 @@ export default function RightsPage() {
   const handleExportClick = useCallback(async () => {
     setExportLoading(true);
     try {
-      const isExpiredValue =
-        statusFilter === "active" ? false :
-          statusFilter === "expired" ? true : undefined;
-      const isOthers = platformFilter === "others";
-      const keyword = PLATFORM_OPTIONS.find((o) => o.keyword === platformFilter)?.keyword;
+      const isExpiredValue = statusFilter === "active" ? false : statusFilter === "expired" ? true : undefined;
       const { data } = await getAllRights({
-        platformNameContains: keyword,
+        platformId: platformFilter !== "all" ? platformFilter : undefined,
+        platformTypeCategory: rightsTypeFilter !== "all" ? rightsTypeFilter : undefined,
         movieId: movieIdFilter !== "all" ? movieIdFilter : undefined,
         isExpired: isExpiredValue,
         limit: 10000,
       });
-      let exportData2 = data as RightWithDetails[];
-      if (rightsTypeFilter !== "all") {
-        exportData2 = exportData2.filter((r) => {
-          const pt = (r.platforms?.platform_type || "").toLowerCase();
-          const isSat = pt.includes("satellite") || pt.includes("dth") || pt.includes("terrestrial");
-          const isInternet = pt.includes("svod") || pt.includes("tvod") || pt.includes("avod") || pt.includes("fvod");
-          if (rightsTypeFilter === "satellite") return isSat;
-          if (rightsTypeFilter === "internet") return isInternet;
-          if (rightsTypeFilter === "other") return !isSat && !isInternet;
-          return true;
-        });
-      }
-      const exportFiltered = isOthers
-        ? exportData2.filter((r) => {
-          const name = (r.platforms?.name || "").toLowerCase();
-          return !KNOWN_KEYWORDS.some((k) => name.includes(k));
-        })
-        : exportData2;
-      setExportData(exportFiltered);
+      setExportData(data as RightWithDetails[]);
       setShowExportDialog(true);
     } catch (err) {
       console.error("Error loading export data:", err);
@@ -322,7 +294,7 @@ export default function RightsPage() {
                 variant="ghost"
                 size="sm"
                 className="ml-auto h-7 text-xs text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 gap-1"
-                onClick={() => { setPlatformFilter("all"); setMovieIdFilter("all"); setStatusFilter("active"); setRightsTypeFilter("all"); setPage(0); }}
+                onClick={() => { setRightsTypeFilter("all"); setPlatformFilter("all"); setMovieIdFilter("all"); setStatusFilter("active"); setPage(0); }}
               >
                 <X className="h-3 w-3" />Reset
               </Button>
@@ -330,31 +302,13 @@ export default function RightsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="p-5 space-y-4">
+
+          {/* Row 1: Movie + Status */}
           <div className="flex flex-col gap-3 md:flex-row md:items-end flex-wrap">
             <div className="w-full max-w-sm">
               <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5 block">Movie</label>
-              <MovieSelector
-                selectedId={movieIdFilter}
-                onSelect={(id) => handleFilterChange("movieId", id)}
-              />
+              <MovieSelector selectedId={movieIdFilter} onSelect={(id) => handleFilterChange("movieId", id)} />
             </div>
-
-            <div className="w-full md:w-44">
-              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5 block">Platform</label>
-              <Select value={platformFilter} onValueChange={(v) => handleFilterChange("platform", v)}>
-                <SelectTrigger className="h-9 bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm">
-                  <SelectValue placeholder="Platform" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Platforms</SelectItem>
-                  {PLATFORM_OPTIONS.map((o) => (
-                    <SelectItem key={o.keyword} value={o.keyword}>{o.label}</SelectItem>
-                  ))}
-                  <SelectItem value="others">Others</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
             <div className="w-full md:w-44">
               <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5 block">Status</label>
               <Select value={statusFilter} onValueChange={(v) => handleFilterChange("status", v)}>
@@ -370,8 +324,8 @@ export default function RightsPage() {
             </div>
           </div>
 
-          {/* Rights type pills */}
-          <div className="flex items-center gap-2 flex-wrap pt-1">
+          {/* Row 2: Type pills */}
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mr-1">Type:</span>
             {rightsTypePills.map(({ id, label, icon: Icon }) => (
               <button
@@ -384,11 +338,29 @@ export default function RightsPage() {
                     : "bg-slate-800/50 border-slate-700/50 text-slate-400 hover:border-red-500/30 hover:text-red-400"
                 )}
               >
-                <Icon className="h-3 w-3" />
-                {label}
+                <Icon className="h-3 w-3" />{label}
               </button>
             ))}
           </div>
+
+          {/* Row 3: Platform name — only shown when a type is selected */}
+          {rightsTypeFilter !== "all" && (
+            <div className="w-full md:w-64">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5 block">Platform</label>
+              <Select value={platformFilter} onValueChange={(v) => { setPlatformFilter(v); setPage(0); }}>
+                <SelectTrigger className="h-9 bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm">
+                  <SelectValue placeholder="All Platforms" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Platforms</SelectItem>
+                  {platformOptions.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
         </CardContent>
       </Card>
 
