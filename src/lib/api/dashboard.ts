@@ -490,8 +490,8 @@ export async function getOpenTitlesForMode(
     sourceFilter?: 'all' | 'home' | 'acquired'
     certification?: string[]
     sortBy?: 'title_asc' | 'title_desc' | 'created_at_desc' | 'release_date_desc' | 'release_date_asc'
-    releaseFrom?: string
-    releaseTo?: string
+    openFrom?: string
+    openTo?: string
     wtpFilter?: 'all' | 'wtp' | 'wtp_bd' | 'library'
   },
 ): Promise<{ data: MovieWithDetails[]; count: number }> {
@@ -515,14 +515,6 @@ export async function getOpenTitlesForMode(
       const hasUaVariant = certs.some((c) => c === 'UA' || c === 'U/A' || c.startsWith('UA '))
       if (hasUaVariant && !certs.includes('U/A')) certs.push('U/A')
       query = query.in('certification', certs)
-    }
-
-    if (options?.releaseFrom) {
-      query = query.gte('release_date', options.releaseFrom)
-    }
-
-    if (options?.releaseTo) {
-      query = query.lte('release_date', options.releaseTo)
     }
 
     if (options?.wtpFilter && options.wtpFilter !== 'all') {
@@ -637,6 +629,20 @@ export async function getOpenTitlesForMode(
     // Re-sort combined list by title
     if (sortBy === 'title_asc') openTitles.sort((a, b) => (a.title || '').localeCompare(b.title || ''))
     else if (sortBy === 'title_desc') openTitles.sort((a, b) => (b.title || '').localeCompare(a.title || ''))
+
+    // Filter by open date range: title must be open (rights end date within or after openFrom, before openTo)
+    if (options?.openFrom || options?.openTo) {
+      openTitles = openTitles.filter((m: any) => {
+        const endDate = mode === 'satellite'
+          ? (m.satellite_rights_end_date || m.agreement_end_date)
+          : (m.internet_rights_end_date || m.agreement_end_date)
+        // Titles with no end date are open indefinitely — include unless openFrom is set and we want bounded results
+        if (!endDate) return true
+        if (options.openFrom && endDate < options.openFrom) return false
+        if (options.openTo && endDate > options.openTo) return false
+        return true
+      })
+    }
 
     const totalCount = openTitles.length
     const limit = options?.limit || 10

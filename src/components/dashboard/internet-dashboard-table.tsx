@@ -177,8 +177,8 @@ export function InternetDashboardTable({
   const [certFilter, setCertFilter] = useState<string[]>([])
   const [certOpen, setCertOpen] = useState(false)
   const [sortBy, setSortBy] = useState<SortOption>('title_asc')
-  const [releaseFrom, setReleaseFrom] = useState('')
-  const [releaseTo, setReleaseTo] = useState('')
+  const [openFrom, setOpenFrom] = useState('')
+  const [openTo, setOpenTo] = useState('')
   const [wtpFilter, setWtpFilter] = useState<'all' | 'wtp' | 'wtp_bd' | 'library'>('all')
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [showExportDialog, setShowExportDialog] = useState(false)
@@ -195,7 +195,7 @@ export function InternetDashboardTable({
   }
 
   // Reset page on filter changes
-  useEffect(() => { setCurrentPage(1) }, [activeCard, language, expiryFrom, expiryTo, sourceFilter, certFilter, releaseFrom, releaseTo, wtpFilter])
+  useEffect(() => { setCurrentPage(1) }, [activeCard, language, expiryFrom, expiryTo, sourceFilter, certFilter, openFrom, openTo, wtpFilter])
 
   // Debounce search
   useEffect(() => {
@@ -207,8 +207,8 @@ export function InternetDashboardTable({
   useEffect(() => {
     setSortBy(activeCard === 'expiring' ? 'expiry_asc' : 'title_asc')
     setExpandedRows(new Set())
-    setReleaseFrom('')
-    setReleaseTo('')
+    setOpenFrom('')
+    setOpenTo('')
     setWtpFilter('all')
   }, [activeCard])
 
@@ -229,8 +229,8 @@ export function InternetDashboardTable({
           sourceFilter,
           certification: certParam,
           sortBy: safeSortBy,
-          releaseFrom: releaseFrom || undefined,
-          releaseTo: releaseTo || undefined,
+          openFrom: openFrom || undefined,
+          openTo: openTo || undefined,
           wtpFilter: wtpFilter !== 'all' ? wtpFilter : undefined,
           limit,
           offset,
@@ -273,7 +273,7 @@ export function InternetDashboardTable({
     } finally {
       if (!forExport) setIsLoading(false)
     }
-  }, [activeCard, debouncedSearch, language, sourceFilter, certFilter, expiryFrom, expiryTo, sortBy, currentPage, releaseFrom, releaseTo, wtpFilter])
+  }, [activeCard, debouncedSearch, language, sourceFilter, certFilter, expiryFrom, expiryTo, sortBy, currentPage, openFrom, openTo, wtpFilter])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -499,16 +499,16 @@ export function InternetDashboardTable({
           </>
         )}
 
-        {/* Open titles filters: release date range + WTP */}
+        {/* Open titles filters: open date range + WTP */}
         {activeCard === 'open_titles' && (
           <>
             <div className="flex items-center gap-1 bg-slate-800/40 border border-slate-700/50 rounded-md px-2 h-9 hover:border-slate-600/70 transition-colors">
-              <span className="text-[10px] font-medium text-slate-400 uppercase px-1">Release</span>
-              <DateInput value={releaseFrom} onChange={(v) => { setReleaseFrom(v); setCurrentPage(1) }} placeholder="From" />
+              <span className="text-[10px] font-medium text-slate-400 uppercase px-1">Open</span>
+              <DateInput value={openFrom} onChange={(v) => { setOpenFrom(v); setCurrentPage(1) }} placeholder="From" />
               <span className="text-slate-700 px-1">|</span>
-              <DateInput value={releaseTo} onChange={(v) => { setReleaseTo(v); setCurrentPage(1) }} placeholder="To" />
-              {(releaseFrom || releaseTo) && (
-                <button onClick={() => { setReleaseFrom(''); setReleaseTo('') }}
+              <DateInput value={openTo} onChange={(v) => { setOpenTo(v); setCurrentPage(1) }} placeholder="To" />
+              {(openFrom || openTo) && (
+                <button onClick={() => { setOpenFrom(''); setOpenTo('') }}
                   className="ml-1 p-0.5 text-slate-400 hover:text-red-400 transition-colors">
                   <X className="h-3 w-3" />
                 </button>
