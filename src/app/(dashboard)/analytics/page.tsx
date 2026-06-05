@@ -1,276 +1,378 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Loader2, Film, FileText, TrendingDown, ShieldCheck, BarChart3 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { EnhancedStatsCard } from "@/components/dashboard/enhanced-stats-card";
-import {
-  RightsExpiryTimelineChart,
-  PlatformComparisonChart,
-  MonthlyActivityChart,
-  DistributionDonutChart,
-  DistributionBarChart,
-  RightsTypeChart,
-} from "@/components/dashboard/analytics-charts";
-import { TerritoryCoverageTreemap, CatalogHealthRadial } from "@/components/dashboard/advanced-charts";
-import {
-  getRightsExpiryTimeline,
-  getTerritoryDistribution,
-  getPlatformComparison,
-  getMonthlyRightsActivity,
-  getCatalogHealth,
-  getCertificationDistribution,
-  getLanguageDistribution,
-  getRightsNatureBreakdown,
-  getRightsTypeDistribution,
-  getTopMoviesByRights,
-} from "@/lib/api/analytics";
-import { getDashboardStats } from "@/lib/api/dashboard";
-import type {
-  DashboardStats,
-  RightsExpiryTimelinePoint,
-  PlatformComparisonPoint,
-  CatalogHealth,
-  DistributionPoint,
-  MonthlyActivityPoint,
-} from "@/lib/types/database";
-import { cn } from "@/lib/utils";
-import { useAppToast } from "@/hooks/use-app-toast";
+  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LabelList,
+} from "recharts";
+import { Loader2, Film, FileText, TrendingDown, Globe, X } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { createClient } from "@/lib/supabase/client";
 
+const supabase = createClient();
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+interface RightRow {
+  id: string;
+  movie_id: string;
+  start_date: string | null;
+  end_date: string | null;
+  nature: string | null;
+  territory: string | null;
+  is_current: boolean;
+  platform_name: string;
+  platform_type: string;
+  movie_title: string;
+  movie_source: string;
+  movie_language: string;
+  movie_cert: string;
+}
+
+// ── Design tokens ─────────────────────────────────────────────────────────────
+const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899", "#84cc16"];
+const tooltipStyle = {
+  backgroundColor: "#0f172a",
+  border: "1px solid rgba(148,163,184,0.15)",
+  borderRadius: "8px",
+  color: "#e2e8f0",
+  fontSize: "12px",
+};
+const tickStyle = { fill: "#64748b", fontSize: 11 };
+const grid = { stroke: "rgba(148,163,184,0.08)" };
+
+// ── Small helpers ─────────────────────────────────────────────────────────────
+function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`rounded-xl bg-slate-900/40 border border-slate-800/60 backdrop-blur-sm ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color: string }) {
+  return (
+    <Card className="p-4 flex flex-col gap-1">
+      <span className="text-xs text-slate-500 uppercase tracking-wider">{label}</span>
+      <span className="text-2xl font-bold tabular-nums" style={{ color }}>{value}</span>
+      {sub && <span className="text-xs text-slate-500">{sub}</span>}
+    </Card>
+  );
+}
+
+function Section({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
+  return (
+    <Card>
+      <div className="px-5 pt-4 pb-2">
+        <p className="text-sm font-semibold text-slate-200">{title}</p>
+        {sub && <p className="text-xs text-slate-500 mt-0.5">{sub}</p>}
+      </div>
+      <div className="px-4 pb-4">{children}</div>
+    </Card>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
 export default function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
-  const toast = useAppToast();
+  const [rights, setRights] = useState<RightRow[]>([]);
+  const [allLanguages, setAllLanguages] = useState<string[]>([]);
+  const [allPlatformTypes, setAllPlatformTypes] = useState<string[]>([]);
 
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [expiryTimeline, setExpiryTimeline] = useState<RightsExpiryTimelinePoint[]>([]);
-  const [territories, setTerritories] = useState<DistributionPoint[]>([]);
-  const [platformComparison, setPlatformComparison] = useState<PlatformComparisonPoint[]>([]);
-  const [monthlyActivity, setMonthlyActivity] = useState<MonthlyActivityPoint[]>([]);
-  const [catalogHealth, setCatalogHealth] = useState<CatalogHealth | null>(null);
-  const [certifications, setCertifications] = useState<DistributionPoint[]>([]);
-  const [languages, setLanguages] = useState<DistributionPoint[]>([]);
-  const [rightsNature, setRightsNature] = useState<DistributionPoint[]>([]);
-  const [rightsTypes, setRightsTypes] = useState<DistributionPoint[]>([]);
-  const [topMovies, setTopMovies] = useState<{ title: string; source: string; rightsCount: number }[]>([]);
+  // Filters
+  const [language, setLanguage] = useState("all");
+  const [source, setSource] = useState("all");
+  const [platformType, setPlatformType] = useState("all");
+  const [rightsStatus, setRightsStatus] = useState("active"); // active | all
+
+  const today = new Date().toISOString().split("T")[0];
 
   useEffect(() => {
-    async function fetchAll() {
-      try {
-        setLoading(true);
-    
-        const [
-          statsData,
-          timelineData,
-          territoryData,
-          platformData,
-          activityData,
-          healthData,
-          certData,
-          langData,
-          natureData,
-          typeData,
-          topData,
-        ] = await Promise.all([
-          getDashboardStats(),
-          getRightsExpiryTimeline(),
-          getTerritoryDistribution(),
-          getPlatformComparison(),
-          getMonthlyRightsActivity(),
-          getCatalogHealth(),
-          getCertificationDistribution(),
-          getLanguageDistribution(),
-          getRightsNatureBreakdown(),
-          getRightsTypeDistribution(),
-          getTopMoviesByRights(),
-        ]);
+    async function load() {
+      setLoading(true);
+      const { data } = await supabase
+        .from("platform_rights")
+        .select(`
+          id, movie_id, start_date, end_date, nature, territory, is_current,
+          platforms(name, platform_type),
+          movies(title, source, language, certification)
+        `);
 
-        setStats(statsData);
-        setExpiryTimeline(timelineData);
-        setTerritories(territoryData);
-        setPlatformComparison(platformData);
-        setMonthlyActivity(activityData);
-        setCatalogHealth(healthData);
-        setCertifications(certData);
-        setLanguages(langData);
-        setRightsNature(natureData);
-        setRightsTypes(typeData);
-        setTopMovies(topData);
-      } catch (err) {
-        console.error("Error loading analytics:", err);
-        toast.error(err instanceof Error ? err.message : "Failed to load analytics data");
-      } finally {
-        setLoading(false);
-      }
+      const rows: RightRow[] = (data || []).map((r: any) => ({
+        id: r.id,
+        movie_id: r.movie_id,
+        start_date: r.start_date,
+        end_date: r.end_date,
+        nature: r.nature,
+        territory: r.territory,
+        is_current: r.is_current,
+        platform_name: r.platforms?.name || "Unknown",
+        platform_type: r.platforms?.platform_type || "Unknown",
+        movie_title: r.movies?.title || "Unknown",
+        movie_source: r.movies?.source || "",
+        movie_language: r.movies?.language || "Unknown",
+        movie_cert: r.movies?.certification || "Unrated",
+      }));
+
+      setRights(rows);
+      setAllLanguages([...new Set(rows.map((r) => r.movie_language).filter(Boolean))].sort());
+      setAllPlatformTypes([...new Set(rows.map((r) => r.platform_type).filter(Boolean))].sort());
+      setLoading(false);
     }
-
-    fetchAll();
+    load();
   }, []);
+
+  // ── Filtered dataset ──────────────────────────────────────────────────────
+  const filtered = useMemo(() => {
+    return rights.filter((r) => {
+      if (rightsStatus === "active" && (!r.is_current || (r.end_date && r.end_date < today))) return false;
+      if (language !== "all" && r.movie_language !== language) return false;
+      if (source !== "all" && r.movie_source !== source) return false;
+      if (platformType !== "all" && r.platform_type !== platformType) return false;
+      return true;
+    });
+  }, [rights, language, source, platformType, rightsStatus, today]);
+
+  const activeRights = useMemo(() => rights.filter((r) => r.is_current && (!r.end_date || r.end_date >= today)), [rights, today]);
+  const expiring30 = useMemo(() => activeRights.filter((r) => r.end_date && r.end_date <= new Date(Date.now() + 30 * 864e5).toISOString().split("T")[0]), [activeRights]);
+  const uniqueMovies = useMemo(() => new Set(filtered.map((r) => r.movie_id)).size, [filtered]);
+
+  // ── Chart data ────────────────────────────────────────────────────────────
+  const byPlatform = useMemo(() => {
+    const counts: Record<string, number> = {};
+    filtered.forEach((r) => { counts[r.platform_name] = (counts[r.platform_name] || 0) + 1; });
+    return Object.entries(counts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 10);
+  }, [filtered]);
+
+  const byLanguage = useMemo(() => {
+    const counts: Record<string, number> = {};
+    filtered.forEach((r) => { counts[r.movie_language] = (counts[r.movie_language] || 0) + 1; });
+    return Object.entries(counts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
+  }, [filtered]);
+
+  const byPlatformType = useMemo(() => {
+    const counts: Record<string, number> = {};
+    filtered.forEach((r) => { counts[r.platform_type] = (counts[r.platform_type] || 0) + 1; });
+    return Object.entries(counts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
+  }, [filtered]);
+
+  const byNature = useMemo(() => {
+    const counts: Record<string, number> = {};
+    filtered.forEach((r) => {
+      const n = r.nature === "exclusive" ? "Exclusive" : r.nature === "non_exclusive" ? "Non-Exclusive" : "Unspecified";
+      counts[n] = (counts[n] || 0) + 1;
+    });
+    return Object.entries(counts).map(([name, count]) => ({ name, count }));
+  }, [filtered]);
+
+  const expiryTimeline = useMemo(() => {
+    const result = [];
+    for (let i = 0; i < 12; i++) {
+      const d = new Date();
+      d.setMonth(d.getMonth() + i);
+      const ms = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split("T")[0];
+      const me = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split("T")[0];
+      const label = d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+      const expiring = filtered.filter((r) => r.end_date && r.end_date >= ms && r.end_date <= me).length;
+      result.push({ month: label, expiring });
+    }
+    return result;
+  }, [filtered]);
+
+  const topMovies = useMemo(() => {
+    const counts: Record<string, { title: string; source: string; count: number }> = {};
+    filtered.forEach((r) => {
+      if (!counts[r.movie_id]) counts[r.movie_id] = { title: r.movie_title, source: r.movie_source, count: 0 };
+      counts[r.movie_id].count++;
+    });
+    return Object.values(counts).sort((a, b) => b.count - a.count).slice(0, 8);
+  }, [filtered]);
+
+  const hasFilters = language !== "all" || source !== "all" || platformType !== "all" || rightsStatus !== "active";
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-red-500" />
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
       </div>
     );
   }
 
-  const glassSection = "relative overflow-hidden rounded-xl bg-slate-900/40 border border-slate-800/60 backdrop-blur-xl shadow-xl";
-
   return (
-    <div className="space-y-6">
-      {/* ── Cinematic Header ── */}
-      <div className="relative overflow-hidden rounded-xl bg-slate-900/60 border border-slate-800/60 backdrop-blur-xl p-6 shadow-2xl">
-        <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-red-600 via-amber-500 to-transparent" />
-        <div className="absolute -top-24 -right-24 w-64 h-64 bg-blue-600/8 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-16 left-1/3 w-48 h-48 bg-violet-500/5 rounded-full blur-3xl pointer-events-none" />
+    <div className="space-y-5">
+      {/* ── Filter bar ── */}
+      <Card className="px-4 py-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider shrink-0">Filters</span>
 
-        <div className="relative flex items-center gap-4">
-          <div className="p-3 rounded-xl bg-blue-500/15 border border-blue-500/30 shadow-lg shadow-blue-500/10">
-            <BarChart3 className="h-6 w-6 text-blue-400" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
-              Analytics
-            </h1>
-            <p className="text-sm text-slate-400 mt-0.5">
-              Comprehensive insights into your film catalog and rights portfolio
-            </p>
-          </div>
-        </div>
-      </div>
+          <Select value={rightsStatus} onValueChange={setRightsStatus}>
+            <SelectTrigger className="h-8 w-32 text-xs bg-slate-800/60 border-slate-700/60">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">Active only</SelectItem>
+              <SelectItem value="all">All rights</SelectItem>
+            </SelectContent>
+          </Select>
 
-      {/* ── KPI Row ── */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <EnhancedStatsCard
-          title="Total Movies"
-          value={stats?.total_movies || 0}
-          description="Films in catalog"
-          icon={Film}
-          accentColor="#3b82f6"
-          sparklineData={[40, 45, 42, 48, 52, 50, stats?.total_movies || 55]}
-        />
-        <EnhancedStatsCard
-          title="Active Rights"
-          value={stats?.active_rights || 0}
-          description="Current licenses"
-          icon={FileText}
-          accentColor="#10b981"
-          sparklineData={[100, 110, 105, 115, 120, 118, stats?.active_rights || 125]}
-        />
-        <EnhancedStatsCard
-          title="Expiring (30d)"
-          value={stats?.rights_expiring_30_days || 0}
-          description="Needs attention"
-          icon={TrendingDown}
-          accentColor="#ef4444"
-        />
-        <EnhancedStatsCard
-          title="Catalog Coverage"
-          value={`${catalogHealth?.percentCovered || 0}%`}
-          description={`${catalogHealth?.withActiveRights || 0} of ${catalogHealth?.totalMovies || 0} movies`}
-          icon={ShieldCheck}
-          accentColor="#8b5cf6"
-        />
-      </div>
+          <Select value={language} onValueChange={setLanguage}>
+            <SelectTrigger className="h-8 w-36 text-xs bg-slate-800/60 border-slate-700/60">
+              <SelectValue placeholder="Language" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Languages</SelectItem>
+              {allLanguages.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+            </SelectContent>
+          </Select>
 
-      {/* ── Rights Expiry Timeline — Full Width ── */}
-      <div className={glassSection}>
-        <RightsExpiryTimelineChart data={expiryTimeline} />
-      </div>
+          <Select value={source} onValueChange={setSource}>
+            <SelectTrigger className="h-8 w-36 text-xs bg-slate-800/60 border-slate-700/60">
+              <SelectValue placeholder="Source" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Sources</SelectItem>
+              <SelectItem value="home_production">Home Production</SelectItem>
+              <SelectItem value="acquired">Acquired</SelectItem>
+            </SelectContent>
+          </Select>
 
-      {/* ── Territory + Platform ── */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className={glassSection}><TerritoryCoverageTreemap data={territories} /></div>
-        <div className={glassSection}><PlatformComparisonChart data={platformComparison} /></div>
-      </div>
+          <Select value={platformType} onValueChange={setPlatformType}>
+            <SelectTrigger className="h-8 w-36 text-xs bg-slate-800/60 border-slate-700/60">
+              <SelectValue placeholder="Platform type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              {allPlatformTypes.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+            </SelectContent>
+          </Select>
 
-      {/* ── Monthly Activity + Rights Nature ── */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className={glassSection}><MonthlyActivityChart data={monthlyActivity} /></div>
-        <div className={glassSection}>
-          <DistributionDonutChart
-            data={rightsNature}
-            title="Rights Nature"
-            description="Exclusive vs non-exclusive distribution"
-          />
-        </div>
-      </div>
+          {hasFilters && (
+            <button
+              onClick={() => { setLanguage("all"); setSource("all"); setPlatformType("all"); setRightsStatus("active"); }}
+              className="flex items-center gap-1 text-xs text-slate-400 hover:text-red-400 transition-colors"
+            >
+              <X className="h-3 w-3" /> Clear
+            </button>
+          )}
 
-      {/* ── Language + Certification ── */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className={glassSection}>
-          <DistributionBarChart
-            data={languages}
-            title="Language Distribution"
-            description="Movies by language"
-          />
-        </div>
-        <div className={glassSection}>
-          <DistributionDonutChart
-            data={certifications}
-            title="Certification Distribution"
-            description="Movies by certification type"
-          />
-        </div>
-      </div>
-
-      {/* ── Rights Type + Catalog Health ── */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className={glassSection}><RightsTypeChart data={rightsTypes} /></div>
-        {catalogHealth && <div className={glassSection}><CatalogHealthRadial health={catalogHealth} /></div>}
-      </div>
-
-      {/* ── Top Movies Table ── */}
-      <div className={glassSection}>
-        <div className="px-5 py-4 border-b border-slate-800/60 flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-slate-200">Top Movies by Active Rights</p>
-            <p className="text-xs text-slate-500 mt-0.5">Movies with the most active platform licenses</p>
+          <div className="ml-auto text-xs text-slate-500">
+            <span className="font-semibold text-slate-300">{filtered.length}</span> rights · <span className="font-semibold text-slate-300">{uniqueMovies}</span> titles
           </div>
         </div>
-        <Table>
-          <TableHeader>
-            <TableRow className="border-slate-800/60 hover:bg-transparent">
-              <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-500 w-12">Rank</TableHead>
-              <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Movie</TableHead>
-              <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Source</TableHead>
-              <TableHead className="text-right text-[10px] font-bold uppercase tracking-widest text-slate-500">Active Rights</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {topMovies.map((movie, i) => (
-              <TableRow key={i} className="border-slate-800/40 hover:bg-slate-800/30 transition-colors">
-                <TableCell className="font-bold text-slate-400 tabular-nums">{i + 1}</TableCell>
-                <TableCell className="font-medium text-slate-200">{movie.title}</TableCell>
-                <TableCell>
-                  <span className={cn(
-                    "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border",
-                    movie.source === "home_production"
-                      ? "bg-indigo-500/15 text-indigo-400 border-indigo-500/30"
-                      : "bg-violet-500/15 text-violet-400 border-violet-500/30"
-                  )}>
-                    {movie.source === "home_production" ? "Home" : "Acquired"}
-                  </span>
-                </TableCell>
-                <TableCell className="text-right font-bold text-slate-200 tabular-nums">{movie.rightsCount}</TableCell>
-              </TableRow>
+      </Card>
+
+      {/* ── KPI row ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard label="Matched Rights" value={filtered.length} color="#3b82f6" sub="matching current filters" />
+        <StatCard label="Titles" value={uniqueMovies} color="#10b981" sub="unique movies" />
+        <StatCard label="Active Rights" value={activeRights.length} color="#8b5cf6" sub="currently active (all)" />
+        <StatCard label="Expiring in 30d" value={expiring30.length} color="#ef4444" sub="needs attention" />
+      </div>
+
+      {/* ── Expiry timeline + Platform type donut ── */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Section title="Expiry Timeline" sub="Rights expiring per month (next 12m)" className="md:col-span-2">
+          <ResponsiveContainer width="100%" height={240}>
+            <AreaChart data={expiryTimeline} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="gExp" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#ef4444" stopOpacity={0.3} />
+                  <stop offset="100%" stopColor="#ef4444" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke={grid.stroke} vertical={false} />
+              <XAxis dataKey="month" tick={tickStyle} tickLine={false} axisLine={false} />
+              <YAxis tick={tickStyle} tickLine={false} axisLine={false} width={28} allowDecimals={false} />
+              <Tooltip contentStyle={tooltipStyle} cursor={{ stroke: "rgba(148,163,184,0.1)" }} />
+              <Area type="monotone" dataKey="expiring" name="Expiring" stroke="#ef4444" fill="url(#gExp)" strokeWidth={2} dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </Section>
+
+        <Section title="Rights by Type" sub="Platform type breakdown">
+          <ResponsiveContainer width="100%" height={240}>
+            <PieChart>
+              <Pie data={byPlatformType} cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={2} dataKey="count" nameKey="name" strokeWidth={0}>
+                {byPlatformType.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+              </Pie>
+              <Tooltip contentStyle={tooltipStyle} />
+              <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, color: "#94a3b8" }} />
+            </PieChart>
+          </ResponsiveContainer>
+        </Section>
+      </div>
+
+      {/* ── Platform + Language ── */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Section title="Top Platforms" sub="Rights count per platform">
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={byPlatform} layout="vertical" margin={{ top: 0, right: 40, left: 0, bottom: 0 }} barCategoryGap="30%">
+              <XAxis type="number" tick={tickStyle} tickLine={false} axisLine={false} />
+              <YAxis type="category" dataKey="name" tick={tickStyle} width={100} tickLine={false} axisLine={false} />
+              <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(148,163,184,0.04)" }} />
+              <Bar dataKey="count" fill="#3b82f6" radius={[0, 3, 3, 0]}>
+                <LabelList dataKey="count" position="right" style={{ fill: "#64748b", fontSize: 10, fontWeight: 600 }} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </Section>
+
+        <Section title="Language Breakdown" sub="Rights by film language">
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={byLanguage} layout="vertical" margin={{ top: 0, right: 40, left: 0, bottom: 0 }} barCategoryGap="30%">
+              <XAxis type="number" tick={tickStyle} tickLine={false} axisLine={false} />
+              <YAxis type="category" dataKey="name" tick={tickStyle} width={100} tickLine={false} axisLine={false} />
+              <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(148,163,184,0.04)" }} />
+              <Bar dataKey="count" fill="#8b5cf6" radius={[0, 3, 3, 0]}>
+                <LabelList dataKey="count" position="right" style={{ fill: "#64748b", fontSize: 10, fontWeight: 600 }} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </Section>
+      </div>
+
+      {/* ── Nature donut + Top titles ── */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Section title="Rights Nature" sub="Exclusive vs non-exclusive">
+          <ResponsiveContainer width="100%" height={220}>
+            <PieChart>
+              <Pie data={byNature} cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={3} dataKey="count" nameKey="name" strokeWidth={0}>
+                {byNature.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+              </Pie>
+              <Tooltip contentStyle={tooltipStyle} />
+              <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, color: "#94a3b8" }} />
+            </PieChart>
+          </ResponsiveContainer>
+        </Section>
+
+        <Section title="Top Titles by Rights" sub="Most licensed films" className="md:col-span-2">
+          <div className="space-y-1.5 pt-1">
+            {topMovies.map((m, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <span className="text-xs tabular-nums text-slate-600 w-4 shrink-0">{i + 1}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-slate-300 truncate">{m.title}</span>
+                    <span className="text-xs font-semibold text-slate-300 tabular-nums shrink-0">{m.count}</span>
+                  </div>
+                  <div className="mt-0.5 h-1 rounded-full bg-slate-800">
+                    <div
+                      className="h-1 rounded-full"
+                      style={{
+                        width: `${Math.round((m.count / (topMovies[0]?.count || 1)) * 100)}%`,
+                        backgroundColor: m.source === "home_production" ? "#3b82f6" : "#8b5cf6",
+                      }}
+                    />
+                  </div>
+                </div>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${m.source === "home_production" ? "bg-blue-500/15 text-blue-400" : "bg-violet-500/15 text-violet-400"}`}>
+                  {m.source === "home_production" ? "Home" : "Acq"}
+                </span>
+              </div>
             ))}
-            {topMovies.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={4} className="text-center py-12 text-slate-500">
-                  No data available
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+            {topMovies.length === 0 && <p className="text-xs text-slate-500 text-center py-8">No data for current filters</p>}
+          </div>
+        </Section>
       </div>
     </div>
   );

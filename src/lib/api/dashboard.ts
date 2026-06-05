@@ -934,29 +934,6 @@ export async function getExpiringInternetTitles(options?: {
       movieRightsMap.get(r.movie_id)!.push(right)
     })
 
-    // Also check acquired movies: internet_rights_end_date in range (or any if no range)
-    filteredMovies.forEach((m: any) => {
-      if (m.source !== 'acquired') return
-      if (m.internet_rights !== 'Yes' && m.negative_rights !== 'Yes') return
-      if (!m.internet_rights_end_date) return
-      if (fromDate && m.internet_rights_end_date < fromDate) return
-      if (toDate && m.internet_rights_end_date > toDate) return
-      const syntheticRight: InternetRight = {
-        id: `${m.id}_acquired`,
-        platform_name: m.assignor_licensor || 'Acquired Rights',
-        rights_type_name: 'Internet Rights (Acquired)',
-        start_date: m.internet_rights_start_date,
-        end_date: m.internet_rights_end_date,
-        nature: m.nature_of_rights,
-        territory: m.territory,
-        is_current: true,
-      }
-      if (!movieRightsMap.has(m.id)) movieRightsMap.set(m.id, [])
-      if (!movieRightsMap.get(m.id)!.find((r) => r.id === syntheticRight.id)) {
-        movieRightsMap.get(m.id)!.push(syntheticRight)
-      }
-    })
-
     // Build result: only movies that have at least one expiring internet right
     const results: MovieWithInternetRights[] = filteredMovies
       .filter((m: any) => movieRightsMap.has(m.id))
@@ -1052,27 +1029,6 @@ export async function getActiveInternetTitles(options?: {
       }
       if (!movieRightsMap.has(r.movie_id)) movieRightsMap.set(r.movie_id, [])
       movieRightsMap.get(r.movie_id)!.push(right)
-    })
-
-    // Also include acquired movies with active internet rights at movie level
-    filteredMovies.forEach((m: any) => {
-      if (m.source !== 'acquired') return
-      if (m.internet_rights !== 'Yes' && m.negative_rights !== 'Yes') return
-      if (!m.internet_rights_end_date || m.internet_rights_end_date < today) return
-      const syntheticRight: InternetRight = {
-        id: `${m.id}_acquired_active`,
-        platform_name: m.assignor_licensor || 'Acquired Rights',
-        rights_type_name: 'Internet Rights (Acquired)',
-        start_date: m.internet_rights_start_date,
-        end_date: m.internet_rights_end_date,
-        nature: m.nature_of_rights,
-        territory: m.territory,
-        is_current: true,
-      }
-      if (!movieRightsMap.has(m.id)) movieRightsMap.set(m.id, [])
-      if (!movieRightsMap.get(m.id)!.find((r) => r.id === syntheticRight.id)) {
-        movieRightsMap.get(m.id)!.push(syntheticRight)
-      }
     })
 
     const results: MovieWithInternetRights[] = filteredMovies
