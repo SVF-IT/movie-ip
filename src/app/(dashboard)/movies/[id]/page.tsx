@@ -499,9 +499,21 @@ export default function MovieDetailPage() {
 
           {/* Poster */}
           <div className="mt-8 ml-2 shrink-0">
-            {movie.poster_url ? (
+            {movie.title ? (
               <div className="relative w-28 aspect-[2/3] rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/10">
-                <img src={movie.poster_url} alt={movie.title} className="w-full h-full object-cover" />
+                <img
+                  src={`https://fileapi.mni.agency/api/FileFolderManager/PreviewFile?path=%2Fmnt%2Fmni%2FMoviePoster%2F${encodeURIComponent(movie.title)}.jpg&userId=1&platform=WebMicrosoft%20Windows%20NT%2010.0.20348.0`}
+                  alt={movie.title}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    target.style.display = "none";
+                    target.nextElementSibling?.classList.remove("hidden");
+                  }}
+                />
+                <div className="hidden absolute inset-0 bg-slate-800/60 flex items-center justify-center">
+                  <Film className="h-9 w-9 text-slate-500" />
+                </div>
                 <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
               </div>
             ) : (
