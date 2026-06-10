@@ -13,7 +13,7 @@ export function StatsCardSkeleton() {
             <Skeleton className="h-9 w-20" />
             <Skeleton className="h-3 w-32" />
           </div>
-          <Skeleton className="h-12 w-12 rounded-xl" />
+          <Skeleton className="h-12 w-12 rounded-[12px]" />
         </div>
       </CardContent>
     </Card>

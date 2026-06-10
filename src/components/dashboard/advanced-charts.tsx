@@ -32,8 +32,8 @@ function ChartSection({ title, description, children }: {
   return (
     <div className="p-5">
       <div className="mb-4">
-        <p className="text-sm font-semibold text-slate-200">{title}</p>
-        {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
+        <p className="text-sm font-semibold text-(--text)">{title}</p>
+        {description && <p className="text-xs text-(--text-faint) mt-0.5">{description}</p>}
       </div>
       {children}
     </div>

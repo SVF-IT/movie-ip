@@ -52,9 +52,9 @@ import {
   toggleUserStatus,
 } from "@/lib/api/auth";
 
-const inputCls = "bg-slate-950/40 border-slate-700/50 text-slate-200 placeholder:text-slate-500 focus:border-slate-500 h-9";
-const selectCls = "bg-slate-950/40 border-slate-700/50 text-slate-300 h-9";
-const labelCls = "text-xs font-semibold text-slate-400 uppercase tracking-wider";
+const inputCls = "bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) h-9";
+const selectCls = "bg-(--bg-raise)/40 border-(--svf-border) text-(--text) h-9";
+const labelCls = "text-xs font-semibold text-(--text-faint) uppercase tracking-wider";
 
 const roleCfg: Record<UserRole, { label: string; cls: string }> = {
   admin:  { label: "Admin",  cls: "bg-red-500/20 text-red-300 border-red-500/30" },
@@ -221,186 +221,168 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div className="space-y-6 min-w-0">
-      {/* ── Cinematic Header ── */}
-      <div className="relative overflow-hidden rounded-xl bg-slate-900/60 border border-slate-800/60 backdrop-blur-xl p-6 shadow-2xl">
-        <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-violet-600 via-indigo-500 to-transparent" />
-        <div className="absolute -top-24 -right-24 w-64 h-64 bg-violet-600/6 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="relative flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-3 rounded-xl bg-violet-500/15 border border-violet-500/30 shadow-lg shadow-violet-500/10">
-              <Users className="h-6 w-6 text-violet-400" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
-                User Management
-              </h1>
-              <p className="text-sm text-slate-400 mt-0.5">Create and manage user accounts</p>
-            </div>
+    <div className="space-y-4 min-w-0">
+      {/* ── Compact toolbar ── */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex gap-3">
+          <div className="rounded-[9px] bg-(--bg-raise) border border-(--svf-border) px-4 py-2.5">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-0.5">Total</div>
+            <div className="text-xl font-bold text-(--text) tabular-nums" style={{ fontFamily: "var(--font-display)" }}>{users.length}</div>
           </div>
+          <div className="rounded-[9px] bg-(--bg-raise) border border-(--svf-border) px-4 py-2.5">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-0.5">Active</div>
+            <div className="text-xl font-bold text-emerald-400 tabular-nums" style={{ fontFamily: "var(--font-display)" }}>{activeCount}</div>
+          </div>
+          <div className="rounded-[9px] bg-(--bg-raise) border border-(--svf-border) px-4 py-2.5">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-0.5">Admins</div>
+            <div className="text-xl font-bold text-violet-400 tabular-nums" style={{ fontFamily: "var(--font-display)" }}>{adminCount}</div>
+          </div>
+        </div>
 
-          <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" className="bg-violet-600 hover:bg-violet-500 text-white border-0 shadow-lg shadow-violet-900/30 h-8 shrink-0">
-                <UserPlus className="h-3.5 w-3.5 mr-1.5" /> Create User
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px] bg-slate-900 border-slate-700/60 text-slate-200">
-              <DialogHeader>
-                <DialogTitle className="text-slate-100">Create New User</DialogTitle>
-                <DialogDescription className="text-slate-400">
-                  Create a new user account with a temporary password
-                </DialogDescription>
-              </DialogHeader>
+        <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+          <DialogTrigger asChild>
+            <Button size="sm" className="ml-auto bg-violet-600 hover:bg-violet-500 text-white border-0 shadow-lg shadow-violet-900/30 h-9">
+              <UserPlus className="h-3.5 w-3.5 mr-1.5" /> Create User
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-125 bg-(--panel-solid) border-(--svf-border)">
+            <DialogHeader>
+              <DialogTitle className="text-(--text)">Create New User</DialogTitle>
+              <DialogDescription className="text-(--text-faint)">
+                Create a new user account with a temporary password
+              </DialogDescription>
+            </DialogHeader>
 
-              {createSuccess ? (
-                <div className="py-8 text-center space-y-4">
-                  <CheckCircle2 className="h-16 w-16 text-emerald-400 mx-auto" />
-                  <div>
-                    <p className="font-medium text-slate-100">User Created Successfully!</p>
-                    <p className="text-sm text-slate-400 mt-1">They will need to change their password on first login.</p>
+            {createSuccess ? (
+              <div className="py-8 text-center space-y-4">
+                <CheckCircle2 className="h-16 w-16 text-emerald-400 mx-auto" />
+                <div>
+                  <p className="font-medium text-(--text)">User Created Successfully!</p>
+                  <p className="text-sm text-(--text-faint) mt-1">They will need to change their password on first login.</p>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleCreateUser} className="space-y-4">
+                {createError && (
+                  <div className="flex items-start gap-3 px-4 py-3 rounded-[9px] bg-red-500/10 border border-red-500/30">
+                    <AlertTriangle className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />
+                    <p className="text-sm text-red-300">{createError}</p>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <label className={labelCls}>Full Name <span className="text-red-400">*</span></label>
+                  <Input value={newUser.full_name} onChange={(e) => setNewUser({ ...newUser, full_name: e.target.value })}
+                    placeholder="John Doe" required className={inputCls} />
+                </div>
+                <div className="space-y-2">
+                  <label className={labelCls}>Employee ID <span className="text-red-400">*</span></label>
+                  <Input value={newUser.employee_id} onChange={(e) => setNewUser({ ...newUser, employee_id: e.target.value })}
+                    placeholder="EMP-001" required className={inputCls} />
+                </div>
+                <div className="space-y-2">
+                  <label className={labelCls}>Email <span className="text-red-400">*</span></label>
+                  <Input type="email" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                    placeholder="john@company.com" required className={inputCls} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className={labelCls}>Role <span className="text-red-400">*</span></label>
+                    <Select value={newUser.role} onValueChange={(v: UserRole) => setNewUser({ ...newUser, role: v })}>
+                      <SelectTrigger className={selectCls}><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="admin">Admin</SelectItem>
+                        <SelectItem value="legal">Legal</SelectItem>
+                        <SelectItem value="editor">Editor</SelectItem>
+                        <SelectItem value="viewer">Viewer</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-(--text-faint)">{roleDescriptions[newUser.role]}</p>
+                  </div>
+                  <div className="space-y-2">
+                    <label className={labelCls}>Department</label>
+                    <Input value={newUser.department} onChange={(e) => setNewUser({ ...newUser, department: e.target.value })}
+                      placeholder="Legal & Rights" className={inputCls} />
                   </div>
                 </div>
-              ) : (
-                <form onSubmit={handleCreateUser} className="space-y-4">
-                  {createError && (
-                    <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/30">
-                      <AlertTriangle className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />
-                      <p className="text-sm text-red-300">{createError}</p>
-                    </div>
-                  )}
-                  <div className="space-y-2">
-                    <label className={labelCls}>Full Name <span className="text-red-400">*</span></label>
-                    <Input value={newUser.full_name} onChange={(e) => setNewUser({ ...newUser, full_name: e.target.value })}
-                      placeholder="John Doe" required className={inputCls} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className={labelCls}>Employee ID <span className="text-red-400">*</span></label>
-                    <Input value={newUser.employee_id} onChange={(e) => setNewUser({ ...newUser, employee_id: e.target.value })}
-                      placeholder="EMP-001" required className={inputCls} />
-                  </div>
-                  <div className="space-y-2">
-                    <label className={labelCls}>Email <span className="text-red-400">*</span></label>
-                    <Input type="email" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                      placeholder="john@company.com" required className={inputCls} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className={labelCls}>Role <span className="text-red-400">*</span></label>
-                      <Select value={newUser.role} onValueChange={(v: UserRole) => setNewUser({ ...newUser, role: v })}>
-                        <SelectTrigger className={selectCls}><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="admin">Admin</SelectItem>
-                          <SelectItem value="legal">Legal</SelectItem>
-                          <SelectItem value="editor">Editor</SelectItem>
-                          <SelectItem value="viewer">Viewer</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <p className="text-xs text-slate-500">{roleDescriptions[newUser.role]}</p>
-                    </div>
-                    <div className="space-y-2">
-                      <label className={labelCls}>Department</label>
-                      <Input value={newUser.department} onChange={(e) => setNewUser({ ...newUser, department: e.target.value })}
-                        placeholder="Legal & Rights" className={inputCls} />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className={labelCls}>Temporary Password <span className="text-red-400">*</span></label>
-                      <Button type="button" variant="ghost" size="sm"
-                        className="h-6 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
-                        onClick={() => setNewUser({ ...newUser, password: generateTempPassword() })}>
-                        Generate
-                      </Button>
-                    </div>
-                    <Input type="text" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                      placeholder="Enter or generate a temporary password" required minLength={8} className={inputCls} />
-                    <p className="text-xs text-slate-500">User will be required to change this on first login</p>
-                  </div>
-                  <DialogFooter>
-                    <Button type="button" variant="ghost" onClick={() => setCreateDialogOpen(false)}
-                      className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/60">
-                      Cancel
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className={labelCls}>Temporary Password <span className="text-red-400">*</span></label>
+                    <Button type="button" variant="ghost" size="sm"
+                      className="h-6 text-xs text-(--text-faint) hover:text-(--text) hover:bg-(--hover)"
+                      onClick={() => setNewUser({ ...newUser, password: generateTempPassword() })}>
+                      Generate
                     </Button>
-                    <Button type="submit" disabled={creating}
-                      className="bg-violet-600 hover:bg-violet-500 text-white border-0">
-                      {creating ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating...</> : "Create User"}
-                    </Button>
-                  </DialogFooter>
-                </form>
-              )}
-            </DialogContent>
-          </Dialog>
-        </div>
-
-        {/* Stat cards */}
-        <div className="relative mt-5 flex gap-3">
-          <div className="flex-1 rounded-lg bg-slate-800/30 border border-slate-700/30 px-4 py-3">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-0.5">Total Users</div>
-            <div className="text-xl font-bold text-slate-100 tabular-nums">{users.length}</div>
-          </div>
-          <div className="flex-1 rounded-lg bg-slate-800/30 border border-slate-700/30 px-4 py-3">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-0.5">Active</div>
-            <div className="text-xl font-bold text-emerald-400 tabular-nums">{activeCount}</div>
-          </div>
-          <div className="flex-1 rounded-lg bg-slate-800/30 border border-slate-700/30 px-4 py-3">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-0.5">Admins</div>
-            <div className="text-xl font-bold text-red-400 tabular-nums">{adminCount}</div>
-          </div>
-        </div>
+                  </div>
+                  <Input type="text" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                    placeholder="Enter or generate a temporary password" required minLength={8} className={inputCls} />
+                  <p className="text-xs text-(--text-faint)">User will be required to change this on first login</p>
+                </div>
+                <DialogFooter>
+                  <Button type="button" variant="ghost" onClick={() => setCreateDialogOpen(false)}
+                    className="text-(--text-faint) hover:text-(--text) hover:bg-(--hover)">
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={creating}
+                    className="bg-violet-600 hover:bg-violet-500 text-white border-0">
+                    {creating ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating...</> : "Create User"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* ── Table ── */}
-      <div className="rounded-xl bg-slate-900/40 border border-slate-800/60 backdrop-blur-xl shadow-xl overflow-hidden">
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-800/60">
-          <div className="p-1.5 rounded-lg bg-violet-500/15 border border-violet-500/30">
+      <div className="glass-card overflow-hidden">
+        <div className="flex items-center gap-3 px-5 py-3 border-b border-(--svf-border)" style={{ background: "var(--bg-deep)" }}>
+          <div className="p-1.5 rounded-[7px] bg-violet-500/15 border border-violet-500/30">
             <ShieldCheck className="h-3.5 w-3.5 text-violet-400" />
           </div>
-          <span className="text-sm font-semibold text-slate-200">All Users</span>
-          <span className="ml-auto text-xs text-slate-500">
+          <span className="text-sm font-semibold text-(--text)">All Users</span>
+          <span className="ml-auto text-xs text-(--text-faint)">
             {loading ? "Loading…" : `${users.length} user${users.length !== 1 ? "s" : ""}`}
           </span>
         </div>
 
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-red-500" />
+            <Loader2 className="h-8 w-8 animate-spin" style={{ color: "var(--svf-accent)" }} />
           </div>
         ) : (
           <div className="overflow-x-auto">
             <Table>
-              <TableHeader>
-                <TableRow className="border-slate-800/60 hover:bg-transparent">
+              <TableHeader style={{ background: "var(--bg-deep)" }}>
+                <TableRow className="border-(--svf-border) hover:bg-transparent">
                   <SortableHeader column="full_name" label="Name" currentSort={sortConfig} onSort={requestSort}
-                    className="text-[10px] font-bold uppercase tracking-widest text-slate-500 h-9" />
+                    className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9" />
                   <SortableHeader column="employee_id" label="Employee ID" currentSort={sortConfig} onSort={requestSort}
-                    className="hidden sm:table-cell text-[10px] font-bold uppercase tracking-widest text-slate-500 h-9" />
+                    className="hidden sm:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9" />
                   <SortableHeader column="email" label="Email" currentSort={sortConfig} onSort={requestSort}
-                    className="hidden md:table-cell text-[10px] font-bold uppercase tracking-widest text-slate-500 h-9" />
+                    className="hidden md:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9" />
                   <SortableHeader column="role" label="Role" currentSort={sortConfig} onSort={requestSort}
-                    className="text-[10px] font-bold uppercase tracking-widest text-slate-500 h-9" />
+                    className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9" />
                   <SortableHeader column="department" label="Department" currentSort={sortConfig} onSort={requestSort}
-                    className="hidden lg:table-cell text-[10px] font-bold uppercase tracking-widest text-slate-500 h-9" />
+                    className="hidden lg:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9" />
                   <SortableHeader column="is_active" label="Status" currentSort={sortConfig} onSort={requestSort}
-                    className="hidden sm:table-cell text-[10px] font-bold uppercase tracking-widest text-slate-500 h-9" />
-                  <TableHead className="text-right text-[10px] font-bold uppercase tracking-widest text-slate-500 h-9">Actions</TableHead>
+                    className="hidden sm:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9" />
+                  <TableHead className="text-right text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {sortedUsers.map((user) => (
-                  <TableRow key={user.id} className="border-slate-800/40 hover:bg-slate-800/20 transition-colors">
+                  <TableRow key={user.id} className="border-(--svf-border) hover:bg-(--hover) transition-colors">
                     <TableCell>
-                      <span className="font-medium text-slate-200">{user.full_name || "—"}</span>
-                      <span className="text-xs text-slate-500 block md:hidden">{user.email}</span>
+                      <span className="font-medium text-(--text)">{user.full_name || "—"}</span>
+                      <span className="text-xs text-(--text-faint) block md:hidden">{user.email}</span>
                     </TableCell>
                     <TableCell className="hidden sm:table-cell">
-                      <span className="font-mono text-sm text-slate-400">{user.employee_id || "—"}</span>
+                      <span className="font-mono text-sm text-(--text-dim)">{user.employee_id || "—"}</span>
                     </TableCell>
-                    <TableCell className="hidden md:table-cell text-slate-400 text-sm">{user.email}</TableCell>
+                    <TableCell className="hidden md:table-cell text-(--text-dim) text-sm">{user.email}</TableCell>
                     <TableCell>
                       <Select value={user.role} onValueChange={(v: UserRole) => handleRoleChange(user.id, v)}>
-                        <SelectTrigger className="w-28 h-7 bg-slate-950/40 border-slate-700/50 text-slate-300 text-xs">
+                        <SelectTrigger className="w-28 h-7 bg-(--bg-raise) border-(--svf-border) text-(--text) text-xs">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -411,16 +393,16 @@ export default function AdminUsersPage() {
                         </SelectContent>
                       </Select>
                     </TableCell>
-                    <TableCell className="hidden lg:table-cell text-slate-400 text-sm">{user.department || "—"}</TableCell>
+                    <TableCell className="hidden lg:table-cell text-(--text-dim) text-sm">{user.department || "—"}</TableCell>
                     <TableCell className="hidden sm:table-cell">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${user.is_active ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" : "bg-slate-700/40 text-slate-400 border-slate-600/30"}`}>
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${user.is_active ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" : "bg-(--bg-raise) text-(--text-faint) border-(--svf-border)"}`}>
                         {user.is_active ? "Active" : "Inactive"}
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
                         <Button variant="ghost" size="sm" title="Reset Password"
-                          className="h-7 w-7 p-0 text-slate-500 hover:text-amber-400 hover:bg-amber-500/10"
+                          className="h-7 w-7 p-0 text-(--text-faint) hover:text-amber-400 hover:bg-amber-500/10"
                           onClick={() => { setResetUser(user); setNewPassword(generateTempPassword()); setResetDialogOpen(true); }}>
                           <KeyRound className="h-3.5 w-3.5" />
                         </Button>
@@ -428,14 +410,12 @@ export default function AdminUsersPage() {
                           <>
                             <Button variant="ghost" size="sm"
                               title={user.is_active ? "Deactivate User" : "Activate User"}
-                              className={`h-7 w-7 p-0 ${user.is_active ? "text-slate-500 hover:text-red-400 hover:bg-red-500/10" : "text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10"}`}
+                              className={`h-7 w-7 p-0 ${user.is_active ? "text-(--text-faint) hover:text-red-400 hover:bg-red-500/10" : "text-(--text-faint) hover:text-emerald-400 hover:bg-emerald-500/10"}`}
                               onClick={() => handleToggleStatus(user)}>
-                              {user.is_active
-                                ? <UserX className="h-3.5 w-3.5" />
-                                : <UserCheck className="h-3.5 w-3.5" />}
+                              {user.is_active ? <UserX className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
                             </Button>
                             <Button variant="ghost" size="sm" title="Delete User"
-                              className="h-7 w-7 p-0 text-slate-500 hover:text-red-400 hover:bg-red-500/10"
+                              className="h-7 w-7 p-0 text-(--text-faint) hover:text-red-400 hover:bg-red-500/10"
                               onClick={() => { setDeleteUser(user); setDeleteError(null); setDeleteDialogOpen(true); }}>
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
@@ -453,25 +433,25 @@ export default function AdminUsersPage() {
 
       {/* ── Delete User Dialog ── */}
       <Dialog open={deleteDialogOpen} onOpenChange={(open) => { setDeleteDialogOpen(open); if (!open) setDeleteError(null); }}>
-        <DialogContent className="sm:max-w-105 bg-slate-900 border-slate-700/60 text-slate-200">
+        <DialogContent className="sm:max-w-100 bg-(--panel-solid) border-(--svf-border)">
           <DialogHeader>
-            <DialogTitle className="text-slate-100 flex items-center gap-2">
+            <DialogTitle className="text-(--text) flex items-center gap-2">
               <Trash2 className="h-4 w-4 text-red-400" /> Delete User
             </DialogTitle>
-            <DialogDescription className="text-slate-400">
+            <DialogDescription className="text-(--text-faint)">
               This action is permanent. The user&apos;s profile will be deleted. Any movies or records they created will have their author ID removed but their name will be preserved.
             </DialogDescription>
           </DialogHeader>
 
           <div className="px-1 py-2">
-            <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-4 py-3">
+            <div className="rounded-[9px] bg-red-500/10 border border-red-500/30 px-4 py-3">
               <p className="text-sm text-red-300 font-medium">{deleteUser?.full_name || deleteUser?.email}</p>
               <p className="text-xs text-red-400/70 mt-0.5">{deleteUser?.email}</p>
             </div>
           </div>
 
           {deleteError && (
-            <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/30">
+            <div className="flex items-start gap-3 px-4 py-3 rounded-[9px] bg-red-500/10 border border-red-500/30">
               <AlertTriangle className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />
               <p className="text-sm text-red-300">{deleteError}</p>
             </div>
@@ -479,7 +459,7 @@ export default function AdminUsersPage() {
 
           <DialogFooter>
             <Button variant="ghost" onClick={() => setDeleteDialogOpen(false)}
-              className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/60">
+              className="text-(--text-faint) hover:text-(--text) hover:bg-(--hover)">
               Cancel
             </Button>
             <Button onClick={handleDeleteUser} disabled={deleting}
@@ -492,10 +472,10 @@ export default function AdminUsersPage() {
 
       {/* ── Reset Password Dialog ── */}
       <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
-        <DialogContent className="sm:max-w-[400px] bg-slate-900 border-slate-700/60 text-slate-200">
+        <DialogContent className="sm:max-w-100 bg-(--panel-solid) border-(--svf-border)">
           <DialogHeader>
-            <DialogTitle className="text-slate-100">Reset Password</DialogTitle>
-            <DialogDescription className="text-slate-400">
+            <DialogTitle className="text-(--text)">Reset Password</DialogTitle>
+            <DialogDescription className="text-(--text-faint)">
               Set a new temporary password for {resetUser?.full_name || resetUser?.email}
             </DialogDescription>
           </DialogHeader>
@@ -504,8 +484,8 @@ export default function AdminUsersPage() {
             <div className="py-8 text-center space-y-4">
               <CheckCircle2 className="h-16 w-16 text-emerald-400 mx-auto" />
               <div>
-                <p className="font-medium text-slate-100">Password Reset Successfully!</p>
-                <p className="text-sm text-slate-400 mt-1">The user will need to change it on their next login.</p>
+                <p className="font-medium text-(--text)">Password Reset Successfully!</p>
+                <p className="text-sm text-(--text-faint) mt-1">The user will need to change it on their next login.</p>
               </div>
             </div>
           ) : (
@@ -514,19 +494,19 @@ export default function AdminUsersPage() {
                 <div className="flex items-center justify-between">
                   <label className={labelCls}>New Temporary Password</label>
                   <Button type="button" variant="ghost" size="sm"
-                    className="h-6 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+                    className="h-6 text-xs text-(--text-faint) hover:text-(--text) hover:bg-(--hover)"
                     onClick={() => setNewPassword(generateTempPassword())}>
                     Regenerate
                   </Button>
                 </div>
                 <Input type="text" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
                   required className={inputCls} />
-                <p className="text-xs text-slate-500">Share this password securely with the user</p>
+                <p className="text-xs text-(--text-faint)">Share this password securely with the user</p>
               </div>
 
               <DialogFooter>
                 <Button variant="ghost" onClick={() => setResetDialogOpen(false)}
-                  className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/60">
+                  className="text-(--text-faint) hover:text-(--text) hover:bg-(--hover)">
                   Cancel
                 </Button>
                 <Button onClick={handleResetPassword} disabled={resetting}

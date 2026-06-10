@@ -104,123 +104,98 @@ export default function ProductionHousesPage() {
   const totalPages = Math.ceil(totalCount / pageSize);
 
   return (
-    <div className="space-y-6 min-w-0">
-      {/* ── Cinematic Header ── */}
-      <div className="relative overflow-hidden rounded-xl bg-slate-900/60 border border-slate-800/60 backdrop-blur-xl p-6 shadow-2xl">
-        <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-orange-600 via-amber-500 to-transparent" />
-        <div className="absolute -top-24 -right-24 w-64 h-64 bg-orange-600/6 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="relative flex items-start justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-3 rounded-xl bg-orange-500/15 border border-orange-500/30 shadow-lg shadow-orange-500/10">
-              <Factory className="h-6 w-6 text-orange-400" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
-                Production Houses
-              </h1>
-              <p className="text-sm text-slate-400 mt-0.5">Manage production houses and studios</p>
-            </div>
-          </div>
-
-          <div className="flex gap-2 shrink-0">
-            <Button variant="ghost" size="sm" onClick={handleExportClick} disabled={exportLoading}
-              className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 gap-1.5 h-8">
-              {exportLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-              Export
+    <div className="space-y-4 min-w-0">
+      {/* ── Compact toolbar ── */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0 ml-auto">
+          <Button
+            onClick={handleExportClick}
+            disabled={exportLoading}
+            size="sm"
+            className="h-9 gap-2 bg-(--bg-raise) hover:bg-(--hover) text-(--text) border border-(--svf-border)/60"
+          >
+            {exportLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            Export
+          </Button>
+          <RoleGate action="create" resource="production_house">
+            <Button asChild size="sm" className="h-9 gap-2 bg-red-600 hover:bg-red-500 text-white border-0 shadow-lg shadow-red-900/30">
+              <Link href="/production-houses/new">
+                <Plus className="h-4 w-4" />
+                Add Production House
+              </Link>
             </Button>
-            <RoleGate action="create" resource="production_house">
-              <Button asChild size="sm" className="bg-orange-600 hover:bg-orange-500 text-white border-0 shadow-lg shadow-orange-900/30 h-8">
-                <Link href="/production-houses/new">
-                  <Plus className="h-3.5 w-3.5 mr-1.5" /> Add Production House
-                </Link>
-              </Button>
-            </RoleGate>
-          </div>
-        </div>
-
-        {/* Stat cards */}
-        <div className="relative mt-5 flex gap-3">
-          <div className="flex-1 rounded-lg bg-slate-800/30 border border-slate-700/30 px-4 py-3">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-0.5">Total Houses</div>
-            <div className="text-xl font-bold text-slate-100 tabular-nums">{totalCount}</div>
-          </div>
+          </RoleGate>
         </div>
       </div>
 
-      {/* ── Filters ── */}
-      <div className="rounded-xl bg-slate-900/40 border border-slate-800/60 backdrop-blur-xl p-4 shadow-xl">
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+      {/* ── Directory Filters ── */}
+      <div className="glass-card p-4">
+        <div className="flex flex-wrap gap-3 items-center">
+          <div className="relative min-w-[200px] flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-(--text-faint)" />
             <Input
-              placeholder="Search production houses..."
+              placeholder="Search production houses…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-8 bg-slate-950/40 border-slate-700/50 text-slate-200 placeholder:text-slate-500 focus:border-slate-500 h-9"
+              className="pl-9 h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-sm"
               aria-label="Search production houses"
             />
             {searchQuery && (
-              <button onClick={() => setSearchQuery("")} className="absolute right-2.5 top-2.5 text-slate-500 hover:text-slate-300">
-                <X className="h-4 w-4" />
+              <button className="absolute right-2 top-1/2 -translate-y-1/2 text-(--text-faint) hover:text-(--text)" onClick={() => setSearchQuery("")}>
+                <X className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
-          <span className="text-xs text-slate-500 shrink-0">
+          {searchQuery && (
+            <Button variant="ghost" size="sm" className="h-9 gap-1.5 text-(--text-faint) hover:text-(--text) hover:bg-(--hover)"
+              onClick={() => setSearchQuery("")}>
+              <X className="h-3.5 w-3.5" /> Clear
+            </Button>
+          )}
+          <span className="ml-auto text-xs text-(--text-faint) shrink-0">
             {loading ? "Loading…" : `${totalCount} house${totalCount !== 1 ? "s" : ""}`}
           </span>
         </div>
       </div>
 
       {/* ── Table ── */}
-      <div className="rounded-xl bg-slate-900/40 border border-slate-800/60 backdrop-blur-xl shadow-xl overflow-hidden">
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-800/60">
-          <div className="p-1.5 rounded-lg bg-orange-500/15 border border-orange-500/30">
-            <Factory className="h-3.5 w-3.5 text-orange-400" />
-          </div>
-          <span className="text-sm font-semibold text-slate-200">
-            Production House Directory
-          </span>
-          <span className="ml-auto text-xs text-slate-500">
-            {loading ? "Loading…" : `${totalCount} total`}
-          </span>
-        </div>
+      <div className="glass-card overflow-hidden">
 
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-red-500" />
           </div>
         ) : houses.length === 0 ? (
-          <div className="text-center py-12 text-slate-500">
+          <div className="text-center py-12 text-(--text-faint)">
             No production houses found. Try adjusting your search or add a new one.
           </div>
         ) : (
           <>
             <div className="overflow-x-auto">
               <Table>
-                <TableHeader>
-                  <TableRow className="border-slate-800/60 hover:bg-transparent">
+                <TableHeader style={{ background: "var(--bg-deep)" }}>
+                  <TableRow className="border-(--svf-border) hover:bg-transparent">
                     <SortableHeader column="name" label="Name" currentSort={sortConfig} onSort={requestSort}
-                      className="text-[10px] font-bold uppercase tracking-widest text-slate-500 h-9" />
-                    <TableHead className="text-right text-[10px] font-bold uppercase tracking-widest text-slate-500 h-9">Actions</TableHead>
+                      className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9" />
+                    <TableHead className="text-right text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {sortedHouses.map((house) => (
-                    <TableRow key={house.id} className="border-slate-800/40 hover:bg-slate-800/20 transition-colors">
+                    <TableRow key={house.id} className="border-(--svf-border) hover:bg-(--hover) transition-colors">
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <div className="h-7 w-7 rounded-lg bg-orange-500/15 border border-orange-500/30 flex items-center justify-center shrink-0">
                             <Factory className="h-3.5 w-3.5 text-orange-400" />
                           </div>
-                          <span className="font-medium text-slate-200 truncate max-w-[300px]">{house.name}</span>
+                          <span className="font-medium text-(--text) truncate max-w-[300px]">{house.name}</span>
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
                         <RoleGate action="edit" resource="production_house">
                           <div className="flex justify-end gap-1">
                             <Button variant="ghost" size="sm" aria-label={`Edit ${house.name}`} asChild
-                              className="h-7 w-7 p-0 text-slate-500 hover:text-amber-400 hover:bg-amber-500/10">
+                              className="h-7 w-7 p-0 text-(--text-faint) hover:text-amber-400 hover:bg-amber-500/10">
                               <Link href={`/production-houses/${house.id}/edit`}>
                                 <Edit className="h-3.5 w-3.5" />
                               </Link>
@@ -230,7 +205,7 @@ export default function ProductionHousesPage() {
                                 variant="ghost"
                                 size="sm"
                                 aria-label={`Delete ${house.name}`}
-                                className="h-7 w-7 p-0 text-slate-500 hover:text-red-400 hover:bg-red-500/10"
+                                className="h-7 w-7 p-0 text-(--text-faint) hover:text-red-400 hover:bg-red-500/10"
                                 onClick={() => { setDeletingHouse(house); setShowDeleteConfirm(true); }}
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
@@ -246,20 +221,20 @@ export default function ProductionHousesPage() {
             </div>
 
             {totalCount > pageSize && (
-              <div className="flex items-center justify-between px-5 py-3 border-t border-slate-800/60">
-                <p className="text-xs text-slate-500">
+              <div className="flex items-center justify-between px-5 py-3 border-t border-(--svf-border)">
+                <p className="text-xs text-(--text-faint)">
                   Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, totalCount)} of {totalCount}
                 </p>
                 <div className="flex gap-2">
                   <Button variant="ghost" size="sm" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
-                    className="h-7 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 disabled:opacity-30">
+                    className="h-7 text-xs text-(--text-faint) hover:text-(--text) hover:bg-(--hover) disabled:opacity-30">
                     Previous
                   </Button>
-                  <span className="flex items-center text-xs text-slate-500">
+                  <span className="flex items-center text-xs text-(--text-faint)">
                     {page + 1} / {totalPages}
                   </span>
                   <Button variant="ghost" size="sm" onClick={() => setPage(p => p + 1)} disabled={(page + 1) * pageSize >= totalCount}
-                    className="h-7 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 disabled:opacity-30">
+                    className="h-7 text-xs text-(--text-faint) hover:text-(--text) hover:bg-(--hover) disabled:opacity-30">
                     Next
                   </Button>
                 </div>
@@ -279,16 +254,16 @@ export default function ProductionHousesPage() {
 
       {/* ── Delete Dialog ── */}
       <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-        <DialogContent className="bg-slate-900 border-slate-700/60 text-slate-200">
+        <DialogContent className="bg-(--panel-solid) border-(--svf-border)/60 text-(--text)">
           <DialogHeader>
-            <DialogTitle className="text-slate-100">Delete Production House</DialogTitle>
-            <DialogDescription className="text-slate-400">
+            <DialogTitle className="text-(--text)">Delete Production House</DialogTitle>
+            <DialogDescription className="text-(--text-faint)">
               Are you sure you want to delete &quot;{deletingHouse?.name}&quot;?
               This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           {deletingHouse && (deletingHouse.movie_count || 0) > 0 && (
-            <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/30">
+            <div className="flex items-start gap-3 px-4 py-3 rounded-[12px] bg-red-500/10 border border-red-500/30">
               <AlertTriangle className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />
               <p className="text-sm text-red-300">
                 This production house has {deletingHouse.movie_count} associated movies.
@@ -298,7 +273,7 @@ export default function ProductionHousesPage() {
           )}
           <DialogFooter>
             <Button variant="ghost" onClick={() => setShowDeleteConfirm(false)}
-              className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/60">
+              className="text-(--text-faint) hover:text-(--text) hover:bg-(--hover)">
               Cancel
             </Button>
             <Button onClick={handleDelete} disabled={deleting}

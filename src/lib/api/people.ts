@@ -8,6 +8,8 @@ export interface PersonWithStats extends Person {
   movies_count?: number;
   movies_as_actor?: number;
   movies_as_director?: number;
+  movies_list?: string[];
+  movies?: any[];
   // role is also stored on people.role in DB; PersonWithStats mirrors it
 }
 
@@ -126,6 +128,7 @@ export async function getPeopleWithStats(options?: {
           movies_count: totalMovies,
           movies_as_actor: moviesAsActor,
           movies_as_director: moviesAsDirector,
+          movies_list: Array.from(allUniqueTitles),
         };
       }
     );
@@ -194,6 +197,7 @@ export async function getPersonById(id: string): Promise<PersonWithStats | null>
       movies_count: totalMovies,
       movies_as_actor: moviesAsActor,
       movies_as_director: moviesAsDirector,
+      movies_list: Array.from(allUniqueTitles),
     };
   } catch (error) {
     console.error("Error fetching person:", error);

@@ -4,7 +4,6 @@ import { LanguageSelector } from "@/components/forms/language-selector";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { FileUpload } from "@/components/ui/file-upload";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -61,19 +60,19 @@ const HOME_NATURE_OPTIONS = [
 
 const HOLDBACK_PRESETS = ["Audio Rights", "Theatrical Exploitation", "FVOD", "AVOD", "SVOD", "TVOD"];
 
-const inputCls = "bg-slate-950/40 border-slate-700/50 text-slate-200 placeholder:text-slate-500 focus:border-slate-500 h-10";
-const selectCls = "bg-slate-950/40 border-slate-700/50 text-slate-300 h-10";
-const textareaCls = "bg-slate-950/40 border-slate-700/50 text-slate-200 placeholder:text-slate-500 focus:border-slate-500";
-const labelCls = "text-xs font-semibold text-slate-400 uppercase tracking-wider";
+const inputCls = "bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) focus:border-slate-500 h-10";
+const selectCls = "bg-(--bg-raise)/40 border-(--svf-border) text-(--text) h-10";
+const textareaCls = "bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) focus:border-slate-500";
+const labelCls = "text-xs font-semibold text-(--text-faint) uppercase tracking-wider";
 
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="relative overflow-hidden rounded-xl bg-slate-900/40 border border-slate-800/60 backdrop-blur-xl shadow-xl">
-      <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-800/60">
-        <div className="p-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30">
+    <div className="relative overflow-hidden rounded-[12px] bg-(--panel-solid)/40 border border-(--svf-border) backdrop-blur-xl shadow-xl">
+      <div className="flex items-center gap-3 px-5 py-4 border-b border-(--svf-border)">
+        <div className="p-1.5 rounded-[10px] bg-amber-500/15 border border-amber-500/30">
           <Film className="h-3.5 w-3.5 text-amber-400" />
         </div>
-        <span className="text-sm font-semibold text-slate-200">{title}</span>
+        <span className="text-sm font-semibold text-(--text)">{title}</span>
       </div>
       <div className="p-5 space-y-5">{children}</div>
     </div>
@@ -85,14 +84,14 @@ function FormField({ label, required, hint, children }: { label: string; require
     <div className="space-y-2">
       <Label className={labelCls}>{label}{required && <span className="text-red-400 ml-0.5">*</span>}</Label>
       {children}
-      {hint && <p className="text-[10px] text-slate-400 leading-relaxed">{hint}</p>}
+      {hint && <p className="text-[10px] text-(--text-faint) leading-relaxed">{hint}</p>}
     </div>
   );
 }
 
 function TogglePill({ value, onChange, options = ["Yes", "No"] }: { value: string; onChange: (v: string) => void; options?: string[] }) {
   return (
-    <div className="inline-flex bg-slate-950/50 border border-slate-700/50 rounded-full p-0.5 gap-0.5">
+    <div className="inline-flex bg-(--bg-raise)/50 border border-(--svf-border) rounded-full p-0.5 gap-0.5">
       {options.map((opt) => {
         const active = value === opt;
         return (
@@ -101,8 +100,8 @@ function TogglePill({ value, onChange, options = ["Yes", "No"] }: { value: strin
               "px-3 py-1 rounded-full text-[12.5px] font-semibold transition-all duration-150 whitespace-nowrap select-none",
               active && opt === "Yes" ? "bg-emerald-500/20 text-emerald-400" :
                 active && opt === "No" ? "bg-red-500/20 text-red-400" :
-                  active ? "bg-slate-700/60 text-slate-300" :
-                    "text-slate-500 hover:text-slate-300",
+                  active ? "bg-(--hover) text-(--text)" :
+                    "text-(--text-faint) hover:text-(--text)",
             ].filter(Boolean).join(" ")}>
             {opt}
           </button>
@@ -112,20 +111,50 @@ function TogglePill({ value, onChange, options = ["Yes", "No"] }: { value: strin
   );
 }
 
-function RightsCard({ title, value, onChange, children }: { title: string; value: string; onChange: (v: string) => void; children?: React.ReactNode }) {
-  const isAcq = value === "Yes";
+function SyndicationField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const isFixedValue = value === "Yes" || value === "No" || value === "";
+  const [customMode, setCustomMode] = useState(!isFixedValue);
+  const [customText, setCustomText] = useState(isFixedValue ? "" : value);
+  const activePill = customMode ? "Custom" : value;
+  const handlePill = (v: string) => {
+    if (v === "Custom") { setCustomMode(true); onChange(customText); }
+    else { setCustomMode(false); onChange(v); }
+  };
+  const handleTextChange = (text: string) => {
+    setCustomText(text);
+    onChange(text);
+  };
   return (
-    <div className={["rounded-lg border overflow-hidden transition-colors duration-200", isAcq ? "border-emerald-500/40" : "border-slate-800/50"].join(" ")}>
-      <div className="flex items-center justify-between px-3 py-2.5 bg-slate-950/40 gap-2">
-        <span className={["text-[11px] font-bold uppercase tracking-widest transition-colors duration-200", isAcq ? "text-emerald-400" : "text-slate-400"].join(" ")}>{title}</span>
-        <TogglePill value={value} onChange={onChange} />
-      </div>
-      {isAcq && <div className="p-3 border-t border-slate-800/50 bg-slate-900/30">{children}</div>}
+    <div className="flex flex-col gap-2 items-end">
+      <TogglePill value={activePill} onChange={handlePill} options={["Yes", "No", "Custom"]} />
+      {customMode && (
+        <input
+          autoFocus
+          type="text"
+          value={customText}
+          onChange={(e) => handleTextChange(e.target.value)}
+          placeholder="Enter custom syndication terms…"
+          className="w-64 h-8 rounded-xl border border-(--svf-border) bg-(--bg-raise)/40 px-3 text-xs text-(--text) placeholder:text-(--text-faint) focus:outline-none focus:border-(--svf-border-strong)"
+        />
+      )}
     </div>
   );
 }
 
-const LANG_LIST = ["Bengali","Hindi","English","Tamil","Telugu","Malayalam","Kannada","Marathi","Gujarati","Punjabi","Odia","Assamese"];
+function RightsCard({ title, value, onChange, children }: { title: string; value: string; onChange: (v: string) => void; children?: React.ReactNode }) {
+  const isAcq = value === "Yes";
+  return (
+    <div className={["rounded-[10px] border overflow-hidden transition-colors duration-200", isAcq ? "border-emerald-500/40" : "border-(--svf-border)"].join(" ")}>
+      <div className="flex items-center justify-between px-3 py-2.5 bg-(--bg-raise)/40 gap-2">
+        <span className={["text-[11px] font-bold uppercase tracking-widest transition-colors duration-200", isAcq ? "text-emerald-400" : "text-(--text-faint)"].join(" ")}>{title}</span>
+        <TogglePill value={value} onChange={onChange} />
+      </div>
+      {isAcq && <div className="p-3 border-t border-(--svf-border) bg-(--bg-raise)/30">{children}</div>}
+    </div>
+  );
+}
+
+const LANG_LIST = ["Bengali", "Hindi", "English", "Tamil", "Telugu", "Malayalam", "Kannada", "Marathi", "Gujarati", "Punjabi", "Odia", "Assamese"];
 
 function LangMultiPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [customInput, setCustomInput] = useState("");
@@ -148,13 +177,13 @@ function LangMultiPicker({ value, onChange }: { value: string; onChange: (v: str
           return (
             <button key={lang} type="button" onClick={() => toggle(lang)}
               className={["px-2 py-0.5 rounded-full text-xs font-semibold border transition-all select-none",
-                sel ? "bg-amber-500/15 border-amber-500/50 text-amber-300" : "bg-slate-950/40 border-slate-700/40 text-slate-500 hover:text-slate-300",
+                sel ? "bg-amber-500/15 border-amber-500/50 text-amber-300" : "bg-(--bg-raise)/40 border-(--svf-border) text-(--text-faint) hover:text-(--text)",
               ].join(" ")}>{lang}</button>
           );
         })}
         {!showCustom && (
           <button type="button" onClick={() => { setShowCustom(true); setTimeout(() => inputRef.current?.focus(), 50); }}
-            className="px-2 py-0.5 rounded-full text-xs font-semibold border border-dashed border-slate-600/50 text-slate-500 hover:text-slate-300 transition-all">
+            className="px-2 py-0.5 rounded-full text-xs font-semibold border border-dashed border-(--svf-border-strong) text-(--text-faint) hover:text-(--text) transition-all">
             + Custom
           </button>
         )}
@@ -164,9 +193,9 @@ function LangMultiPicker({ value, onChange }: { value: string; onChange: (v: str
           <Input ref={inputRef} value={customInput} onChange={e => setCustomInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } if (e.key === "Escape") { setShowCustom(false); setCustomInput(""); } }}
             placeholder="Type language…"
-            className="h-7 flex-1 bg-slate-950/40 border-slate-700/50 text-slate-200 placeholder:text-slate-500 text-xs" />
-          <button type="button" onClick={addCustom} className="h-7 px-2.5 rounded-md bg-amber-600/20 border border-amber-500/30 text-amber-400 text-xs font-semibold hover:bg-amber-600/30">Add</button>
-          <button type="button" onClick={() => { setShowCustom(false); setCustomInput(""); }} className="h-7 w-7 flex items-center justify-center rounded-md text-slate-500 hover:text-slate-300">
+            className="h-7 flex-1 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-xs" />
+          <button type="button" onClick={addCustom} className="h-7 px-2.5 rounded-[9px] bg-amber-600/20 border border-amber-500/30 text-amber-400 text-xs font-semibold hover:bg-amber-600/30">Add</button>
+          <button type="button" onClick={() => { setShowCustom(false); setCustomInput(""); }} className="h-7 w-7 flex items-center justify-center rounded-[9px] text-(--text-faint) hover:text-(--text)">
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -184,9 +213,9 @@ function LangMultiPicker({ value, onChange }: { value: string; onChange: (v: str
         </div>
       )}
       {dbVal && (
-        <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-slate-950/60 border border-slate-800/60">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 shrink-0">DB:</span>
-          <span className="text-[11px] text-slate-400 font-mono break-all">{dbVal}</span>
+        <div className="flex items-center gap-2 px-2.5 py-1 rounded-[9px] bg-(--bg-raise)/60 border border-(--svf-border)">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) shrink-0">DB:</span>
+          <span className="text-[11px] text-(--text-faint) font-mono break-all">{dbVal}</span>
         </div>
       )}
     </div>
@@ -195,12 +224,12 @@ function LangMultiPicker({ value, onChange }: { value: string; onChange: (v: str
 
 function InlineRightsRow({ label, value, onChange, langValue, onLangChange }: { label: string; value: string; onChange: (v: string) => void; langValue?: string; onLangChange?: (v: string) => void }) {
   return (
-    <div className="py-2.5 border-b border-slate-800/50 last:border-0 last:pb-0">
+    <div className="py-2.5 border-b border-(--svf-border) last:border-0 last:pb-0">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-semibold text-slate-200">{label}</span>
+        <span className="text-sm font-semibold text-(--text)">{label}</span>
         <TogglePill value={value} onChange={onChange} />
       </div>
-      {onLangChange && value === "Yes" && (
+      {onLangChange && (value === "Yes" || value === "No") && (
         <LangMultiPicker value={langValue ?? ""} onChange={onLangChange} />
       )}
     </div>
@@ -220,7 +249,7 @@ function MultiChips({ options, value, onChange }: { options: string[]; value: st
         return (
           <button key={opt} type="button" onClick={() => toggle(opt)}
             className={["px-2.5 py-1 rounded-full text-xs font-semibold border transition-all duration-100 select-none",
-              sel ? "bg-slate-600/25 border-slate-500/50 text-slate-200" : "bg-slate-950/40 border-slate-700/40 text-slate-500 hover:text-slate-300",
+              sel ? "bg-(--hover) border-slate-500/50 text-(--text)" : "bg-(--bg-raise)/40 border-(--svf-border) text-(--text-faint) hover:text-(--text)",
             ].join(" ")}>
             {opt}
           </button>
@@ -251,13 +280,13 @@ function HoldbackPicker({ value, onChange }: { value: string; onChange: (v: stri
           return (
             <button key={opt} type="button" onClick={() => toggle(opt)}
               className={["px-2.5 py-1 rounded-full text-xs font-semibold border transition-all duration-100 select-none",
-                sel ? "bg-slate-600/25 border-slate-500/50 text-slate-200" : "bg-slate-950/40 border-slate-700/40 text-slate-500 hover:text-slate-300",
+                sel ? "bg-(--hover) border-slate-500/50 text-(--text)" : "bg-(--bg-raise)/40 border-(--svf-border) text-(--text-faint) hover:text-(--text)",
               ].join(" ")}>{opt}</button>
           );
         })}
         {!showCustom && (
           <button type="button" onClick={() => { setShowCustom(true); setTimeout(() => inputRef.current?.focus(), 50); }}
-            className="px-2.5 py-1 rounded-full text-xs font-semibold border border-dashed border-slate-600/50 text-slate-500 hover:text-slate-300 hover:border-slate-500 transition-all">
+            className="px-2.5 py-1 rounded-full text-xs font-semibold border border-dashed border-(--svf-border-strong) text-(--text-faint) hover:text-(--text) hover:border-(--svf-border-strong) transition-all">
             + Custom
           </button>
         )}
@@ -267,11 +296,11 @@ function HoldbackPicker({ value, onChange }: { value: string; onChange: (v: stri
           <Input ref={inputRef} value={customInput} onChange={e => setCustomInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } if (e.key === "Escape") { setShowCustom(false); setCustomInput(""); } }}
             placeholder="Type custom value…"
-            className="h-7 flex-1 bg-slate-950/40 border-slate-700/50 text-slate-200 placeholder:text-slate-500 text-xs focus-visible:ring-amber-500/40" />
+            className="h-7 flex-1 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-xs focus-visible:ring-amber-500/40" />
           <button type="button" onClick={addCustom}
-            className="h-7 px-2.5 rounded-md bg-amber-600/20 border border-amber-500/30 text-amber-400 text-xs font-semibold hover:bg-amber-600/30 transition-all">Add</button>
+            className="h-7 px-2.5 rounded-[9px] bg-amber-600/20 border border-amber-500/30 text-amber-400 text-xs font-semibold hover:bg-amber-600/30 transition-all">Add</button>
           <button type="button" onClick={() => { setShowCustom(false); setCustomInput(""); }}
-            className="h-7 w-7 flex items-center justify-center rounded-md text-slate-500 hover:text-slate-300">
+            className="h-7 w-7 flex items-center justify-center rounded-[9px] text-(--text-faint) hover:text-(--text)">
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -290,9 +319,131 @@ function HoldbackPicker({ value, onChange }: { value: string; onChange: (v: stri
         </div>
       )}
       {value && (
-        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-slate-950/60 border border-slate-800/60">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 shrink-0">DB value:</span>
-          <span className="text-[11px] text-slate-400 font-mono break-all">{value}</span>
+        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-[9px] bg-(--bg-raise)/60 border border-(--svf-border)">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) shrink-0">DB value:</span>
+          <span className="text-[11px] text-(--text-faint) font-mono break-all">{value}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const OTHER_RIGHTS_OPTIONS = [
+  "Airborne Rights",
+  "Clip Rights",
+  "Hotel Rights",
+  "Mechanical Synch Rights",
+  "Ship Rights",
+  "Surface Transport Rights",
+  "Other Communication & Broadcasting Rights",
+];
+
+function parseOtherRights(value: string): { isYes: boolean; types: string[] } {
+  if (!value) return { isYes: false, types: [] };
+  const trimmed = value.trim();
+  const lower = trimmed.toLowerCase();
+  if (lower === "no" || lower === "") return { isYes: false, types: [] };
+
+  if (lower.startsWith("yes")) {
+    const openParenIndex = trimmed.indexOf("(");
+    const closeParenIndex = trimmed.lastIndexOf(")");
+    if (openParenIndex !== -1 && closeParenIndex !== -1 && closeParenIndex > openParenIndex) {
+      const content = trimmed.substring(openParenIndex + 1, closeParenIndex);
+      const types = content.split(",").map(s => s.trim()).filter(Boolean);
+      return { isYes: true, types };
+    }
+    return { isYes: true, types: [] };
+  }
+
+  // Handle legacy/other values that are comma-separated without starting with "Yes"
+  const types = trimmed.split(",").map(s => s.trim()).filter(Boolean);
+  return { isYes: true, types };
+}
+
+function commitOtherRights(isYes: boolean, types: string[]): string {
+  if (!isYes) return "No";
+  if (types.length === 0) return "Yes";
+  return `Yes(${types.join(", ")})`;
+}
+
+function OtherRightsMultiPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [customInput, setCustomInput] = useState("");
+  const [showCustom, setShowCustom] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const { isYes, types } = parseOtherRights(value);
+
+  const setYes = (yes: boolean) => onChange(commitOtherRights(yes, yes ? types : []));
+  const toggle = (opt: string) => onChange(commitOtherRights(true,
+    types.includes(opt) ? types.filter(s => s !== opt) : [...types, opt]
+  ));
+  const remove = (s: string) => onChange(commitOtherRights(true, types.filter(x => x !== s)));
+  const addCustom = () => {
+    const v = customInput.trim();
+    if (!v || types.includes(v)) { setCustomInput(""); setShowCustom(false); return; }
+    onChange(commitOtherRights(true, [...types, v]));
+    setCustomInput("");
+    setShowCustom(false);
+  };
+
+  return (
+    <div className="space-y-2.5">
+      {/* Yes / No toggle */}
+      <TogglePill value={isYes ? "Yes" : value === "No" ? "No" : ""} onChange={(v) => setYes(v === "Yes")} />
+
+      {/* Type picker — only when Yes */}
+      {isYes && (
+        <div className="space-y-2 pt-1">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Specify types (optional)</p>
+          <div className="flex flex-wrap gap-1.5">
+            {OTHER_RIGHTS_OPTIONS.map(opt => (
+              <button key={opt} type="button" onClick={() => toggle(opt)}
+                className={[
+                  "px-2 py-0.5 rounded-full text-xs font-semibold border transition-all select-none",
+                  types.includes(opt)
+                    ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
+                    : "bg-(--bg-raise)/40 border-(--svf-border) text-(--text-faint) hover:text-(--text)",
+                ].join(" ")}>
+                {opt}
+              </button>
+            ))}
+            {!showCustom && (
+              <button type="button" onClick={() => { setShowCustom(true); setTimeout(() => inputRef.current?.focus(), 50); }}
+                className="px-2 py-0.5 rounded-full text-xs font-semibold border border-dashed border-(--svf-border-strong) text-(--text-faint) hover:text-(--text) transition-all">
+                + Custom
+              </button>
+            )}
+          </div>
+
+          {showCustom && (
+            <div className="flex gap-2 items-center">
+              <Input ref={inputRef} value={customInput} onChange={e => setCustomInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } if (e.key === "Escape") { setShowCustom(false); setCustomInput(""); } }}
+                placeholder="Type right name…"
+                className="h-7 flex-1 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-xs focus-visible:ring-red-500/40" />
+              <button type="button" onClick={addCustom} className="h-7 px-2.5 rounded-[9px] bg-emerald-600/20 border border-emerald-500/30 text-emerald-400 text-xs font-semibold hover:bg-emerald-600/30">Add</button>
+              <button type="button" onClick={() => { setShowCustom(false); setCustomInput(""); }} className="h-7 w-7 flex items-center justify-center rounded-[9px] text-(--text-faint) hover:text-(--text)">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+
+          {types.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {types.map(s => (
+                <span key={s} className="flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-xs font-semibold text-emerald-300">
+                  {s}
+                  <button type="button" onClick={() => remove(s)} className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-emerald-500/20">
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div className="text-[10px] font-mono text-(--text-faint) pt-0.5">
+            {commitOtherRights(isYes, types)}
+          </div>
         </div>
       )}
     </div>
@@ -302,6 +453,38 @@ function HoldbackPicker({ value, onChange }: { value: string; onChange: (v: stri
 function DurationInput({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
   return (
     <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder="e.g. 2 mins, 30 sec, 00:02:30" className={className} />
+  );
+}
+
+function ClipDurationField({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
+  const isTimestamp = value === "" || (/^\d{0,2}:?\d{0,2}:?\d{0,2}$/.test(value) && !(/[a-zA-Z]/.test(value)));
+  const [customMode, setCustomMode] = useState(!isTimestamp);
+  const [customText, setCustomText] = useState(!isTimestamp ? value : "");
+  const activePill = customMode ? "Custom" : "Duration";
+  const handlePill = (v: string) => {
+    if (v === "Custom") { setCustomMode(true); onChange(customText); }
+    else { setCustomMode(false); onChange(""); }
+  };
+  const handleTextChange = (text: string) => {
+    setCustomText(text);
+    onChange(text);
+  };
+  return (
+    <div className="flex flex-col gap-2">
+      <TogglePill value={activePill} onChange={handlePill} options={["Duration", "Custom"]} />
+      {customMode ? (
+        <input
+          autoFocus
+          type="text"
+          value={customText}
+          onChange={(e) => handleTextChange(e.target.value)}
+          placeholder="e.g. 30 seconds, 2 mins…"
+          className={`h-9 rounded-xl border border-(--svf-border) bg-(--bg-raise)/40 px-3 text-xs text-(--text) placeholder:text-(--text-faint) focus:outline-none focus:border-(--svf-border-strong) w-full ${className ?? ""}`}
+        />
+      ) : (
+        <DurationInput value={isTimestamp ? value : ""} onChange={onChange} className={className} />
+      )}
+    </div>
   );
 }
 
@@ -349,7 +532,6 @@ export default function EditMoviePage() {
   const [revenueShare, setRevenueShare] = useState("");
   const [colorOrBw, setColorOrBw] = useState("");
   const [trailerLink, setTrailerLink] = useState("");
-  const [posterUrl, setPosterUrl] = useState("");
   const [assignorLicensor, setAssignorLicensor] = useState("");
   const [licensee, setLicensee] = useState("");
   const [agreementDate, setAgreementDate] = useState("");
@@ -448,7 +630,6 @@ export default function EditMoviePage() {
         }
         setColorOrBw(movie.color_or_bw || "");
         setTrailerLink(movie.trailer_link || "");
-        setPosterUrl(movie.poster_url || "");
         setAssignorLicensor(movie.assignor_licensor || "");
         setLicensee(movie.licensee || "");
         setAgreementDate(movie.agreement_date || "");
@@ -519,7 +700,6 @@ export default function EditMoviePage() {
           production_house_name: movie.production_house_name || "",
           color_or_bw: movie.color_or_bw || "",
           trailer_link: movie.trailer_link || "",
-          poster_url: movie.poster_url || "",
           assignor_licensor: movie.assignor_licensor || "",
           licensee: movie.licensee || "",
           agreement_date: movie.agreement_date || "",
@@ -669,7 +849,6 @@ export default function EditMoviePage() {
 
   const handleSave = async () => {
     if (!title.trim()) { toast.error("Title is required"); return; }
-    if (title.trim().length > 500) { toast.error("Title must be 500 characters or less"); return; }
     setSaving(true);
     try {
       let finalProductionHouseName: string | undefined;
@@ -693,7 +872,6 @@ export default function EditMoviePage() {
         production_house_name: finalProductionHouseName || "",
         color_or_bw: colorOrBw || "",
         trailer_link: trailerLink || "",
-        poster_url: posterUrl || "",
         assignor_licensor: assignorLicensor || "",
         licensee: licensee || "",
         agreement_date: agreementDate || "",
@@ -702,8 +880,8 @@ export default function EditMoviePage() {
         internet_rights_classification: internetRightsClassification || "",
         prequel_sequel_rights: prequelSequelRights || "",
         character_rights: characterRights || "",
-        subtitling_rights: subtitlingRights === "Yes" && subtitlingLang ? `Yes(${subtitlingLang})` : subtitlingRights || "",
-        dubbing_rights: dubbingRights === "Yes" && dubbingLang ? `Yes(${dubbingLang})` : dubbingRights || "",
+        subtitling_rights: subtitlingLang ? `${subtitlingRights}(${subtitlingLang})` : subtitlingRights || "",
+        dubbing_rights: dubbingLang ? `${dubbingRights}(${dubbingLang})` : dubbingRights || "",
         nature_of_rights: source === "acquired" ? "" : (natureOfRights || ""),
         territory: territory || "",
         remarks: remarks || "",
@@ -760,12 +938,12 @@ export default function EditMoviePage() {
         language: language.replace(/\s*[Dd]ubbed\s*/g, "").trim() || undefined,
         production_house_name: finalProductionHouseName,
         color_or_bw: colorOrBw || undefined, trailer_link: trailerLink || undefined,
-        poster_url: posterUrl || undefined, assignor_licensor: assignorLicensor || undefined,
+        assignor_licensor: assignorLicensor || undefined,
         licensee: licensee || undefined, agreement_date: agreementDate || undefined,
         agreement_start_date: agreementStartDate || undefined, agreement_end_date: agreementEndDate || undefined,
         prequel_sequel_rights: prequelSequelRights || undefined, character_rights: characterRights || undefined,
-        subtitling_rights: (subtitlingRights === "Yes" && subtitlingLang ? `Yes(${subtitlingLang})` : subtitlingRights) || undefined,
-        dubbing_rights: (dubbingRights === "Yes" && dubbingLang ? `Yes(${dubbingLang})` : dubbingRights) || undefined,
+        subtitling_rights: (subtitlingLang ? `${subtitlingRights}(${subtitlingLang})` : subtitlingRights) || undefined,
+        dubbing_rights: (dubbingLang ? `${dubbingRights}(${dubbingLang})` : dubbingRights) || undefined,
         nature_of_rights: isHomeProd ? (natureOfRights as RightNature) || undefined : undefined,
         territory: territory || undefined, remarks: remarks || undefined,
         actionables: actionables || undefined,
@@ -814,35 +992,33 @@ export default function EditMoviePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* ── Cinematic Header ── */}
-      <div className="relative overflow-hidden rounded-xl bg-slate-900/60 border border-slate-800/60 backdrop-blur-xl p-6 shadow-2xl">
-        <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-amber-600 via-red-500 to-transparent" />
-        <div className="absolute -top-20 -right-20 w-56 h-56 bg-cyan-600/6 rounded-full blur-3xl pointer-events-none" />
+      <div className="relative overflow-hidden rounded-[12px] bg-(--bg-raise)/60 border border-(--svf-border) backdrop-blur-xl p-3">
 
         <div className="relative flex items-center gap-4">
           <Link href="/movies">
-            <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 gap-1.5 h-8">
+            <Button variant="ghost" size="sm" className="text-(--text-faint) hover:text-(--text) hover:bg-slate-800/60 gap-1.5 h-8">
               <ArrowLeft className="h-3.5 w-3.5" /> Back
             </Button>
           </Link>
-          <div className="h-4 w-px bg-slate-700/60" />
+          <div className="h-4 w-px bg-(--hover)" />
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 shadow-lg shadow-amber-500/10">
+            <div className="p-2.5 rounded-[12px] bg-amber-500/15 border border-amber-500/30 shadow-lg shadow-amber-500/10">
               <Film className="h-5 w-5 text-amber-400" />
             </div>
             <div>
               <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
                 Edit Movie
               </h1>
-              <p className="text-xs text-slate-400 mt-0.5">Updating <span className="text-slate-300">{title}</span></p>
+              <p className="text-xs text-(--text-faint) mt-0.5">Updating <span className="text-(--text)">{title}</span></p>
             </div>
           </div>
         </div>
       </div>
 
       {shouldStage && (
-        <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-blue-500/10 border border-blue-500/30">
+        <div className="flex items-start gap-3 px-4 py-3 rounded-[12px] bg-blue-500/10 border border-blue-500/30">
           <GitPullRequest className="h-4 w-4 text-blue-400 mt-0.5 shrink-0" />
           <p className="text-sm text-blue-300">
             Changes you save will be <strong>submitted for review</strong> before being applied.
@@ -850,17 +1026,17 @@ export default function EditMoviePage() {
         </div>
       )}
 
-      <div className="relative overflow-hidden rounded-xl bg-slate-900/40 border border-slate-800/60 backdrop-blur-xl shadow-xl p-6">
+      <div className="relative overflow-hidden rounded-[12px] bg-(--panel-solid)/40 border border-(--svf-border) backdrop-blur-xl shadow-xl p-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-6 bg-transparent border-b border-slate-800/60 rounded-none p-0 h-auto gap-8">
-            <TabsTrigger value="basic" className="relative rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent bg-transparent text-slate-400 data-[state=active]:text-amber-400 px-0 py-3">Basic</TabsTrigger>
-            <TabsTrigger value="acquired" disabled={isHomeProd} className="relative rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent bg-transparent text-slate-400 data-[state=active]:text-amber-400 px-0 py-3 disabled:opacity-40">Acquired</TabsTrigger>
-            <TabsTrigger value="rights" disabled={isHomeProd} className="relative rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent bg-transparent text-slate-400 data-[state=active]:text-amber-400 px-0 py-3 disabled:opacity-40">
+          <TabsList className="grid w-full grid-cols-6 bg-transparent border-b border-(--svf-border) rounded-[9px] p-0 h-auto gap-8">
+            <TabsTrigger value="basic" className="relative rounded-[9px] border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent bg-transparent text-(--text-faint) data-[state=active]:text-amber-400 px-0 py-3">Basic</TabsTrigger>
+            <TabsTrigger value="acquired" disabled={isHomeProd} className="relative rounded-[9px] border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent bg-transparent text-(--text-faint) data-[state=active]:text-amber-400 px-0 py-3 disabled:opacity-40">Acquired</TabsTrigger>
+            <TabsTrigger value="rights" disabled={isHomeProd} className="relative rounded-[9px] border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent bg-transparent text-(--text-faint) data-[state=active]:text-amber-400 px-0 py-3 disabled:opacity-40">
               Rights{isHomeProd && <span className="ml-1.5 text-[9px] font-bold uppercase tracking-widest text-emerald-500 border border-emerald-500/40 rounded px-1 py-0.5">All Yes</span>}
             </TabsTrigger>
-            <TabsTrigger value="notes" className="relative rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent bg-transparent text-slate-400 data-[state=active]:text-amber-400 px-0 py-3">Notes</TabsTrigger>
-            <TabsTrigger value="people" className="relative rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent bg-transparent text-slate-400 data-[state=active]:text-amber-400 px-0 py-3">Cast & Crew</TabsTrigger>
-            <TabsTrigger value="approval" className="relative rounded-none border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent bg-transparent text-slate-400 data-[state=active]:text-amber-400 px-0 py-3">
+            <TabsTrigger value="notes" className="relative rounded-[9px] border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent bg-transparent text-(--text-faint) data-[state=active]:text-amber-400 px-0 py-3">Notes</TabsTrigger>
+            <TabsTrigger value="people" className="relative rounded-[9px] border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent bg-transparent text-(--text-faint) data-[state=active]:text-amber-400 px-0 py-3">Cast & Crew</TabsTrigger>
+            <TabsTrigger value="approval" className="relative rounded-[9px] border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent bg-transparent text-(--text-faint) data-[state=active]:text-amber-400 px-0 py-3">
               Approval
               {approvalStatus === "rejected" && (
                 <span className="absolute top-2 -right-2 h-2 w-2 rounded-full bg-red-500" />
@@ -895,11 +1071,11 @@ export default function EditMoviePage() {
 
                 {/* Color / B&W — toggle pill */}
                 <FormField label="Color / B&W">
-                  <div className="inline-flex bg-slate-950/50 border border-slate-700/50 rounded-full p-0.5 gap-0.5">
+                  <div className="inline-flex bg-(--bg-raise)/50 border border-(--svf-border) rounded-full p-0.5 gap-0.5">
                     {["Color", "B&W"].map((opt) => (
                       <button key={opt} type="button" onClick={() => setColorOrBw(opt)}
                         className={["px-4 py-1.5 rounded-full text-sm font-semibold transition-all duration-150",
-                          colorOrBw === opt ? "bg-emerald-500/20 text-emerald-400" : "text-slate-500 hover:text-slate-300",
+                          colorOrBw === opt ? "bg-emerald-500/20 text-emerald-400" : "text-(--text-faint) hover:text-(--text)",
                         ].join(" ")}>
                         {opt}
                       </button>
@@ -933,12 +1109,12 @@ export default function EditMoviePage() {
                         return (
                           <button key={opt.value} type="button"
                             onClick={() => { setSource(opt.value as MovieSource); if (opt.value === 'home_production' && natureOfRights === 'Non-Exclusive') setNatureOfRights(''); }}
-                            className={["text-left p-4 rounded-lg border-[1.5px] transition-all duration-150 cursor-pointer",
+                            className={["text-left p-4 rounded-[10px] border-[1.5px] transition-all duration-150 cursor-pointer",
                               sel ? "border-amber-500/70 bg-amber-500/10 shadow-[0_0_0_1px] shadow-amber-500/30"
-                                : "border-slate-700/50 bg-slate-950/40 hover:border-amber-500/30 hover:bg-amber-500/5",
+                                : "border-(--svf-border) bg-(--bg-raise)/40 hover:border-amber-500/30 hover:bg-amber-500/5",
                             ].join(" ")}>
-                            <strong className={`block text-sm font-bold mb-0.5 ${sel ? "text-amber-400" : "text-slate-200"}`}>{opt.label}</strong>
-                            <span className="text-xs text-slate-500">{opt.desc}</span>
+                            <strong className={`block text-sm font-bold mb-0.5 ${sel ? "text-amber-400" : "text-(--text)"}`}>{opt.label}</strong>
+                            <span className="text-xs text-(--text-faint)">{opt.desc}</span>
                           </button>
                         );
                       })}
@@ -971,7 +1147,7 @@ export default function EditMoviePage() {
                               }}
                               className={["px-4 py-2 rounded-full border text-[12.5px] font-semibold transition-all duration-120 select-none",
                                 sel ? "bg-amber-500/12 border-amber-500/60 text-amber-400"
-                                  : "bg-slate-950/40 border-slate-700/40 text-slate-500 hover:text-slate-300",
+                                  : "bg-(--bg-raise)/40 border-(--svf-border) text-(--text-faint) hover:text-(--text)",
                               ].join(" ")}>
                               {opt.label}
                             </button>
@@ -1000,9 +1176,9 @@ export default function EditMoviePage() {
                         )}
                       </div>
                       {isSvfLocked ? (
-                        <div className={`${selectCls} flex items-center px-3 rounded-md border opacity-70 cursor-not-allowed`}>
-                          <span className="text-slate-300 text-sm">SVF</span>
-                          <span className="ml-auto text-[10px] text-slate-500 uppercase tracking-widest">Default</span>
+                        <div className={`${selectCls} flex items-center px-3 rounded-[9px] border opacity-70 cursor-not-allowed`}>
+                          <span className="text-(--text) text-sm">SVF</span>
+                          <span className="ml-auto text-[10px] text-(--text-faint) uppercase tracking-widest">Default</span>
                         </div>
                       ) : (
                         <Select value={houseId} onValueChange={(val) => setSelectedHouseIds(ids => { const n = [...ids]; n[index] = val; return n; })}>
@@ -1027,7 +1203,7 @@ export default function EditMoviePage() {
                 {isJointlyOwned && isHomeProd && (
                   <div className="md:col-span-2 pt-1">
                     <Button variant="outline" size="sm" onClick={() => setSelectedHouseIds(ids => [...ids, ""])}
-                      className="w-full border-dashed border-slate-700/50 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60">
+                      className="w-full border-dashed border-(--svf-border) text-(--text-faint) hover:text-(--text) hover:bg-slate-800/60">
                       <Plus className="h-3 w-3 mr-1" /> Add Production House
                     </Button>
                   </div>
@@ -1068,7 +1244,7 @@ export default function EditMoviePage() {
                             onClick={() => { const newVal = sel ? "" : c; setCertification(newVal); setRecensorFlag(newVal === "A"); }}
                             className={["px-3 py-1.5 rounded-full border text-xs font-semibold transition-all duration-100 select-none",
                               sel ? "bg-amber-500/12 border-amber-500/60 text-amber-400"
-                                : "bg-slate-950/40 border-slate-700/40 text-slate-500 hover:text-slate-300",
+                                : "bg-(--bg-raise)/40 border-(--svf-border) text-(--text-faint) hover:text-(--text)",
                             ].join(" ")}>
                             {c}
                           </button>
@@ -1078,12 +1254,6 @@ export default function EditMoviePage() {
                   </FormField>
                 </div>
 
-                <div className="md:col-span-2">
-                  <Label className={labelCls}>Poster</Label>
-                  <div className="mt-2">
-                    <FileUpload bucket="images" folder={`movies/${movieId}`} variant="image" accept=".jpg,.jpeg,.png,.webp" maxSizeMB={0.5} currentUrl={posterUrl} onUpload={setPosterUrl} onRemove={() => setPosterUrl("")} label="Upload movie poster" />
-                  </div>
-                </div>
               </div>
             </SectionCard>
           </TabsContent>
@@ -1112,24 +1282,24 @@ export default function EditMoviePage() {
 
           <TabsContent value="rights" className="space-y-4 mt-4">
             <SectionCard title="Primary Rights">
-              <p className="text-xs text-slate-500 mb-3">Toggle <strong className="text-slate-300">Yes</strong> to expand details for each rights type.</p>
+              <p className="text-xs text-(--text-faint) mb-3">Toggle <strong className="text-(--text)">Yes</strong> to expand details for each rights type.</p>
               <div className="grid gap-3 md:grid-cols-2">
                 {/* Satellite */}
                 <RightsCard title="Satellite Rights" value={satelliteRights} onChange={setSatelliteRights}>
                   <div className="space-y-2.5">
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Classification</p>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1.5">Classification</p>
                       <MultiChips options={["Pay TV", "Free TV", "Pay Per View", "DTH"]}
                         value={satelliteRightsClassification} onChange={setSatelliteRightsClassification} />
                     </div>
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Nature</p>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1.5">Nature</p>
                       <RightsNatureSelect value={natureOfSatelliteRights} onChange={setNatureOfSatelliteRights} />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Start</p>
+                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1">Start</p>
                         <Input type="date" value={satelliteRightsStartDate} onChange={(e) => setSatelliteRightsStartDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
-                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">End</p>
+                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1">End</p>
                         <Input type="date" value={satelliteRightsEndDate} onChange={(e) => setSatelliteRightsEndDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
                     </div>
                   </div>
@@ -1139,18 +1309,18 @@ export default function EditMoviePage() {
                 <RightsCard title="Internet Rights" value={internetRights} onChange={setInternetRights}>
                   <div className="space-y-2.5">
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Classification</p>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1.5">Classification</p>
                       <MultiChips options={["AVOD", "FVOD", "SVOD", "NVOD", "TVOD", "IPTV"]}
                         value={internetRightsClassification} onChange={setInternetRightsClassification} />
                     </div>
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Nature</p>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1.5">Nature</p>
                       <RightsNatureSelect value={natureOfInternetRights} onChange={setNatureOfInternetRights} />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Start</p>
+                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1">Start</p>
                         <Input type="date" value={internetRightsStartDate} onChange={(e) => setInternetRightsStartDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
-                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">End</p>
+                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1">End</p>
                         <Input type="date" value={internetRightsEndDate} onChange={(e) => setInternetRightsEndDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
                     </div>
                   </div>
@@ -1160,42 +1330,52 @@ export default function EditMoviePage() {
                 <RightsCard title="Negative Rights" value={negativeRights} onChange={setNegativeRights}>
                   <div className="space-y-2.5">
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Nature</p>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1.5">Nature</p>
                       <RightsNatureSelect value={natureOfNegativeRights} onChange={setNatureOfNegativeRights} />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Start</p>
+                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1">Start</p>
                         <Input type="date" value={negativeRightsStartDate} onChange={(e) => setNegativeRightsStartDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
-                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">End</p>
+                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1">End</p>
                         <Input type="date" value={negativeRightsEndDate} onChange={(e) => setNegativeRightsEndDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
                     </div>
                   </div>
                 </RightsCard>
 
                 {/* Other */}
-                <RightsCard title="Other Rights" value={otherRights} onChange={setOtherRights}>
-                  <div className="space-y-2.5">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Nature</p>
-                      <RightsNatureSelect value={natureOfOtherRights} onChange={setNatureOfOtherRights} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Start</p>
-                        <Input type="date" value={otherRightsStartDate} onChange={(e) => setOtherRightsStartDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
-                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">End</p>
-                        <Input type="date" value={otherRightsEndDate} onChange={(e) => setOtherRightsEndDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
-                    </div>
+                <div className={["rounded-[10px] border overflow-hidden transition-colors duration-200",
+                  (otherRights && otherRights !== "No") ? "border-emerald-500/40" : "border-(--svf-border)"].join(" ")}>
+                  <div className="flex items-center justify-between px-3 py-2.5 bg-(--bg-raise)/40 gap-2">
+                    <span className={["text-[11px] font-bold uppercase tracking-widest transition-colors duration-200",
+                      (otherRights && otherRights !== "No") ? "text-emerald-400" : "text-(--text-faint)"].join(" ")}>Other Rights</span>
                   </div>
-                </RightsCard>
+                  <div className="p-3 border-t border-(--svf-border) bg-(--bg-raise)/30 space-y-2.5">
+                    <OtherRightsMultiPicker value={otherRights} onChange={setOtherRights} />
+                    {(otherRights && otherRights !== "No") && (
+                      <>
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1.5">Nature</p>
+                          <RightsNatureSelect value={natureOfOtherRights} onChange={setNatureOfOtherRights} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div><p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1">Start</p>
+                            <Input type="date" value={otherRightsStartDate} onChange={(e) => setOtherRightsStartDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
+                          <div><p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1">End</p>
+                            <Input type="date" value={otherRightsEndDate} onChange={(e) => setOtherRightsEndDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              <div className="mt-4 pt-4 border-t border-slate-800/50">
+              <div className="mt-4 pt-4 border-t border-(--svf-border)">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-slate-200">Syndication – Internet Rights</p>
-                    <p className="text-xs text-slate-500 mt-0.5">Sub-licensing for internet syndication</p>
+                    <p className="text-sm font-semibold text-(--text)">Syndication – Internet Rights</p>
+                    <p className="text-xs text-(--text-faint) mt-0.5">Sub-licensing for internet syndication</p>
                   </div>
-                  <TogglePill value={syndicationInternetRights} onChange={setSyndicationInternetRights} />
+                  <SyndicationField value={syndicationInternetRights} onChange={setSyndicationInternetRights} />
                 </div>
               </div>
             </SectionCard>
@@ -1206,7 +1386,7 @@ export default function EditMoviePage() {
                   <TogglePill value={clipRights} onChange={setClipRights} />
                 </FormField>
                 <FormField label="Clip Rights Duration">
-                  <DurationInput value={clipRightsDuration} onChange={setClipRightsDuration} className={inputCls} />
+                  <ClipDurationField value={clipRightsDuration} onChange={setClipRightsDuration} className={inputCls} />
                 </FormField>
               </div>
             </SectionCard>
@@ -1215,20 +1395,20 @@ export default function EditMoviePage() {
               <div>
                 <InlineRightsRow label="Prequel / Sequel Rights" value={prequelSequelRights} onChange={setPrequelSequelRights} />
                 <InlineRightsRow label="Character Rights" value={characterRights} onChange={setCharacterRights} />
-                <InlineRightsRow label="Sub-Titling Rights" value={subtitlingRights} onChange={(v) => { setSubtitlingRights(v); if (v !== "Yes") setSubtitlingLang(""); }}
+                <InlineRightsRow label="Sub-Titling Rights" value={subtitlingRights} onChange={(v) => { setSubtitlingRights(v); if (v !== "Yes" && v !== "No") setSubtitlingLang(""); }}
                   langValue={subtitlingLang} onLangChange={setSubtitlingLang} />
-                {subtitlingRights === "Yes" && subtitlingLang && (
-                  <div className="flex items-center gap-2 px-3 py-1.5 mb-1 rounded-md bg-slate-950/60 border border-slate-800/60">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 shrink-0">DB value:</span>
-                    <span className="text-[11px] text-slate-400 font-mono">Yes: {subtitlingLang}</span>
+                {(subtitlingRights === "Yes" || subtitlingRights === "No") && subtitlingLang && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 mb-1 rounded-[9px] bg-(--bg-raise)/60 border border-(--svf-border)">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) shrink-0">DB value:</span>
+                    <span className="text-[11px] text-(--text-faint) font-mono">{subtitlingRights}({subtitlingLang})</span>
                   </div>
                 )}
-                <InlineRightsRow label="Dubbing Rights" value={dubbingRights} onChange={(v) => { setDubbingRights(v); if (v !== "Yes") setDubbingLang(""); }}
+                <InlineRightsRow label="Dubbing Rights" value={dubbingRights} onChange={(v) => { setDubbingRights(v); if (v !== "Yes" && v !== "No") setDubbingLang(""); }}
                   langValue={dubbingLang} onLangChange={setDubbingLang} />
-                {dubbingRights === "Yes" && dubbingLang && (
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-slate-950/60 border border-slate-800/60">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 shrink-0">DB value:</span>
-                    <span className="text-[11px] text-slate-400 font-mono">Yes: {dubbingLang}</span>
+                {(dubbingRights === "Yes" || dubbingRights === "No") && dubbingLang && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-[9px] bg-(--bg-raise)/60 border border-(--svf-border)">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) shrink-0">DB value:</span>
+                    <span className="text-[11px] text-(--text-faint) font-mono">{dubbingRights}({dubbingLang})</span>
                   </div>
                 )}
               </div>
@@ -1249,7 +1429,7 @@ export default function EditMoviePage() {
                 <FormField label="Actionables">
                   <Textarea value={actionables} onChange={(e) => setActionables(e.target.value)} rows={3} className={textareaCls} />
                 </FormField>
-                <div className="flex items-start gap-3 rounded-lg border border-slate-800/60 p-3 bg-slate-950/20">
+                <div className="flex items-start gap-3 rounded-[10px] border border-(--svf-border) p-3 bg-(--bg-deep)/20">
                   <Checkbox
                     id="recensor_flag"
                     checked={recensorFlag}
@@ -1257,8 +1437,8 @@ export default function EditMoviePage() {
                     className="mt-0.5"
                   />
                   <div>
-                    <Label htmlFor="recensor_flag" className="cursor-pointer font-medium text-slate-200">Censor Flag</Label>
-                    <p className="text-xs text-slate-400 mt-0.5">
+                    <Label htmlFor="recensor_flag" className="cursor-pointer font-medium text-(--text)">Censor Flag</Label>
+                    <p className="text-xs text-(--text-faint) mt-0.5">
                       Auto-enabled for &quot;A&quot; certified movies. Monthly recensor reminders are sent to admins while this is on. Uncheck to stop notifications.
                     </p>
                   </div>
@@ -1269,38 +1449,38 @@ export default function EditMoviePage() {
 
           <TabsContent value="people" className="space-y-4 mt-4">
             <SectionCard title="Cast & Crew">
-              <p className="text-xs text-slate-400 mb-4">
+              <p className="text-xs text-(--text-faint) mb-4">
                 Search existing people and link them. To add a new person first go to the{" "}
-                <Link href="/people" className="underline underline-offset-2 hover:text-slate-300">People directory</Link>.
+                <Link href="/people" className="underline underline-offset-2 hover:text-(--text)">People directory</Link>.
               </p>
 
               {/* Cast */}
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <Label className="text-sm font-semibold text-slate-200">Cast (Actors)</Label>
-                  <Button variant="ghost" size="sm" onClick={() => { setAddingRole(addingRole === "cast" ? null : "cast"); setPersonSearch(""); setPersonResults([]); }} className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 h-8 px-3">
+                  <Label className="text-sm font-semibold text-(--text)">Cast (Actors)</Label>
+                  <Button variant="ghost" size="sm" onClick={() => { setAddingRole(addingRole === "cast" ? null : "cast"); setPersonSearch(""); setPersonResults([]); }} className="text-(--text-faint) hover:text-(--text) hover:bg-slate-800/60 h-8 px-3">
                     <Plus className="h-3 w-3 mr-1" />{addingRole === "cast" ? "Cancel" : "Add Actor"}
                   </Button>
                 </div>
                 {addingRole === "cast" && (
-                  <div className="space-y-2 p-3 border border-slate-800/60 rounded-lg bg-slate-950/40">
+                  <div className="space-y-2 p-3 border border-(--svf-border) rounded-[10px] bg-(--bg-raise)/40">
                     <div className="relative">
-                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-(--text-faint)" />
                       <Input placeholder="Search people by name…" value={personSearch} onChange={(e) => handlePersonSearch(e.target.value)} className={`${inputCls} pl-8`} autoFocus />
                     </div>
-                    {searchingPeople && <div className="flex items-center gap-2 text-sm text-slate-400"><Loader2 className="h-3 w-3 animate-spin" />Searching…</div>}
+                    {searchingPeople && <div className="flex items-center gap-2 text-sm text-(--text-faint)"><Loader2 className="h-3 w-3 animate-spin" />Searching…</div>}
                     {personResults.length > 0 && (
-                      <div className="border border-slate-800/60 rounded-lg max-h-40 overflow-y-auto bg-slate-950/20">
+                      <div className="border border-(--svf-border) rounded-[10px] max-h-40 overflow-y-auto bg-(--bg-deep)/20">
                         {personResults.map((p) => (
-                          <button key={p.id} className="w-full px-3 py-1.5 text-left text-sm text-slate-200 hover:bg-slate-800/40 flex items-center justify-between border-b border-slate-800/40 last:border-0" onClick={() => handleAddCast(p)}>
+                          <button key={p.id} className="w-full px-3 py-1.5 text-left text-sm text-(--text) hover:bg-slate-800/40 flex items-center justify-between border-b border-slate-800/40 last:border-0" onClick={() => handleAddCast(p)}>
                             <span>{p.name}</span>
-                            {p.role && <span className="text-xs text-slate-500 capitalize">{p.role}</span>}
+                            {p.role && <span className="text-xs text-(--text-faint) capitalize">{p.role}</span>}
                           </button>
                         ))}
                       </div>
                     )}
                     {personSearch.length >= 2 && !searchingPeople && personResults.length === 0 && (
-                      <p className="text-xs text-slate-500 px-1">No results. <Link href="/people" className="underline underline-offset-2 text-slate-400 hover:text-slate-300">Create the person</Link> in the People directory first.</p>
+                      <p className="text-xs text-(--text-faint) px-1">No results. <Link href="/people" className="underline underline-offset-2 text-(--text-faint) hover:text-(--text)">Create the person</Link> in the People directory first.</p>
                     )}
                   </div>
                 )}
@@ -1311,37 +1491,37 @@ export default function EditMoviePage() {
                       <button onClick={() => handleRemoveCast(m)} className="ml-1 rounded-full hover:bg-amber-500/30 p-0.5"><X className="h-3 w-3" /></button>
                     </Badge>
                   ))}
-                  {cast.length === 0 && <span className="text-sm text-slate-500">No cast members linked</span>}
+                  {cast.length === 0 && <span className="text-sm text-(--text-faint)">No cast members linked</span>}
                 </div>
               </div>
 
               {/* Directors */}
-              <div className="space-y-4 pt-4 border-t border-slate-800/60">
+              <div className="space-y-4 pt-4 border-t border-(--svf-border)">
                 <div className="flex items-center justify-between">
-                  <Label className="text-sm font-semibold text-slate-200">Directors</Label>
-                  <Button variant="ghost" size="sm" onClick={() => { setAddingRole(addingRole === "director" ? null : "director"); setPersonSearch(""); setPersonResults([]); }} className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 h-8 px-3">
+                  <Label className="text-sm font-semibold text-(--text)">Directors</Label>
+                  <Button variant="ghost" size="sm" onClick={() => { setAddingRole(addingRole === "director" ? null : "director"); setPersonSearch(""); setPersonResults([]); }} className="text-(--text-faint) hover:text-(--text) hover:bg-slate-800/60 h-8 px-3">
                     <Plus className="h-3 w-3 mr-1" />{addingRole === "director" ? "Cancel" : "Add Director"}
                   </Button>
                 </div>
                 {addingRole === "director" && (
-                  <div className="space-y-2 p-3 border border-slate-800/60 rounded-lg bg-slate-950/40">
+                  <div className="space-y-2 p-3 border border-(--svf-border) rounded-[10px] bg-(--bg-raise)/40">
                     <div className="relative">
-                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-(--text-faint)" />
                       <Input placeholder="Search people by name…" value={personSearch} onChange={(e) => handlePersonSearch(e.target.value)} className={`${inputCls} pl-8`} autoFocus />
                     </div>
-                    {searchingPeople && <div className="flex items-center gap-2 text-sm text-slate-400"><Loader2 className="h-3 w-3 animate-spin" />Searching…</div>}
+                    {searchingPeople && <div className="flex items-center gap-2 text-sm text-(--text-faint)"><Loader2 className="h-3 w-3 animate-spin" />Searching…</div>}
                     {personResults.length > 0 && (
-                      <div className="border border-slate-800/60 rounded-lg max-h-40 overflow-y-auto bg-slate-950/20">
+                      <div className="border border-(--svf-border) rounded-[10px] max-h-40 overflow-y-auto bg-(--bg-deep)/20">
                         {personResults.map((p) => (
-                          <button key={p.id} className="w-full px-3 py-1.5 text-left text-sm text-slate-200 hover:bg-slate-800/40 flex items-center justify-between border-b border-slate-800/40 last:border-0" onClick={() => handleAddDirector(p)}>
+                          <button key={p.id} className="w-full px-3 py-1.5 text-left text-sm text-(--text) hover:bg-slate-800/40 flex items-center justify-between border-b border-slate-800/40 last:border-0" onClick={() => handleAddDirector(p)}>
                             <span>{p.name}</span>
-                            {p.role && <span className="text-xs text-slate-500 capitalize">{p.role}</span>}
+                            {p.role && <span className="text-xs text-(--text-faint) capitalize">{p.role}</span>}
                           </button>
                         ))}
                       </div>
                     )}
                     {personSearch.length >= 2 && !searchingPeople && personResults.length === 0 && (
-                      <p className="text-xs text-slate-500 px-1">No results. <Link href="/people" className="underline underline-offset-2 text-slate-400 hover:text-slate-300">Create the person</Link> in the People directory first.</p>
+                      <p className="text-xs text-(--text-faint) px-1">No results. <Link href="/people" className="underline underline-offset-2 text-(--text-faint) hover:text-(--text)">Create the person</Link> in the People directory first.</p>
                     )}
                   </div>
                 )}
@@ -1352,7 +1532,7 @@ export default function EditMoviePage() {
                       <button onClick={() => handleRemoveDirector(d)} className="ml-1 rounded-full hover:bg-blue-500/30 p-0.5"><X className="h-3 w-3" /></button>
                     </Badge>
                   ))}
-                  {directors.length === 0 && <span className="text-sm text-slate-500">No directors linked</span>}
+                  {directors.length === 0 && <span className="text-sm text-(--text-faint)">No directors linked</span>}
                 </div>
               </div>
             </SectionCard>
@@ -1362,8 +1542,8 @@ export default function EditMoviePage() {
             <SectionCard title="Approval Status">
               <div className="space-y-4">
                 {/* Current status */}
-                <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-950/40 border border-slate-800/60">
-                  <span className="text-xs font-bold uppercase tracking-widest text-slate-500">Current Status:</span>
+                <div className="flex items-center gap-3 p-3 rounded-[10px] bg-(--bg-raise)/40 border border-(--svf-border)">
+                  <span className="text-xs font-bold uppercase tracking-widest text-(--text-faint)">Current Status:</span>
                   {approvalStatus === "approved" && (
                     <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-400">
                       <CheckCircle className="h-4 w-4" /> Approved
@@ -1379,29 +1559,29 @@ export default function EditMoviePage() {
                       <XCircle className="h-4 w-4" /> Rejected
                     </span>
                   )}
-                  {!approvalStatus && <span className="text-sm text-slate-500">—</span>}
+                  {!approvalStatus && <span className="text-sm text-(--text-faint)">—</span>}
                 </div>
 
                 {/* Rejection reason + resubmit */}
                 {approvalStatus === "rejected" && (() => {
                   const lastRejection = approvalHistory.find(h => h.status === "rejected");
                   return (
-                    <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 space-y-3">
+                    <div className="rounded-[10px] border border-red-500/30 bg-red-500/10 p-4 space-y-3">
                       <div className="flex items-start gap-2">
                         <AlertTriangle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
                         <div className="space-y-1">
                           <p className="text-sm font-semibold text-red-400">Rejection reason</p>
                           {lastRejection?.reason ? (
-                            <p className="text-sm text-slate-300 italic">&quot;{lastRejection.reason}&quot;</p>
+                            <p className="text-sm text-(--text) italic">&quot;{lastRejection.reason}&quot;</p>
                           ) : (
-                            <p className="text-sm text-slate-500">No reason provided.</p>
+                            <p className="text-sm text-(--text-faint)">No reason provided.</p>
                           )}
                           {lastRejection?.reviewer_name && (
-                            <p className="text-xs text-slate-500">— {lastRejection.reviewer_name}</p>
+                            <p className="text-xs text-(--text-faint)">— {lastRejection.reviewer_name}</p>
                           )}
                         </div>
                       </div>
-                      <p className="text-xs text-slate-400">
+                      <p className="text-xs text-(--text-faint)">
                         Fix the issues above using the other tabs, then resubmit for review.
                       </p>
                       <Button
@@ -1423,16 +1603,16 @@ export default function EditMoviePage() {
                 {approvalStatus === "pending" && (() => {
                   const lastRejection = approvalHistory.find(h => h.status === "rejected");
                   return (
-                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 space-y-3">
+                    <div className="rounded-[10px] border border-amber-500/30 bg-amber-500/10 p-4 space-y-3">
                       <div className="flex items-start gap-2">
                         <Clock className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
                         <div className="space-y-1">
                           <p className="text-sm font-semibold text-amber-400">Awaiting legal review</p>
-                          <p className="text-xs text-slate-400">
+                          <p className="text-xs text-(--text-faint)">
                             This movie is in the approval queue. If you make changes here, it will be resubmitted automatically when you save.
                           </p>
                           {lastRejection?.reason && (
-                            <p className="text-xs text-slate-400 mt-1 italic">
+                            <p className="text-xs text-(--text-faint) mt-1 italic">
                               Previous rejection: &quot;{lastRejection.reason}&quot;
                             </p>
                           )}
@@ -1455,7 +1635,7 @@ export default function EditMoviePage() {
                 })()}
 
                 {approvalStatus === "approved" && (
-                  <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-300 flex items-start gap-2">
+                  <div className="rounded-[10px] border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-300 flex items-start gap-2">
                     <CheckCircle className="h-4 w-4 shrink-0 mt-0.5" />
                     <span>This movie has been approved and is live in the catalog. Approval status cannot be changed.</span>
                   </div>
@@ -1468,12 +1648,12 @@ export default function EditMoviePage() {
               <SectionCard title="Pending Change Requests">
                 <div className="space-y-3">
                   {pendingChanges.map((c) => (
-                    <div key={c.id} className={`p-3 rounded-lg border text-sm space-y-1 ${c.status === "pending" ? "bg-amber-500/10 border-amber-500/30" :
+                    <div key={c.id} className={`p-3 rounded-[10px] border text-sm space-y-1 ${c.status === "pending" ? "bg-amber-500/10 border-amber-500/30" :
                       c.status === "approved" ? "bg-emerald-500/10 border-emerald-500/30" :
                         "bg-red-500/10 border-red-500/30"
                       }`}>
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-medium text-slate-200">{c.change_summary}</span>
+                        <span className="font-medium text-(--text)">{c.change_summary}</span>
                         <span className={`text-xs font-semibold uppercase tracking-wide ${c.status === "pending" ? "text-amber-400" :
                           c.status === "approved" ? "text-emerald-400" : "text-red-400"
                           }`}>{c.status}</span>
@@ -1486,7 +1666,7 @@ export default function EditMoviePage() {
                           <div className="mt-2 space-y-1">
                             {changed.map(k => (
                               <div key={k} className="text-xs grid grid-cols-3 gap-2">
-                                <span className="text-slate-500 uppercase tracking-wide">{k.replace(/_/g, " ")}</span>
+                                <span className="text-(--text-faint) uppercase tracking-wide">{k.replace(/_/g, " ")}</span>
                                 <span className="text-red-400 line-through truncate">{String(before[k] ?? "—")}</span>
                                 <span className="text-emerald-400 truncate">{String(after[k] ?? "—")}</span>
                               </div>
@@ -1494,8 +1674,8 @@ export default function EditMoviePage() {
                           </div>
                         );
                       })()}
-                      {c.reason && <p className="text-xs text-slate-400 italic">"{c.reason}"</p>}
-                      <p className="text-xs text-slate-500">
+                      {c.reason && <p className="text-xs text-(--text-faint) italic">"{c.reason}"</p>}
+                      <p className="text-xs text-(--text-faint)">
                         {c.changed_by_name && `by ${c.changed_by_name} · `}
                         {new Date(c.created_at).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
                       </p>
@@ -1510,7 +1690,7 @@ export default function EditMoviePage() {
               <SectionCard title="Approval History">
                 <div className="space-y-3">
                   {approvalHistory.map((entry) => (
-                    <div key={entry.id} className="flex items-start gap-3 text-sm p-3 rounded-lg bg-slate-950/40 border border-slate-800/60">
+                    <div key={entry.id} className="flex items-start gap-3 text-sm p-3 rounded-[10px] bg-(--bg-raise)/40 border border-(--svf-border)">
                       <div className="mt-0.5 shrink-0">
                         {entry.status === "approved"
                           ? <CheckCircle className="h-4 w-4 text-emerald-400" />
@@ -1519,10 +1699,10 @@ export default function EditMoviePage() {
                             : <Clock className="h-4 w-4 text-amber-400" />}
                       </div>
                       <div className="flex-1">
-                        <p className="text-slate-200 font-medium capitalize">{entry.status}</p>
-                        {entry.reviewer_name && <p className="text-slate-400 text-xs">by {entry.reviewer_name}</p>}
-                        {entry.reason && <p className="text-slate-400 text-xs mt-0.5 italic">&quot;{entry.reason}&quot;</p>}
-                        <p className="text-slate-500 text-xs mt-0.5">
+                        <p className="text-(--text) font-medium capitalize">{entry.status}</p>
+                        {entry.reviewer_name && <p className="text-(--text-faint) text-xs">by {entry.reviewer_name}</p>}
+                        {entry.reason && <p className="text-(--text-faint) text-xs mt-0.5 italic">&quot;{entry.reason}&quot;</p>}
+                        <p className="text-(--text-faint) text-xs mt-0.5">
                           {entry.created_at
                             ? new Date(entry.created_at).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })
                             : "—"}
@@ -1540,7 +1720,7 @@ export default function EditMoviePage() {
       {/* ── Actions ── */}
       <div className="flex justify-end gap-3">
         <Link href="/movies">
-          <Button variant="outline" className="border-slate-700/50 text-slate-300 hover:bg-slate-800/60">
+          <Button variant="outline" className="border-(--svf-border) text-(--text) hover:bg-slate-800/60">
             Cancel
           </Button>
         </Link>

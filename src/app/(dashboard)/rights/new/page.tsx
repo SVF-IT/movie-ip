@@ -24,11 +24,11 @@ import { NatureSelector } from "@/components/forms/nature-selector";
 function FormField({ label, required, hint, children }: { label: string; required?: boolean; hint?: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-xs font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1">
+      <label className="text-xs font-bold uppercase tracking-widest text-(--text-faint) flex items-center gap-1">
         {label}{required && <span className="text-red-400">*</span>}
       </label>
       {children}
-      {hint && <p className="text-[10px] text-slate-400 leading-relaxed">{hint}</p>}
+      {hint && <p className="text-[10px] text-(--text-faint) leading-relaxed">{hint}</p>}
     </div>
   );
 }
@@ -110,35 +110,33 @@ export default function NewRightPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-3">
         <Loader2 className="h-7 w-7 animate-spin text-red-400/60" />
-        <p className="text-slate-400 text-sm">Checking permissions…</p>
+        <p className="text-(--text-faint) text-sm">Checking permissions…</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
-      <div className="relative overflow-hidden rounded-xl bg-slate-900/60 border border-slate-800/60 backdrop-blur-xl p-6 shadow-2xl">
-        <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-red-600 via-amber-500 to-transparent" />
-        <div className="absolute top-4 right-4 w-48 h-48 bg-red-600/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="relative overflow-hidden rounded-[12px] bg-(--panel-solid)/60 border border-(--svf-border) backdrop-blur-xl p-3">
         <div className="relative flex items-center gap-4">
-          <Button variant="ghost" size="sm" asChild className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 h-8 w-8 p-0 shrink-0">
+          <Button variant="ghost" size="sm" asChild className="text-(--text-faint) hover:text-(--text) hover:bg-slate-800/60 h-8 w-8 p-0 shrink-0">
             <Link href="/rights"><ArrowLeft className="h-4 w-4" /></Link>
           </Button>
-          <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20">
-            <Plus className="h-6 w-6 text-red-400" />
+          <div className="p-2 rounded-[9px] bg-red-500/10 border border-red-500/20">
+            <Plus className="h-5 w-5 text-red-400" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-100">Add New Right</h1>
-            <p className="text-slate-400 text-sm mt-0.5">Assign a new platform license or exploitation right to a film.</p>
+            <h1 className="text-xl font-bold tracking-tight text-(--text)">Add New Right</h1>
+            <p className="text-(--text-faint) text-sm mt-0.5">Assign a new platform license or exploitation right to a film.</p>
           </div>
         </div>
       </div>
 
       {/* Movie Selection */}
-      <Card className="glass-card border-slate-800/60">
-        <CardHeader className="pb-3 pt-5 px-5 border-b border-slate-800/50">
-          <CardTitle className="flex items-center gap-2.5 text-sm font-bold text-slate-200">
+      <Card className="glass-card border-(--svf-border)">
+        <CardHeader className="pb-3 pt-5 px-5 border-b border-(--svf-border)">
+          <CardTitle className="flex items-center gap-2.5 text-sm font-bold text-(--text)">
             <div className="p-1.5 rounded-md bg-red-500/10 border border-red-500/20">
               <FileText className="h-3.5 w-3.5 text-red-400" />
             </div>
@@ -148,9 +146,9 @@ export default function NewRightPage() {
         <CardContent className="p-5">
           {!preMovieId ? (
             movieId ? (
-              <div className="flex items-center justify-between rounded-lg bg-slate-800/40 border border-slate-700/50 px-4 py-3">
-                <span className="font-semibold text-slate-200">{movieTitle}</span>
-                <Button variant="ghost" size="sm" className="text-slate-400 hover:text-red-400 hover:bg-red-500/10 h-7 text-xs"
+              <div className="flex items-center justify-between rounded-lg bg-slate-800/40 border border-(--svf-border) px-4 py-3">
+                <span className="font-semibold text-(--text)">{movieTitle}</span>
+                <Button variant="ghost" size="sm" className="text-(--text-faint) hover:text-red-400 hover:bg-red-500/10 h-7 text-xs"
                   onClick={() => { setMovieId(""); setMovieTitle(""); }}>
                   Change
                 </Button>
@@ -158,27 +156,27 @@ export default function NewRightPage() {
             ) : (
               <div className="space-y-2">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-(--text-faint)" />
                   <Input
                     placeholder="Search movies by title…"
                     value={movieSearch}
                     onChange={(e) => handleMovieSearch(e.target.value)}
-                    className="pl-9 h-9 bg-slate-950/40 border-slate-700/50 text-slate-200 placeholder:text-slate-400 text-sm focus-visible:ring-red-500/40"
+                    className="pl-9 h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-sm focus-visible:ring-red-500/40"
                   />
                 </div>
                 {searchingMovies && (
-                  <div className="flex items-center gap-2 text-xs text-slate-400 px-1">
+                  <div className="flex items-center gap-2 text-xs text-(--text-faint) px-1">
                     <Loader2 className="h-3 w-3 animate-spin" />Searching…
                   </div>
                 )}
                 {movieResults.length > 0 && (
-                  <div className="rounded-lg border border-slate-700/50 bg-slate-900/80 overflow-hidden max-h-44 overflow-y-auto">
+                  <div className="rounded-lg border border-(--svf-border) bg-(--panel-solid)/80 overflow-hidden max-h-44 overflow-y-auto">
                     {movieResults.map((m) => (
                       <button key={m.id}
-                        className="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-800/60 transition-colors border-b border-slate-800/40 last:border-0"
+                        className="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-800/60 transition-colors border-b border-(--svf-border)/40 last:border-0"
                         onClick={() => { setMovieId(m.id); setMovieTitle(m.title); setMovieSearch(""); setMovieResults([]); }}>
-                        <span className="font-semibold text-slate-200">{m.title}</span>
-                        {m.release_year && <span className="text-slate-400 ml-2 text-xs">({m.release_year})</span>}
+                        <span className="font-semibold text-(--text)">{m.title}</span>
+                        {m.release_year && <span className="text-(--text-faint) ml-2 text-xs">({m.release_year})</span>}
                       </button>
                     ))}
                   </div>
@@ -186,18 +184,18 @@ export default function NewRightPage() {
               </div>
             )
           ) : (
-            <div className="flex items-center gap-3 rounded-lg bg-slate-800/40 border border-slate-700/50 px-4 py-3">
-              <FileText className="h-4 w-4 text-slate-400 shrink-0" />
-              <span className="font-semibold text-slate-200">{movieTitle}</span>
+            <div className="flex items-center gap-3 rounded-lg bg-slate-800/40 border border-(--svf-border) px-4 py-3">
+              <FileText className="h-4 w-4 text-(--text-faint) shrink-0" />
+              <span className="font-semibold text-(--text)">{movieTitle}</span>
             </div>
           )}
         </CardContent>
       </Card>
 
       {/* Rights Details */}
-      <Card className="glass-card border-slate-800/60">
-        <CardHeader className="pb-3 pt-5 px-5 border-b border-slate-800/50">
-          <CardTitle className="flex items-center gap-2.5 text-sm font-bold text-slate-200">
+      <Card className="glass-card border-(--svf-border)">
+        <CardHeader className="pb-3 pt-5 px-5 border-b border-(--svf-border)">
+          <CardTitle className="flex items-center gap-2.5 text-sm font-bold text-(--text)">
             <div className="p-1.5 rounded-md bg-red-500/10 border border-red-500/20">
               <FileText className="h-3.5 w-3.5 text-red-400" />
             </div>
@@ -207,11 +205,11 @@ export default function NewRightPage() {
         <CardContent className="p-5 space-y-5">
           <FormField label="Platform" required>
             <Select value={platformId} onValueChange={setPlatformId}>
-              <SelectTrigger className="h-9 bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm">
+              <SelectTrigger className="h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) text-sm">
                 <SelectValue placeholder="Select platform…">
                   {platformId && (() => {
                     const p = platforms.find(x => x.id === platformId);
-                    return p ? <span>{p.name}{p.platform_type ? <span className="text-slate-500 ml-1.5 text-xs">({p.platform_type})</span> : null}</span> : null;
+                    return p ? <span>{p.name}{p.platform_type ? <span className="text-(--text-faint) ml-1.5 text-xs">({p.platform_type})</span> : null}</span> : null;
                   })()}
                 </SelectValue>
               </SelectTrigger>
@@ -219,7 +217,7 @@ export default function NewRightPage() {
                 {platforms.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
                     <span className="font-medium">{p.name}</span>
-                    {p.platform_type && <span className="text-slate-400 ml-2 text-xs">— {p.platform_type}</span>}
+                    {p.platform_type && <span className="text-(--text-faint) ml-2 text-xs">— {p.platform_type}</span>}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -238,9 +236,9 @@ export default function NewRightPage() {
       </Card>
 
       {/* Period & Territory */}
-      <Card className="glass-card border-slate-800/60">
-        <CardHeader className="pb-3 pt-5 px-5 border-b border-slate-800/50">
-          <CardTitle className="flex items-center gap-2.5 text-sm font-bold text-slate-200">
+      <Card className="glass-card border-(--svf-border)">
+        <CardHeader className="pb-3 pt-5 px-5 border-b border-(--svf-border)">
+          <CardTitle className="flex items-center gap-2.5 text-sm font-bold text-(--text)">
             <div className="p-1.5 rounded-md bg-red-500/10 border border-red-500/20">
               <Calendar className="h-3.5 w-3.5 text-red-400" />
             </div>
@@ -251,25 +249,25 @@ export default function NewRightPage() {
           <div className="grid grid-cols-2 gap-4">
             <FormField label="Start Date">
               <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
-                className="h-9 bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm focus-visible:ring-red-500/40" />
+                className="h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) text-sm focus-visible:ring-red-500/40" />
             </FormField>
             <FormField label="End Date">
               <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)}
-                className="h-9 bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm focus-visible:ring-red-500/40" />
+                className="h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) text-sm focus-visible:ring-red-500/40" />
             </FormField>
           </div>
 
           <FormField label="Territory">
             <div className="relative">
-              <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+              <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-(--text-faint)" />
               <Input value={territory} onChange={(e) => setTerritory(e.target.value)} placeholder="e.g., World"
-                className="pl-9 h-9 bg-slate-950/40 border-slate-700/50 text-slate-300 placeholder:text-slate-400 text-sm focus-visible:ring-red-500/40" />
+                className="pl-9 h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-sm focus-visible:ring-red-500/40" />
             </div>
           </FormField>
 
           <FormField label="Remarks">
             <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={3}
-              className="bg-slate-950/40 border-slate-700/50 text-slate-300 placeholder:text-slate-400 text-sm resize-none focus-visible:ring-red-500/40" />
+              className="bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-sm resize-none focus-visible:ring-red-500/40" />
           </FormField>
         </CardContent>
       </Card>
@@ -277,7 +275,7 @@ export default function NewRightPage() {
       {/* Footer Actions */}
       <div className="flex items-center justify-end gap-3 pt-2 pb-6">
         <Link href="/rights">
-          <Button variant="ghost" className="h-10 px-6 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60">
+          <Button variant="ghost" className="h-10 px-6 text-(--text-faint) hover:text-(--text) hover:bg-slate-800/60">
             Cancel
           </Button>
         </Link>

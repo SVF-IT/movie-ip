@@ -258,7 +258,7 @@ export default function NotificationPreferencesPage() {
       <div className="relative z-10 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link href="/settings">
-            <Button variant="ghost" size="sm" className="text-slate-400 hover:text-white hover:bg-slate-800/50 transition-colors">
+            <Button variant="ghost" size="sm" className="text-(--text-faint) hover:text-white hover:bg-slate-800/50 transition-colors">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Settings
             </Button>
@@ -266,11 +266,11 @@ export default function NotificationPreferencesPage() {
         </div>
 
         {isAdmin && (
-          <div className="flex bg-slate-900/60 border border-slate-800/60 p-1 rounded-lg backdrop-blur-md">
+          <div className="flex bg-(--panel-solid)/60 border border-(--svf-border) p-1 rounded-lg backdrop-blur-md">
             <Button
               variant={!isAdminView ? "secondary" : "ghost"}
               size="sm"
-              className={!isAdminView ? "bg-slate-800 text-white hover:bg-slate-700 shadow-sm" : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"}
+              className={!isAdminView ? "bg-slate-800 text-white hover:bg-slate-700 shadow-sm" : "text-(--text-faint) hover:text-(--text) hover:bg-slate-800/50"}
               onClick={() => setIsAdminView(false)}
             >
               My Preferences
@@ -278,7 +278,7 @@ export default function NotificationPreferencesPage() {
             <Button
               variant={isAdminView ? "secondary" : "ghost"}
               size="sm"
-              className={isAdminView ? "bg-slate-800 text-white hover:bg-slate-700 shadow-sm" : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"}
+              className={isAdminView ? "bg-slate-800 text-white hover:bg-slate-700 shadow-sm" : "text-(--text-faint) hover:text-(--text) hover:bg-slate-800/50"}
               onClick={() => setIsAdminView(true)}
             >
               Global Settings (Admin)
@@ -289,10 +289,10 @@ export default function NotificationPreferencesPage() {
 
       <div className="relative z-10">
         <h1 className="text-3xl font-bold flex items-center gap-3 bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
-          <Bell className="h-7 w-7 text-amber-500" />
+          <Bell className="h-5 w-5 text-amber-500" />
           {isAdminView ? "Global Notification Settings" : "Notification Preferences"}
         </h1>
-        <p className="text-slate-400 mt-2">
+        <p className="text-(--text-faint) mt-2">
           {isAdminView
             ? "Configure system-wide notification defaults and recipient roles"
             : "Choose which notifications you want to receive"}
@@ -301,18 +301,18 @@ export default function NotificationPreferencesPage() {
 
       <div className="relative z-10 space-y-8">
         {/* Summary Card */}
-        <Card className="border-slate-800/60 bg-slate-900/40 backdrop-blur-xl shadow-2xl">
+        <Card className="border-(--svf-border) bg-(--panel-solid)/40 backdrop-blur-xl shadow-2xl">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="h-12 w-12 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shadow-inner">
-                  <Bell className="h-6 w-6 text-amber-500" />
+                  <Bell className="h-5 w-5 text-amber-500" />
                 </div>
                 <div>
-                  <p className="font-medium text-slate-200 text-lg">
+                  <p className="font-medium text-(--text) text-lg">
                     {enabledCount} of {totalAvailable} notifications enabled
                   </p>
-                  <p className="text-sm text-slate-400">
+                  <p className="text-sm text-(--text-faint)">
                     {isAdminView
                       ? "Global configuration for the entire organization"
                       : "You can customize which notifications you receive"}
@@ -335,12 +335,12 @@ export default function NotificationPreferencesPage() {
 
         {/* Preferences by Category */}
         {(!isAdminView && preferences.length === 0) || (isAdminView && globalSettings.length === 0) ? (
-          <Card className="border-slate-800/60 bg-slate-900/40 backdrop-blur-xl shadow-2xl">
+          <Card className="border-(--svf-border) bg-(--panel-solid)/40 backdrop-blur-xl shadow-2xl">
             <CardContent className="py-12">
-              <div className="text-center text-slate-400">
-                <Bell className="h-12 w-12 mx-auto mb-4 opacity-50 text-slate-400" />
-                <p className="font-medium text-slate-300">No notification categories available</p>
-                <p className="text-sm mt-1 text-slate-400">
+              <div className="text-center text-(--text-faint)">
+                <Bell className="h-12 w-12 mx-auto mb-4 opacity-50 text-(--text-faint)" />
+                <p className="font-medium text-(--text)">No notification categories available</p>
+                <p className="text-sm mt-1 text-(--text-faint)">
                   Contact your administrator to enable notifications.
                 </p>
               </div>
@@ -350,10 +350,10 @@ export default function NotificationPreferencesPage() {
           categoryOrder
             .filter((cat) => groupedItems[cat]?.length > 0)
             .map((category) => (
-              <Card key={category} className="border-slate-800/60 bg-slate-900/40 backdrop-blur-xl shadow-2xl">
-                <CardHeader className="border-b border-slate-800/60 pb-4">
-                  <CardTitle className="text-slate-200">{categoryInfo[category]?.title || category}</CardTitle>
-                  <CardDescription className="text-slate-400">
+              <Card key={category} className="border-(--svf-border) bg-(--panel-solid)/40 backdrop-blur-xl shadow-2xl">
+                <CardHeader className="border-b border-(--svf-border) pb-4">
+                  <CardTitle className="text-(--text)">{categoryInfo[category]?.title || category}</CardTitle>
+                  <CardDescription className="text-(--text-faint)">
                     {categoryInfo[category]?.description}
                   </CardDescription>
                 </CardHeader>
@@ -367,9 +367,9 @@ export default function NotificationPreferencesPage() {
                     return (
                       <div
                         key={notificationType}
-                        className={`flex flex-col gap-4 p-5 rounded-xl border transition-all ${isDisabledByAdmin
-                          ? "bg-slate-950/40 border-slate-800/40 opacity-50"
-                          : "bg-slate-950/30 border-slate-800 hover:bg-slate-950/60 hover:border-slate-700"
+                        className={`flex flex-col gap-4 p-5 rounded-[12px] border transition-all ${isDisabledByAdmin
+                          ? "bg-(--bg-raise)/40 border-(--svf-border)/40 opacity-50"
+                          : "bg-(--bg-deep)/30 border-(--svf-border) hover:bg-(--bg-raise)/60 hover:border-(--svf-border)"
                           }`}
                       >
                         <div className="flex items-start justify-between gap-4">
@@ -392,11 +392,11 @@ export default function NotificationPreferencesPage() {
                             <div className="space-y-1.5">
                               <label
                                 htmlFor={notificationType}
-                                className="font-medium text-slate-200 cursor-pointer block"
+                                className="font-medium text-(--text) cursor-pointer block"
                               >
                                 {label?.title || notificationType}
                               </label>
-                              <p className="text-sm text-slate-400 leading-relaxed">
+                              <p className="text-sm text-(--text-faint) leading-relaxed">
                                 {label?.description || item.description}
                               </p>
                             </div>
@@ -407,18 +407,18 @@ export default function NotificationPreferencesPage() {
                               <Loader2 className="h-4 w-4 animate-spin text-amber-500" />
                             )}
                             {isAlwaysOn && (
-                              <Badge variant="secondary" className="bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-800">Always On</Badge>
+                              <Badge variant="secondary" className="bg-slate-800 text-(--text) border-(--svf-border) hover:bg-slate-800">Always On</Badge>
                             )}
                             {!isAdminView && isDisabledByAdmin && (
-                              <Badge variant="outline" className="text-slate-400 border-slate-700">Disabled by Admin</Badge>
+                              <Badge variant="outline" className="text-(--text-faint) border-(--svf-border)">Disabled by Admin</Badge>
                             )}
                           </div>
                         </div>
 
                         {/* Admin-only Role Selection Row */}
                         {isAdminView && !isAlwaysOn && (
-                          <div className="mt-2 pt-4 border-t border-slate-800/60 border-dashed">
-                            <p className="text-xs font-semibold mb-3 flex items-center gap-2 text-slate-400 uppercase tracking-wider">
+                          <div className="mt-2 pt-4 border-t border-(--svf-border) border-dashed">
+                            <p className="text-xs font-semibold mb-3 flex items-center gap-2 text-(--text-faint) uppercase tracking-wider">
                               Recipient Roles
                               <Badge variant="outline" className="text-[9px] h-4 bg-amber-500/10 text-amber-500/80 border-amber-500/20 px-1.5">Admin Only</Badge>
                             </p>
@@ -435,7 +435,7 @@ export default function NotificationPreferencesPage() {
                                       px-3.5 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 border
                                       ${isActive
                                         ? "bg-amber-500/20 text-amber-300 border-amber-500/30 shadow-[0_0_15px_-3px_rgba(245,158,11,0.2)]"
-                                        : "bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800 hover:text-slate-300"}
+                                        : "bg-(--panel-solid) text-(--text-faint) border-(--svf-border) hover:bg-slate-800 hover:text-(--text)"}
                                       ${(!item.is_enabled || isChanging) ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
                                     `}
                                   >
@@ -461,14 +461,14 @@ export default function NotificationPreferencesPage() {
         )}
 
         {/* Email Info */}
-        <Card className="border-slate-800/60 bg-slate-900/40 backdrop-blur-xl shadow-2xl">
-          <CardHeader className="border-b border-slate-800/60 pb-4">
-            <CardTitle className="text-base text-slate-200 flex items-center gap-2">
-              <Info className="h-4 w-4 text-slate-400" />
+        <Card className="border-(--svf-border) bg-(--panel-solid)/40 backdrop-blur-xl shadow-2xl">
+          <CardHeader className="border-b border-(--svf-border) pb-4">
+            <CardTitle className="text-base text-(--text) flex items-center gap-2">
+              <Info className="h-4 w-4 text-(--text-faint)" />
               About Email Notifications
             </CardTitle>
           </CardHeader>
-          <CardContent className="text-sm text-slate-400 space-y-3 pt-5 leading-relaxed">
+          <CardContent className="text-sm text-(--text-faint) space-y-3 pt-5 leading-relaxed">
             <p>
               Notifications are sent to your registered email address. If you&apos;re
               not receiving emails, please check your spam folder.

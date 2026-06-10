@@ -1,10 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -14,10 +11,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useAppToast } from "@/hooks/use-app-toast";
+import { createClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
 import { sanitizeError } from "@/lib/utils/sanitize-error";
 import {
-  AlertTriangle,
   Bell,
   CheckCircle2,
   Clock,
@@ -26,11 +24,10 @@ import {
   Loader2,
   Search,
   ShieldAlert,
-  X,
+  X
 } from "lucide-react";
 import Link from "next/link";
-import { cn } from "@/lib/utils";
-import { useAppToast } from "@/hooks/use-app-toast";
+import { useCallback, useEffect, useState } from "react";
 
 interface RecensorMovie {
   id: string;
@@ -145,136 +142,105 @@ export default function RecensorPage() {
       label: "Pending Censoring",
       icon: Bell,
       active: "bg-rose-500/15 border-rose-500/40 text-rose-300",
-      inactive: "bg-slate-800/50 border-slate-700/50 text-slate-400 hover:border-rose-500/30 hover:text-rose-400",
+      inactive: "bg-slate-800/50 border-(--svf-border) text-(--text-faint) hover:border-rose-500/30 hover:text-rose-400",
     },
     {
       id: "done",
       label: "Censored",
       icon: CheckCircle2,
       active: "bg-emerald-500/15 border-emerald-500/40 text-emerald-300",
-      inactive: "bg-slate-800/50 border-slate-700/50 text-slate-400 hover:border-emerald-500/30 hover:text-emerald-400",
+      inactive: "bg-slate-800/50 border-(--svf-border) text-(--text-faint) hover:border-emerald-500/30 hover:text-emerald-400",
     },
     {
       id: "all",
       label: "All \"A\" Movies",
       icon: Film,
       active: "bg-red-600/15 border-red-500/40 text-red-300",
-      inactive: "bg-slate-800/50 border-slate-700/50 text-slate-400 hover:border-red-500/30 hover:text-red-400",
+      inactive: "bg-slate-800/50 border-(--svf-border) text-(--text-faint) hover:border-red-500/30 hover:text-red-400",
     },
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Cinematic Header */}
-      <div className="relative overflow-hidden rounded-xl bg-slate-900/60 border border-slate-800/60 backdrop-blur-xl p-6 shadow-2xl">
-        <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-rose-600 via-red-500 to-transparent" />
-        <div className="absolute top-4 right-4 w-56 h-56 bg-rose-600/6 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-2 right-24 w-36 h-36 bg-amber-500/5 rounded-full blur-2xl pointer-events-none" />
-
-        <div className="relative flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20">
-              <ShieldAlert className="h-7 w-7 text-rose-400" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-100">Censor Tracker</h1>
-              <p className="text-slate-400 text-sm mt-0.5">
-                Manage censoring status for &ldquo;A&rdquo;-certified movies. Monthly reminders sent for all pending items.
-              </p>
-            </div>
-          </div>
-
-          {/* Status filter pills */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {statusPills.map(({ id, label, icon: Icon, active, inactive }) => (
-              <button
-                key={id}
-                onClick={() => { setStatusFilter(id); setPage(0); }}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all duration-200",
-                  statusFilter === id ? active : inactive
-                )}
-              >
-                <Icon className="h-3 w-3" />
-                {label}
-              </button>
-            ))}
-          </div>
+    <div className="space-y-4">
+      {/* Compact toolbar — icon + status pills + search + source */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="p-2 rounded-[9px] bg-rose-500/10 border border-rose-500/20">
+          <ShieldAlert className="h-5 w-5 text-rose-400" />
         </div>
+
+        {/* Status filter pills */}
+        {statusPills.map(({ id, label, icon: Icon, active, inactive }) => (
+          <button
+            key={id}
+            onClick={() => { setStatusFilter(id); setPage(0); }}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all duration-200",
+              statusFilter === id ? active : inactive
+            )}
+          >
+            <Icon className="h-3 w-3" />
+            {label}
+          </button>
+        ))}
+
+        <div className="flex-1" />
+
+        {/* Search */}
+        <div className="relative min-w-48">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-(--text-faint)" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search movies…"
+            className="pl-9 h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint)"
+          />
+        </div>
+
+        <Select value={sourceFilter} onValueChange={(v) => { setSourceFilter(v as typeof sourceFilter); setPage(0); }}>
+          <SelectTrigger className="w-40 h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text)">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Sources</SelectItem>
+            <SelectItem value="home_production">Home Production</SelectItem>
+            <SelectItem value="acquired">Acquired</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {hasFilters && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-9 gap-1.5"
+            style={{ color: "var(--text-faint)" }}
+            onClick={() => { setSearch(""); setStatusFilter("all"); setSourceFilter("all"); setPage(0); }}
+          >
+            <X className="h-3.5 w-3.5" />Reset
+          </Button>
+        )}
+
+        <p className="text-xs tabular-nums" style={{ color: "var(--text-faint)" }}>
+          {loading ? "Loading…" : `${totalCount} movie${totalCount !== 1 ? "s" : ""}`}
+        </p>
       </div>
 
-
-
-      {/* Filters bar */}
-      <Card className="glass-card border-slate-800/60">
-        <CardContent className="px-5 py-4">
-          <div className="flex flex-wrap gap-2 items-center">
-            <div className="relative flex-1 min-w-52 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search movies…"
-                className="pl-9 h-9 bg-slate-950/40 border-slate-700/50 text-slate-200 placeholder:text-slate-400 text-sm focus-visible:ring-rose-500/40 focus-visible:border-rose-500/60"
-              />
-            </div>
-
-            <Select value={sourceFilter} onValueChange={(v) => { setSourceFilter(v as typeof sourceFilter); setPage(0); }}>
-              <SelectTrigger className="w-40 h-9 bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Sources</SelectItem>
-                <SelectItem value="home_production">Home Production</SelectItem>
-                <SelectItem value="acquired">Acquired</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {hasFilters && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-9 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 gap-1.5"
-                onClick={() => { setSearch(""); setStatusFilter("all"); setSourceFilter("all"); setPage(0); }}
-              >
-                <X className="h-3.5 w-3.5" />Reset
-              </Button>
-            )}
-
-            <p className="ml-auto text-xs text-slate-400 tabular-nums">
-              {loading ? "Loading…" : `${totalCount} movie${totalCount !== 1 ? "s" : ""}`}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Table */}
-      <Card className="glass-card border-slate-800/60 overflow-hidden">
-        <CardHeader className="py-4 px-6 border-b border-slate-800/60">
-          <CardTitle className="flex items-center gap-2.5 text-sm font-bold text-slate-200">
-            <ShieldAlert className="h-4 w-4 text-rose-400" />
-            A-Certified Movies
-            <Badge className="ml-0.5 bg-slate-800/80 text-slate-300 border-slate-700/50 font-medium text-xs">
-              {loading ? "…" : totalCount}
-            </Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
+      <div className="glass-card overflow-hidden">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3">
               <Loader2 className="h-7 w-7 animate-spin text-rose-400/60" />
-              <p className="text-slate-400 text-sm">Loading movies…</p>
+              <p className="text-(--text-faint) text-sm">Loading movies…</p>
             </div>
           ) : movies.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3">
-              <div className="p-4 rounded-full bg-slate-800/50 border border-slate-700/40">
+              <div className="p-4 rounded-full bg-slate-800/50 border border-(--svf-border)">
                 <CheckCircle2 className="h-8 w-8 text-emerald-500/60" />
               </div>
-              <p className="text-slate-400 font-medium">
+              <p className="text-(--text-faint) font-medium">
                 {hasFilters ? "No movies match your filters." : "No A-certified movies found."}
               </p>
               {hasFilters && (
-                <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-200"
+                <Button variant="ghost" size="sm" className="text-(--text-faint) hover:text-(--text)"
                   onClick={() => { setSearch(""); setStatusFilter("all"); setSourceFilter("all"); }}>
                   Clear filters
                 </Button>
@@ -284,23 +250,23 @@ export default function RecensorPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-800/60">
-                    <th className="text-left px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-slate-400 w-[35%]">Movie</th>
-                    <th className="text-left px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-slate-400 hidden md:table-cell">Language</th>
-                    <th className="text-left px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-slate-400 hidden lg:table-cell">Production House</th>
-                    <th className="text-left px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-slate-400 hidden sm:table-cell">Source</th>
-                    <th className="text-center px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">Status</th>
-                    <th className="text-center px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">Censor Flag</th>
-                    <th className="text-right px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">Actions</th>
+                  <tr className="border-b border-(--svf-border)">
+                    <th className="text-left px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) w-[35%]">Movie</th>
+                    <th className="text-left px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden md:table-cell">Language</th>
+                    <th className="text-left px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden lg:table-cell">Production House</th>
+                    <th className="text-left px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden sm:table-cell">Source</th>
+                    <th className="text-center px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Status</th>
+                    <th className="text-center px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Censor Flag</th>
+                    <th className="text-right px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/40">
+                <tbody className="divide-y divide-(--svf-border)">
                   {movies.map((movie) => (
                     <tr
                       key={movie.id}
                       className={cn(
-                        "group transition-colors hover:bg-slate-800/30",
-                        movie.recensor_flag && "bg-rose-500/[0.03]"
+                        "group transition-colors",
+                        movie.recensor_flag ? "bg-rose-500/[0.03]" : "hover:bg-(--hover)"
                       )}
                     >
                       {/* Title */}
@@ -312,25 +278,25 @@ export default function RecensorPage() {
                           <div className="min-w-0">
                             <Link
                               href={`/movies/${movie.id}`}
-                              className="font-semibold text-sm text-slate-200 hover:text-rose-400 transition-colors line-clamp-1 block"
+                              className="font-semibold text-sm text-(--text) hover:text-rose-400 transition-colors line-clamp-1 block"
                             >
                               {movie.title}
                             </Link>
                             {movie.release_year && (
-                              <span className="text-[10px] text-slate-400 font-mono">{movie.release_year}</span>
+                              <span className="text-[10px] text-(--text-faint) font-mono">{movie.release_year}</span>
                             )}
                           </div>
                         </div>
                       </td>
 
                       {/* Language */}
-                      <td className="px-4 py-3.5 hidden md:table-cell text-sm text-slate-400">
-                        {movie.language_name || <span className="text-slate-400">—</span>}
+                      <td className="px-4 py-3.5 hidden md:table-cell text-sm text-(--text-faint)">
+                        {movie.language_name || <span className="text-(--text-faint)">—</span>}
                       </td>
 
                       {/* Production House */}
-                      <td className="px-4 py-3.5 hidden lg:table-cell text-sm text-slate-400 max-w-40 truncate">
-                        {movie.production_house_name || <span className="text-slate-400">—</span>}
+                      <td className="px-4 py-3.5 hidden lg:table-cell text-sm text-(--text-faint) max-w-40 truncate">
+                        {movie.production_house_name || <span className="text-(--text-faint)">—</span>}
                       </td>
 
                       {/* Source */}
@@ -361,7 +327,7 @@ export default function RecensorPage() {
                       {/* Toggle */}
                       <td className="px-4 py-3.5 text-center">
                         {togglingId === movie.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin text-slate-400 mx-auto" />
+                          <Loader2 className="h-4 w-4 animate-spin text-(--text-faint) mx-auto" />
                         ) : (
                           <Switch
                             checked={movie.recensor_flag}
@@ -377,7 +343,7 @@ export default function RecensorPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-7 gap-1.5 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10"
+                          className="h-7 gap-1.5 text-(--text-faint) hover:text-amber-400 hover:bg-amber-500/10"
                           asChild
                         >
                           <Link href={`/movies/${movie.id}/edit`}>
@@ -392,32 +358,21 @@ export default function RecensorPage() {
               </table>
             </div>
           )}
-        </CardContent>
-      </Card>
+      </div>
 
       {/* Pagination */}
       {totalCount > pageSize && (
         <div className="flex items-center justify-between">
-          <p className="text-xs text-slate-400 tabular-nums">
+          <p className="text-xs text-(--text-faint) tabular-nums">
             {page * pageSize + 1}–{Math.min((page + 1) * pageSize, totalCount)} of {totalCount}
           </p>
           <div className="flex gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 px-4 bg-slate-800/40 border-slate-700/50 text-slate-400 hover:bg-slate-700/60"
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
-              disabled={page === 0}
-            >
+            <Button variant="outline" size="sm" className="h-8 px-4"
+              onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}>
               Previous
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 px-4 bg-slate-800/40 border-slate-700/50 text-slate-400 hover:bg-slate-700/60"
-              onClick={() => setPage((p) => p + 1)}
-              disabled={(page + 1) * pageSize >= totalCount}
-            >
+            <Button variant="outline" size="sm" className="h-8 px-4"
+              onClick={() => setPage((p) => p + 1)} disabled={(page + 1) * pageSize >= totalCount}>
               Next
             </Button>
           </div>

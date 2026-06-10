@@ -100,14 +100,14 @@ export default function EditRightPage() {
   if (loading || permLoading || !allowed) return <div className="flex items-center justify-center min-h-[400px]"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center gap-4"><Link href="/rights"><Button variant="ghost" size="sm"><ArrowLeft className="mr-2 h-4 w-4" />Back to Rights</Button></Link></div>
       <div className="flex flex-col gap-1">
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Edit Right Details</h1>
         <p className="text-muted-foreground">Modify existing license terms or exploitation parameters.</p>
       </div>
       {movieApprovalStatus === "approved" && (
-        <div className="flex items-start gap-3 rounded-xl bg-blue-500/10 border border-blue-500/30 px-4 py-3 text-sm text-blue-300">
+        <div className="flex items-start gap-2 rounded-[9px] bg-blue-500/10 border border-blue-500/30 px-4 py-3 text-sm text-blue-300">
           <GitPullRequest className="h-4 w-4 shrink-0 mt-0.5" />
           This right belongs to an <strong>approved</strong> movie. Changes will be submitted for admin/legal review before being applied.
         </div>
@@ -115,7 +115,7 @@ export default function EditRightPage() {
       <Card>
         <CardContent className="pt-6 space-y-4">
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2"><Label>Platform</Label><Select value={platformId} onValueChange={setPlatformId}><SelectTrigger><SelectValue placeholder="Select...">{platformId && (() => { const p = platforms.find(x => x.id === platformId); return p ? <span>{p.name}{p.platform_type ? <span className="text-slate-500 ml-1.5 text-xs">({p.platform_type})</span> : null}</span> : null; })()}</SelectValue></SelectTrigger><SelectContent>{platforms.map((p) => (<SelectItem key={p.id} value={p.id}><span className="font-medium">{p.name}</span>{p.platform_type && <span className="text-slate-400 ml-2 text-xs">— {p.platform_type}</span>}</SelectItem>))}</SelectContent></Select></div>
+            <div className="space-y-2"><Label>Platform</Label><Select value={platformId} onValueChange={setPlatformId}><SelectTrigger><SelectValue placeholder="Select...">{platformId && (() => { const p = platforms.find(x => x.id === platformId); return p ? <span>{p.name}{p.platform_type ? <span className="text-(--text-faint) ml-1.5 text-xs">({p.platform_type})</span> : null}</span> : null; })()}</SelectValue></SelectTrigger><SelectContent>{platforms.map((p) => (<SelectItem key={p.id} value={p.id}><span className="font-medium">{p.name}</span>{p.platform_type && <span className="text-(--text-faint) ml-2 text-xs">— {p.platform_type}</span>}</SelectItem>))}</SelectContent></Select></div>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">

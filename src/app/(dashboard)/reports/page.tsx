@@ -122,11 +122,11 @@ export default function ReportsPage() {
     : null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex flex-col gap-1">
         <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
           <div className="p-2 bg-primary/10 rounded-xl">
-            <BarChart3 className="h-7 w-7 text-primary" />
+            <BarChart3 className="h-5 w-5 text-primary" />
           </div>
           Report Builder
         </h1>

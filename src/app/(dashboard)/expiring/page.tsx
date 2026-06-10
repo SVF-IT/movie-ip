@@ -69,6 +69,8 @@ export default function ExpiringRightsPage() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [deletingRight, setDeletingRight] = useState<ExpiringRight | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [tabPages, setTabPages] = useState<Record<string, number>>({ all: 0, critical: 0, urgent: 0, upcoming: 0 });
+  const setTabPage = (tab: string, p: number) => setTabPages((prev) => ({ ...prev, [tab]: p }));
 
   const canDelete = profile?.role === "admin" || profile?.role === "editor";
 
@@ -177,8 +179,6 @@ export default function ExpiringRightsPage() {
   const upcomingRights = sortedFiltered.filter((r) => r.days_until_expiry > 30);
 
   const PAGE_SIZE = 50;
-  const [tabPages, setTabPages] = useState<Record<string, number>>({ all: 0, critical: 0, urgent: 0, upcoming: 0 });
-  const setTabPage = (tab: string, p: number) => setTabPages((prev) => ({ ...prev, [tab]: p }));
 
   const getUrgencyRowClass = (days: number) => {
     if (days <= 7) return "border-l-2 border-l-red-500/70 bg-red-500/5";
@@ -198,7 +198,7 @@ export default function ExpiringRightsPage() {
       </span>
     );
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-700/50 text-slate-400 border border-slate-600/30">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-700/50 text-(--text-faint) border border-slate-600/30">
         {days}d
       </span>
     );
@@ -257,56 +257,61 @@ export default function ExpiringRightsPage() {
     { value: "other", label: "Others", icon: Globe },
   ] as const;
 
-  return (
-    <div className="space-y-6 min-w-0">
-      {/* ── Cinematic Header ── */}
-      <div className="relative overflow-hidden rounded-xl bg-slate-900/60 border border-slate-800/60 backdrop-blur-xl p-6 shadow-2xl">
-        <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-red-600 via-amber-500 to-transparent" />
-        <div className="absolute -top-24 -right-24 w-64 h-64 bg-red-600/8 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-16 left-1/3 w-48 h-48 bg-amber-500/6 rounded-full blur-3xl pointer-events-none" />
+  const alreadyExpired = expiringRights.filter((r) => r.days_until_expiry < 0);
+  const critical90 = sortedFiltered.filter((r) => r.days_until_expiry >= 0 && r.days_until_expiry <= 90);
+  const approaching9mo = sortedFiltered.filter((r) => r.days_until_expiry > 90 && r.days_until_expiry <= 270);
 
-        <div className="relative flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/30 shadow-lg shadow-red-500/10">
-              <Clock className="h-6 w-6 text-red-400" />
+  return (
+    <div className="space-y-4 min-w-0">
+      {/* ── 3 Glass Stat Cards ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {[
+          {
+            label: "Already Expired",
+            count: alreadyExpired.length,
+            desc: "Rights past their end date",
+            iconColor: "var(--st-expired)",
+            icon: <AlertTriangle className="h-5 w-5" style={{ color: "var(--st-expired)" }} />,
+          },
+          {
+            label: "Critical ≤90 days",
+            count: critical90.length,
+            desc: "Expiring within 3 months",
+            iconColor: "var(--st-expired)",
+            icon: <Zap className="h-5 w-5" style={{ color: "var(--st-expired)" }} />,
+          },
+          {
+            label: "Approaching ≤9 months",
+            count: approaching9mo.length,
+            desc: "Expiring within 9 months",
+            iconColor: "var(--st-expiring)",
+            icon: <Clock className="h-5 w-5" style={{ color: "var(--st-expiring)" }} />,
+          },
+        ].map((s) => (
+          <div key={s.label} className="glass-card p-5 flex items-center gap-4">
+            <div
+              className="shrink-0 flex items-center justify-center rounded-[10px]"
+              style={{
+                width: 38,
+                height: 38,
+                background: `color-mix(in oklch, ${s.iconColor} 14%, transparent)`,
+                border: `1px solid color-mix(in oklch, ${s.iconColor} 28%, transparent)`,
+              }}
+            >
+              {s.icon}
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
-                Expiring Rights
-              </h1>
-              <p className="text-sm text-slate-400 mt-0.5">Monitor and manage rights approaching expiration</p>
+              <div className="text-3xl font-bold tabular-nums" style={{ fontFamily: "var(--font-serif)" }}>{s.count}</div>
+              <div className="text-xs font-semibold text-(--text) mt-0.5">{s.label}</div>
+              <div className="text-[11px] text-(--text-faint)">{s.desc}</div>
             </div>
           </div>
-          <Button
-            onClick={exportToExcel}
-            disabled={filteredRights.length === 0}
-            className="bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 border border-slate-700/60 shadow-lg gap-2"
-            size="sm"
-          >
-            <Download className="h-4 w-4" />
-            Export
-          </Button>
-        </div>
-
-        {/* ── Stat Cards ── */}
-        <div className="relative mt-6 grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[
-            { label: "Critical (0–7d)", count: criticalRights.length, color: "text-red-400", bg: "bg-red-500/10 border-red-500/20" },
-            { label: "Urgent (8–30d)", count: urgentRights.length, color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20" },
-            { label: "Upcoming (31d+)", count: upcomingRights.length, color: "text-yellow-400", bg: "bg-yellow-500/10 border-yellow-500/20" },
-            { label: "Total in Period", count: filteredRights.length, color: "text-slate-300", bg: "bg-slate-800/60 border-slate-700/40" },
-          ].map((s) => (
-            <div key={s.label} className={`rounded-lg border px-4 py-3 ${s.bg}`}>
-              <div className={`text-2xl font-bold tabular-nums ${s.color}`}>{s.count}</div>
-              <div className="text-xs text-slate-400 mt-0.5">{s.label}</div>
-            </div>
-          ))}
-        </div>
+        ))}
       </div>
 
       {/* ── Alert Banners ── */}
       {criticalRights.length > 0 && (
-        <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/30 backdrop-blur-sm">
+        <div className="flex items-start gap-3 px-4 py-3 rounded-[12px] bg-red-500/10 border border-red-500/30 backdrop-blur-sm">
           <AlertTriangle className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />
           <div>
             <p className="text-sm font-semibold text-red-300">Critical: {criticalRights.length} rights expiring within 7 days</p>
@@ -315,7 +320,7 @@ export default function ExpiringRightsPage() {
         </div>
       )}
       {urgentRights.length > 0 && (
-        <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/30 backdrop-blur-sm">
+        <div className="flex items-start gap-3 px-4 py-3 rounded-[12px] bg-amber-500/10 border border-amber-500/30 backdrop-blur-sm">
           <Bell className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
           <div>
             <p className="text-sm font-semibold text-amber-300">Urgent: {urgentRights.length} rights expiring within 30 days</p>
@@ -324,83 +329,69 @@ export default function ExpiringRightsPage() {
         </div>
       )}
 
-      {/* ── Date Range Pills ── */}
-      <div className="relative overflow-hidden rounded-xl bg-slate-900/40 border border-slate-800/60 backdrop-blur-xl p-4 shadow-xl">
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="flex gap-2 flex-wrap">
-            {(["7d", "30d", "60d", "90d", "1y", "all", "custom"] as const).map((f) => (
-              <button
-                key={f}
-                onClick={() => setActiveFilter(f)}
-                className={cn(
-                  "px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all",
-                  activeFilter === f
-                    ? "bg-red-600/20 border-red-500/50 text-red-300 shadow-sm"
-                    : "bg-slate-800/40 border-slate-700/40 text-slate-400 hover:text-slate-300 hover:border-slate-600/50"
-                )}
-              >
-                {dateFilterLabels[f]}
+      {/* ── Date Range Segmented Pills + inline custom pickers ── */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1 glass-card p-1 rounded-[10px]">
+          {(["90d", "1y", "all", "custom"] as const).map((f) => {
+            const segLabels: Record<string, string> = { "90d": "90 days", "1y": "1 year", "all": "All", "custom": "Custom" };
+            return (
+              <button key={f} onClick={() => setActiveFilter(f)}
+                className={cn("px-3.5 py-1.5 rounded-[8px] text-xs font-semibold transition-all",
+                  activeFilter === f ? "bg-(--svf-accent-soft) text-(--svf-accent-bright) shadow-sm" : "text-(--text-faint) hover:text-(--text)"
+                )}>
+                {segLabels[f]}
               </button>
-            ))}
-          </div>
-
-          {activeFilter === "custom" && (
-            <div className="flex items-end gap-2 flex-wrap">
-              <div className="space-y-1">
-                <Label className="text-xs text-slate-400">From Date</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className={cn("w-[200px] justify-start text-left font-normal h-9 bg-slate-950/40 border-slate-700/50 text-slate-200", !customFromDate && "text-slate-500")}>
-                      <Calendar className="mr-2 h-4 w-4" />
-                      {customFromDate ? format(customFromDate, "PP") : <span>Pick a date</span>}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <CalendarComponent mode="single" selected={customFromDate} onSelect={setCustomFromDate} captionLayout="dropdown" startMonth={new Date(2000, 0)} endMonth={new Date(2050, 11)} />
-                  </PopoverContent>
-                </Popover>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs text-slate-400">To Date</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className={cn("w-[200px] justify-start text-left font-normal h-9 bg-slate-950/40 border-slate-700/50 text-slate-200", !customToDate && "text-slate-500")}>
-                      <Calendar className="mr-2 h-4 w-4" />
-                      {customToDate ? format(customToDate, "PP") : <span>Pick a date</span>}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <CalendarComponent
-                      mode="single" selected={customToDate} onSelect={setCustomToDate}
-                      captionLayout="dropdown" startMonth={new Date(2000, 0)} endMonth={new Date(2050, 11)}
-                      defaultMonth={customFromDate ? new Date(customFromDate.getFullYear(), customFromDate.getMonth() + 1, 1) : undefined}
-                      disabled={(date) => {
-                        if (!customFromDate) return false;
-                        return new Date(date.getFullYear(), date.getMonth(), date.getDate()) < new Date(customFromDate.getFullYear(), customFromDate.getMonth(), customFromDate.getDate());
-                      }}
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-            </div>
-          )}
+            );
+          })}
         </div>
+
+        {/* Custom date pickers — inline on same row */}
+        {activeFilter === "custom" && (
+          <>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className={cn("h-9 gap-1.5 text-xs", !customFromDate && "text-(--text-faint)")}>
+                  <Calendar className="h-3.5 w-3.5" />
+                  {customFromDate ? format(customFromDate, "dd MMM yyyy") : "From date"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <CalendarComponent mode="single" selected={customFromDate} onSelect={setCustomFromDate} captionLayout="dropdown" startMonth={new Date(2000, 0)} endMonth={new Date(2050, 11)} />
+              </PopoverContent>
+            </Popover>
+            <span className="text-xs" style={{ color: "var(--text-faint)" }}>→</span>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className={cn("h-9 gap-1.5 text-xs", !customToDate && "text-(--text-faint)")}>
+                  <Calendar className="h-3.5 w-3.5" />
+                  {customToDate ? format(customToDate, "dd MMM yyyy") : "To date"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <CalendarComponent
+                  mode="single" selected={customToDate} onSelect={setCustomToDate}
+                  captionLayout="dropdown" startMonth={new Date(2000, 0)} endMonth={new Date(2050, 11)}
+                  defaultMonth={customFromDate ? new Date(customFromDate.getFullYear(), customFromDate.getMonth() + 1, 1) : undefined}
+                  disabled={(date) => !customFromDate ? false : date < customFromDate}
+                />
+              </PopoverContent>
+            </Popover>
+          </>
+        )}
       </div>
 
-      {/* ── Rights Type + Secondary Filters ── */}
-      <div className="relative overflow-hidden rounded-xl bg-slate-900/40 border border-slate-800/60 backdrop-blur-xl p-4 shadow-xl space-y-3">
-        {/* Rights type pills */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 pr-1">Rights Type:</span>
-          {rightsTypeConfig.map(({ value, label, icon: Icon }) => (
+      {/* ── Rights Type Filter Row + Export ── */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1 glass-card p-1 rounded-[10px]">
+          {rightsTypeConfig.filter(({ value }) => value !== "other").map(({ value, label, icon: Icon }) => (
             <button
               key={value}
               onClick={() => setRightsTypeFilter(value)}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all",
+                "flex items-center gap-1.5 px-3.5 py-1.5 rounded-[8px] text-xs font-semibold transition-all",
                 rightsTypeFilter === value
-                  ? "bg-red-600/20 border-red-500/50 text-red-300 shadow-sm"
-                  : "bg-slate-800/40 border-slate-700/40 text-slate-400 hover:text-slate-300 hover:border-slate-600/50"
+                  ? "bg-(--svf-accent-soft) text-(--svf-accent-bright) shadow-sm"
+                  : "text-(--text-faint) hover:text-(--text)"
               )}
             >
               <Icon className="h-3.5 w-3.5" />
@@ -409,258 +400,226 @@ export default function ExpiringRightsPage() {
           ))}
         </div>
 
-        {/* Search + platform + subtype + sort */}
-        <div className="flex flex-wrap gap-3 items-center">
-          <div className="relative min-w-[200px] flex-1 max-w-[280px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-            <Input
-              placeholder="Search movie or platform…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 h-9 bg-slate-950/40 border-slate-700/50 text-slate-200 placeholder:text-slate-500 text-sm"
-            />
-          </div>
+        {/* Search */}
+        <div className="relative min-w-50 flex-1 max-w-70">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-(--text-faint)" />
+          <Input
+            placeholder="Search movie or platform…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-sm"
+          />
+        </div>
 
-          <Select value={platformFilter} onValueChange={setPlatformFilter}>
-            <SelectTrigger className="h-9 bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm w-50">
-              <SelectValue placeholder="All Platforms" />
+        <Select value={platformFilter} onValueChange={setPlatformFilter}>
+          <SelectTrigger className="h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) text-sm w-50">
+            <SelectValue placeholder="All Platforms" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Platforms</SelectItem>
+            {platforms.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                <span className="font-medium">{p.name}</span>
+                {p.platform_type && <span className="text-(--text-faint) ml-2 text-xs">— {p.platform_type}</span>}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {rightsTypeFilter !== "all" && subTypeOptions.length > 0 && (
+          <Select value={subTypeFilter} onValueChange={setSubTypeFilter}>
+            <SelectTrigger className="h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) text-sm w-45">
+              <SelectValue placeholder="All Types" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Platforms</SelectItem>
-              {platforms.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  <span className="font-medium">{p.name}</span>
-                  {p.platform_type && <span className="text-slate-400 ml-2 text-xs">— {p.platform_type}</span>}
-                </SelectItem>
+              <SelectItem value="all">All Types</SelectItem>
+              {subTypeOptions.map((t) => (
+                <SelectItem key={t} value={t}>{t}</SelectItem>
               ))}
             </SelectContent>
           </Select>
+        )}
 
-          {rightsTypeFilter !== "all" && subTypeOptions.length > 0 && (
-            <Select value={subTypeFilter} onValueChange={setSubTypeFilter}>
-              <SelectTrigger className="h-9 bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm w-[180px]">
-                <SelectValue placeholder="All Types" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                {subTypeOptions.map((t) => (
-                  <SelectItem key={t} value={t}>{t}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-
-          <Select
-            value={sortConfig ? `${sortConfig.column}:${sortConfig.direction}` : "days_until_expiry:asc"}
-            onValueChange={(v) => {
-              const [col, dir] = v.split(":");
-              if (sortConfig?.column === col && sortConfig?.direction === dir) return;
-              if (sortConfig?.column !== col) requestSort(col);
-              if (sortConfig?.column === col && sortConfig?.direction !== dir) requestSort(col);
-            }}
+        {hasSecondaryFilters && (
+          <Button
+            variant="ghost" size="sm"
+            className="h-9 gap-1.5 text-(--text-faint) hover:text-(--text) hover:bg-slate-800/50"
+            onClick={() => { setPlatformFilter("all"); setSubTypeFilter("all"); setSearchQuery(""); }}
           >
-            <SelectTrigger className="h-9 bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm w-[200px]">
-              <SelectValue placeholder="Sort by…" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="days_until_expiry:asc">Days Left (Soonest)</SelectItem>
-              <SelectItem value="days_until_expiry:desc">Days Left (Latest)</SelectItem>
-              <SelectItem value="movie_title:asc">Movie A–Z</SelectItem>
-              <SelectItem value="movie_title:desc">Movie Z–A</SelectItem>
-              <SelectItem value="platform_name:asc">Platform A–Z</SelectItem>
-              <SelectItem value="end_date:asc">End Date (Earliest)</SelectItem>
-              <SelectItem value="end_date:desc">End Date (Latest)</SelectItem>
-            </SelectContent>
-          </Select>
+            <X className="h-3.5 w-3.5" /> Clear
+          </Button>
+        )}
 
-          {hasSecondaryFilters && (
-            <Button
-              variant="ghost" size="sm"
-              className="h-9 gap-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
-              onClick={() => { setPlatformFilter("all"); setSubTypeFilter("all"); setSearchQuery(""); }}
-            >
-              <X className="h-3.5 w-3.5" /> Clear
-            </Button>
-          )}
-        </div>
+        {/* Export button pushed to right */}
+        <Button
+          onClick={exportToExcel}
+          disabled={filteredRights.length === 0}
+          className="ml-auto bg-slate-800/80 hover:bg-slate-700/80 text-(--text) border border-(--svf-border)/60 shadow-sm gap-2"
+          size="sm"
+        >
+          <Download className="h-4 w-4" />
+          Export
+        </Button>
       </div>
 
+      {/* ── Table ── */}
+      <div style={{ border: "1px solid var(--svf-border)", borderRadius: 14, overflow: "hidden", background: "var(--panel)", backdropFilter: "blur(14px)" }}>
+        {sortedFiltered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
+            <CheckCircle className="h-10 w-10" style={{ color: "var(--st-active)", opacity: 0.5 }} />
+            <p className="font-medium" style={{ color: "var(--text)" }}>No expiring rights</p>
+            <p className="text-sm" style={{ color: "var(--text-faint)" }}>All rights in this category are up to date</p>
+          </div>
+        ) : (
+          <>
+            {/* Table header */}
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(180px,2fr) 1.2fr 1fr 0.9fr 0.9fr 0.8fr 0.8fr 80px",
+              padding: "0 20px", height: 44, alignItems: "center",
+              background: "var(--bg-deep)", borderBottom: "1px solid var(--svf-border)",
+              fontSize: 11, fontWeight: 700, letterSpacing: "0.08em",
+              textTransform: "uppercase", color: "var(--text-faint)",
+            }}>
+              <div>Movie</div>
+              <div>Platform</div>
+              <div>Type</div>
+              <div>Start Date</div>
+              <div>End Date</div>
+              <div>Days</div>
+              <div>Status</div>
+              <div />
+            </div>
 
-
-      {/* ── Tabbed Table ── */}
-      <Tabs defaultValue="all" className="space-y-4">
-        <TabsList className="bg-slate-900/60 border border-slate-800/60 p-0 h-auto rounded-lg">
-          {[
-            { value: "all", label: "All", count: sortedFiltered.length, color: "" },
-            { value: "critical", label: "Critical", count: criticalRights.length, color: "text-red-400" },
-            { value: "urgent", label: "Urgent", count: urgentRights.length, color: "text-amber-400" },
-            { value: "upcoming", label: "Upcoming", count: upcomingRights.length, color: "" },
-          ].map(({ value, label, count, color }) => (
-            <TabsTrigger
-              key={value}
-              value={value}
-              className={cn(
-                "rounded-md px-4 py-2 text-sm font-medium transition-all border-b-2 border-transparent data-[state=active]:border-red-500 data-[state=active]:text-red-400 data-[state=active]:bg-transparent text-slate-400 hover:text-slate-300",
-                color
-              )}
-            >
-              {label} <span className="ml-1.5 text-xs opacity-70">({count})</span>
-            </TabsTrigger>
-          ))}
-        </TabsList>
-
-        {(["all", "critical", "urgent", "upcoming"] as const).map((tab) => {
-          const tabRights = tab === "all" ? sortedFiltered : tab === "critical" ? criticalRights : tab === "urgent" ? urgentRights : upcomingRights;
-          const currentPage = tabPages[tab] ?? 0;
-          const paginated = tabRights.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
-
-          return (
-            <TabsContent key={tab} value={tab}>
-              <div className="relative overflow-hidden rounded-xl bg-slate-900/40 border border-slate-800/60 backdrop-blur-xl shadow-xl">
-                <div className="px-5 py-4 border-b border-slate-800/60 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-slate-400" />
-                    <span className="text-sm font-semibold text-slate-200">Expiring Rights</span>
-                  </div>
-                  <span className="text-xs text-slate-500">{tabRights.length} rights</span>
-                </div>
-
-                {tabRights.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-center">
-                    <CheckCircle className="h-12 w-12 text-emerald-500/60 mb-4" />
-                    <p className="text-base font-medium text-slate-300">No expiring rights</p>
-                    <p className="text-sm text-slate-500 mt-1">All rights in this category are up to date</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="border-slate-800/60 hover:bg-transparent">
-                          <SortableHeader column="movie_title" label="Movie" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-slate-500" />
-                          <SortableHeader column="movie_source" label="Source" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-slate-500" />
-                          <SortableHeader column="platform_name" label="Platform" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-slate-500" />
-                          <SortableHeader column="rights_type_name" label="Type" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-slate-500" />
-                          <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Nature</TableHead>
-                          <SortableHeader column="start_date" label="Start Date" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-slate-500" />
-                          <SortableHeader column="end_date" label="Expiry" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-slate-500" />
-                          <SortableHeader column="days_until_expiry" label="Days" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-slate-500" />
-                          <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Territory</TableHead>
-                          <TableHead className="text-right text-[10px] font-bold uppercase tracking-widest text-slate-500">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {paginated.map((right) => (
-                          <TableRow
-                            key={right.id}
-                            className={cn("border-slate-800/40 hover:bg-slate-800/30 transition-colors", getUrgencyRowClass(right.days_until_expiry))}
-                          >
-                            <TableCell className="min-w-40">
-                              <Link href={`/movies/${right.movie_id}`} className="font-medium text-slate-200 hover:text-red-400 transition-colors truncate block max-w-50">
-                                {right.movie_title}
-                              </Link>
-                            </TableCell>
-                            <TableCell>
-                              <span className={cn(
-                                "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap",
-                                right.movie_source === "home_production"
-                                  ? "bg-indigo-500/15 text-indigo-400 border-indigo-500/30"
-                                  : "bg-violet-500/15 text-violet-400 border-violet-500/30"
-                              )}>
-                                {right.movie_source === "home_production" ? "Home" : "Acquired"}
-                              </span>
-                            </TableCell>
-                            <TableCell className="whitespace-nowrap text-slate-300 text-sm">
-                              {right.platform_name || <span className="text-slate-500">—</span>}
-                            </TableCell>
-                            <TableCell>
-                              {right.rights_type_name ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20 whitespace-nowrap">
-                                  {right.rights_type_name.toLowerCase().includes("satellite") ? <Tv className="h-3 w-3" /> : <Wifi className="h-3 w-3" />}
-                                  {right.rights_type_name}
-                                </span>
-                              ) : <span className="text-slate-500">—</span>}
-                            </TableCell>
-                            <TableCell>
-                              {right.nature ? (
-                                <span className={cn(
-                                  "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border whitespace-nowrap",
-                                  right.nature === "exclusive"
-                                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
-                                    : "bg-slate-700/40 text-slate-400 border-slate-600/30"
-                                )}>
-                                  {right.nature === "exclusive" ? "Exclusive" : right.nature === "non_exclusive" ? "Non-Exclusive" : right.nature}
-                                </span>
-                              ) : <span className="text-slate-500">—</span>}
-                            </TableCell>
-                            <TableCell className="whitespace-nowrap text-slate-400 text-sm">
-                              {right.start_date ? format(new Date(right.start_date), "dd MMM yy") : <span className="text-slate-500">—</span>}
-                            </TableCell>
-                            <TableCell className="whitespace-nowrap text-slate-400 text-sm">
-                              {right.end_date ? format(new Date(right.end_date), "dd MMM yy") : <span className="text-slate-500">—</span>}
-                            </TableCell>
-                            <TableCell>{getUrgencyBadge(right.days_until_expiry)}</TableCell>
-                            <TableCell className="whitespace-nowrap text-slate-400 text-sm">{right.territory || "World"}</TableCell>
-                            <TableCell className="text-right">
-                              <RoleGate action="edit" resource="right">
-                                <div className="flex justify-end gap-0.5">
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button size="icon" variant="ghost" className="h-7 w-7 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10" asChild aria-label="Edit right">
-                                        <Link href={`/rights/${right.id}/edit`}><Edit className="h-3.5 w-3.5" /></Link>
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Edit</TooltipContent>
-                                  </Tooltip>
-                                  {canDelete && (
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button size="icon" variant="ghost" className="h-7 w-7 text-slate-400 hover:text-red-400 hover:bg-red-500/10" onClick={() => setDeletingRight(right)} aria-label="Delete right">
-                                          <Trash2 className="h-3.5 w-3.5" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>Request Deletion</TooltipContent>
-                                    </Tooltip>
-                                  )}
-                                </div>
-                              </RoleGate>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-
-                {tabRights.length > PAGE_SIZE && (
-                  <div className="flex items-center justify-between px-5 py-3 border-t border-slate-800/60">
-                    <p className="text-xs text-slate-500">
-                      Showing {currentPage * PAGE_SIZE + 1}–{Math.min((currentPage + 1) * PAGE_SIZE, tabRights.length)} of {tabRights.length}
-                    </p>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline" size="sm"
-                        className="h-8 bg-slate-800/40 border-slate-700/50 text-slate-300 hover:bg-slate-700/50"
-                        onClick={() => setTabPage(tab, currentPage - 1)}
-                        disabled={currentPage === 0}
-                      >
-                        Previous
-                      </Button>
-                      <Button
-                        variant="outline" size="sm"
-                        className="h-8 bg-slate-800/40 border-slate-700/50 text-slate-300 hover:bg-slate-700/50"
-                        onClick={() => setTabPage(tab, currentPage + 1)}
-                        disabled={(currentPage + 1) * PAGE_SIZE >= tabRights.length}
-                      >
-                        Next
-                      </Button>
+            {sortedFiltered.slice(0, (tabPages["all"] + 1) * PAGE_SIZE).map((right) => {
+              const urgencyColor =
+                right.days_until_expiry < 0 ? "var(--st-expired)"
+                : right.days_until_expiry <= 90 ? "var(--st-expired)"
+                : right.days_until_expiry <= 270 ? "var(--st-expiring)"
+                : "var(--st-active)";
+              const statusLabel =
+                right.days_until_expiry < 0 ? "Expired"
+                : right.days_until_expiry <= 90 ? "Critical"
+                : right.days_until_expiry <= 270 ? "Approaching"
+                : "Active";
+              const isPerpetual = right.end_date && (right.end_date.startsWith("3099") || right.end_date.startsWith("9999"));
+              return (
+                <div
+                  key={right.id}
+                  className="group"
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "minmax(180px,2fr) 1.2fr 1fr 0.9fr 0.9fr 0.8fr 0.8fr 80px",
+                    padding: "0 20px", minHeight: 52, alignItems: "center",
+                    borderBottom: "1px solid var(--svf-border)",
+                    borderLeft: `3px solid ${urgencyColor}`,
+                    transition: "background .15s",
+                  }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--hover)"}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
+                >
+                  {/* Movie */}
+                  <div style={{ minWidth: 0, paddingRight: 12 }}>
+                    <Link href={`/movies/${right.movie_id}`}
+                      className="block font-semibold text-sm truncate hover:underline"
+                      style={{ color: "var(--text)" }}>
+                      {right.movie_title}
+                    </Link>
+                    <div className="text-[10px] mt-0.5 truncate" style={{ color: "var(--text-faint)", fontFamily: "var(--font-mono)" }}>
+                      {right.movie_source === "home_production" ? "Home" : "Acquired"}
                     </div>
                   </div>
-                )}
+
+                  {/* Platform */}
+                  <div className="text-sm truncate" style={{ color: "var(--text-dim)" }}>
+                    {right.platform_name || "—"}
+                  </div>
+
+                  {/* Type */}
+                  <div className="text-sm" style={{ color: "var(--text-dim)" }}>
+                    {right.rights_type_name ? (
+                      <span className="inline-flex items-center gap-1">
+                        {right.rights_type_name.toLowerCase().includes("satellite")
+                          ? <Tv className="h-3 w-3 shrink-0" style={{ color: "var(--st-wtp)" }} />
+                          : <Wifi className="h-3 w-3 shrink-0" style={{ color: "var(--st-open)" }} />}
+                        <span className="truncate text-xs">{right.rights_type_name}</span>
+                      </span>
+                    ) : "—"}
+                  </div>
+
+                  {/* Start date */}
+                  <div className="text-xs tabular-nums" style={{ color: "var(--st-active)", fontFamily: "var(--font-mono)" }}>
+                    {right.start_date ? format(new Date(right.start_date), "dd MMM yy") : "—"}
+                  </div>
+
+                  {/* End / Expiry date */}
+                  <div className="text-xs tabular-nums" style={{ color: "var(--text-dim)", fontFamily: "var(--font-mono)" }}>
+                    {isPerpetual
+                      ? <span style={{ color: "var(--st-active)", fontWeight: 600 }}>Perpetual</span>
+                      : right.end_date ? format(new Date(right.end_date), "dd MMM yy") : "—"}
+                  </div>
+
+                  {/* Days */}
+                  <div className="tabular-nums font-bold text-sm" style={{ color: urgencyColor, fontFamily: "var(--font-mono)" }}>
+                    {isPerpetual ? "∞"
+                      : right.days_until_expiry < 0
+                        ? `${Math.abs(right.days_until_expiry)}d ago`
+                        : `${right.days_until_expiry}d`}
+                  </div>
+
+                  {/* Status pill */}
+                  <div style={{
+                    display: "inline-flex", alignItems: "center",
+                    padding: "2px 9px", borderRadius: 999,
+                    fontSize: 11, fontWeight: 600,
+                    color: urgencyColor,
+                    background: `color-mix(in oklch, ${urgencyColor} 13%, transparent)`,
+                    border: `1px solid color-mix(in oklch, ${urgencyColor} 28%, transparent)`,
+                    whiteSpace: "nowrap",
+                  }}>
+                    {statusLabel}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <RoleGate action="edit" resource="right">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button size="icon" variant="ghost" className="h-7 w-7 hover:text-amber-400 hover:bg-amber-500/10" style={{ color: "var(--text-faint)" }} asChild>
+                            <Link href={`/rights/${right.id}/edit`}><Edit className="h-3.5 w-3.5" /></Link>
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Edit</TooltipContent>
+                      </Tooltip>
+                    </RoleGate>
+                    {canDelete && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button size="icon" variant="ghost" className="h-7 w-7 hover:text-red-400 hover:bg-red-500/10" style={{ color: "var(--text-faint)" }} onClick={() => setDeletingRight(right)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Request Deletion</TooltipContent>
+                      </Tooltip>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {sortedFiltered.length > (tabPages["all"] + 1) * PAGE_SIZE && (
+              <div className="flex items-center justify-between px-5 py-3" style={{ borderTop: "1px solid var(--svf-border)" }}>
+                <p className="text-xs" style={{ color: "var(--text-faint)" }}>
+                  Showing {Math.min((tabPages["all"] + 1) * PAGE_SIZE, sortedFiltered.length)} of {sortedFiltered.length} rights
+                </p>
+                <Button variant="outline" size="sm" className="h-8" onClick={() => setTabPage("all", (tabPages["all"] ?? 0) + 1)}>
+                  Load more
+                </Button>
               </div>
-            </TabsContent>
-          );
-        })}
-      </Tabs>
+            )}
+          </>
+        )}
+      </div>
 
       <ConfirmDialog
         open={!!deletingRight}

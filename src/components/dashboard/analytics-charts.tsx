@@ -60,8 +60,8 @@ function ChartSection({ title, description, children, height = 300 }: {
   return (
     <div className="p-5">
       <div className="mb-4">
-        <p className="text-sm font-semibold text-slate-200">{title}</p>
-        {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
+        <p className="text-sm font-semibold text-(--text)">{title}</p>
+        {description && <p className="text-xs text-(--text-faint) mt-0.5">{description}</p>}
       </div>
       <div style={{ height }}>{children}</div>
     </div>
@@ -208,8 +208,8 @@ export function DistributionDonutChart({ data, title, description }: Distributio
           </PieChart>
         </ResponsiveContainer>
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none" style={{ top: "-24px" }}>
-          <span className="text-2xl font-extrabold text-slate-100 tabular-nums">{total}</span>
-          <span className="text-[9px] text-slate-500 uppercase tracking-widest">Total</span>
+          <span className="text-2xl font-extrabold text-(--text) tabular-nums">{total}</span>
+          <span className="text-[9px] text-(--text-faint) uppercase tracking-widest">Total</span>
         </div>
       </div>
     </ChartSection>
@@ -291,8 +291,8 @@ export function RightsWindowChart({ data }: RightsWindowChartProps) {
         {data.map((d) => (
           <div key={d.status} className="flex items-center gap-1.5 text-xs">
             <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: WINDOW_COLORS[d.status] }} />
-            <span className="text-slate-400">{d.label}:</span>
-            <span className="font-semibold text-slate-200">{d.count}</span>
+            <span className="text-(--text-faint)">{d.label}:</span>
+            <span className="font-semibold text-(--text)">{d.count}</span>
           </div>
         ))}
       </div>
@@ -371,7 +371,7 @@ export function PlatformConcentrationChart({ data, hhi }: PlatformConcentrationC
         </ResponsiveContainer>
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none" style={{ top: "-28px" }}>
           <span className="text-2xl font-extrabold tabular-nums" style={{ color: riskColor }}>{Math.round(hhi)}</span>
-          <span className="text-[9px] text-slate-500 uppercase tracking-widest">HHI</span>
+          <span className="text-[9px] text-(--text-faint) uppercase tracking-widest">HHI</span>
         </div>
       </div>
     </ChartSection>

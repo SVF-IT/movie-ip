@@ -1,36 +1,34 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
-import { Card } from '@/components/ui/card'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import {
-  getLanguages,
-  getRightsModeStats,
-  getActiveInternetTitlesCount,
-  type RightsModeStats,
-} from '@/lib/api/dashboard'
-import { getPendingMovies } from '@/lib/api/approvals'
-import { useAuth } from '@/contexts/auth-context'
+import { AnimatedCounter } from '@/components/dashboard/animated-counter'
 import { InternetDashboardTable } from '@/components/dashboard/internet-dashboard-table'
 import { SatelliteDashboardTable } from '@/components/dashboard/satellite-dashboard-table'
-import { AnimatedCounter } from '@/components/dashboard/animated-counter'
+import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useAuth } from '@/contexts/auth-context'
+import { useAppToast } from "@/hooks/use-app-toast"
+import { getPendingMovies } from '@/lib/api/approvals'
 import {
-  Globe,
-  Film,
-  Calendar,
+  getActiveInternetTitlesCount,
+  getLanguages,
+  getRightsModeStats,
+  type RightsModeStats,
+} from '@/lib/api/dashboard'
+import {
   Activity,
-  TrendingUp,
-  Clock,
-  Star,
-  Satellite,
-  Languages,
   ArrowLeft,
-  Maximize2,
+  Calendar,
+  Clock,
+  Film,
   Gavel,
+  Globe,
+  Languages,
+  Maximize2,
+  Satellite,
+  Star
 } from 'lucide-react'
 import Link from 'next/link'
-import { Button } from '@/components/ui/button'
-import { useAppToast } from "@/hooks/use-app-toast";
+import { useCallback, useEffect, useState } from 'react'
 
 type DashboardMode = 'satellite' | 'internet'
 
@@ -75,7 +73,7 @@ export default function RightsDashboardPage() {
   // Load pending approvals count for legal/admin banner
   useEffect(() => {
     if (!isLegalOrAdmin) return
-    getPendingMovies({ status: 'pending', limit: 1 }).then(({ count }) => setPendingCount(count)).catch(() => {})
+    getPendingMovies({ status: 'pending', limit: 1 }).then(({ count }) => setPendingCount(count)).catch(() => { })
   }, [isLegalOrAdmin])
 
   // Initial load
@@ -83,7 +81,7 @@ export default function RightsDashboardPage() {
     async function fetchData() {
       try {
         setLoading(true)
-            const langs = await getLanguages()
+        const langs = await getLanguages()
         setLanguages(langs)
 
         const bengali = langs.find((l) => l.toLowerCase() === 'bengali')
@@ -248,16 +246,16 @@ export default function RightsDashboardPage() {
 
   if (fullPageView) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col">
+      <div className="flex flex-col -m-4 md:-m-8" style={{ minHeight: "calc(100vh - 4rem)" }}>
         {/* Full-page top bar */}
-        <div className={`flex items-center gap-3 px-4 py-2.5 border-b border-slate-800/60 backdrop-blur-md ${isSatellite
+        <div className={`flex items-center gap-3 px-4 py-2.5 border-b border-(--svf-border) backdrop-blur-md ${isSatellite
           ? 'bg-gradient-to-r from-slate-950 via-slate-900/80 to-purple-950/20'
           : 'bg-gradient-to-r from-slate-950 via-slate-900/80 to-blue-950/20'
           }`}>
           <Button
             variant="ghost"
             size="sm"
-            className="gap-1.5 h-8 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
+            className="gap-1.5 h-8 text-(--text-faint) hover:text-(--text) hover:bg-slate-800/50"
             onClick={() => setFullPageView(false)}
           >
             <ArrowLeft className="h-4 w-4" />
@@ -274,14 +272,14 @@ export default function RightsDashboardPage() {
             </div>
           )}
           <div className="ml-auto flex items-center gap-2">
-            <span className="text-xs text-slate-400">
+            <span className="text-xs text-(--text-faint)">
               {isSatellite ? 'Satellite Rights' : 'Internet Rights'}
             </span>
             {/* Language selector */}
             <div className="flex items-center gap-1.5">
-              <Languages className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+              <Languages className="h-3.5 w-3.5 text-(--text-faint) shrink-0" />
               <Select value={language || 'all'} onValueChange={handleLanguageChange} disabled={loading}>
-                <SelectTrigger className="bg-slate-900/60 h-8 border-slate-800/60 text-xs w-32 text-slate-300">
+                <SelectTrigger className="bg-(--bg-raise)/40 h-8 border-(--svf-border) text-xs w-32 text-(--text)">
                   <SelectValue placeholder="Language" />
                 </SelectTrigger>
                 <SelectContent>
@@ -333,210 +331,213 @@ export default function RightsDashboardPage() {
     )
   }
 
+  // color maps matching the design screenshot
+  const cardColors: Record<string, { color: string; border: string; bg: string; dot: string }> = {
+    'text-cyan-400': { color: 'var(--st-open)', border: 'color-mix(in oklch, var(--st-open) 40%, transparent)', bg: 'color-mix(in oklch, var(--st-open) 13%, transparent)', dot: 'var(--st-open)' },
+    'text-orange-400': { color: 'var(--st-expiring)', border: 'color-mix(in oklch, var(--st-expiring) 40%, transparent)', bg: 'color-mix(in oklch, var(--st-expiring) 13%, transparent)', dot: 'var(--st-expiring)' },
+    'text-purple-400': { color: 'var(--st-wtp)', border: 'color-mix(in oklch, var(--st-wtp) 40%, transparent)', bg: 'color-mix(in oklch, var(--st-wtp) 13%, transparent)', dot: 'var(--st-wtp)' },
+    'text-emerald-400': { color: 'var(--st-active)', border: 'color-mix(in oklch, var(--st-active) 40%, transparent)', bg: 'color-mix(in oklch, var(--st-active) 13%, transparent)', dot: 'var(--st-active)' },
+  }
+
   return (
-    <div className="min-h-screen bg-slate-950 relative overflow-hidden">
-      {/* Pending approvals banner for legal/admin */}
+    <div className="space-y-4">
+      {/* Pending approvals banner — unchanged */}
       {isLegalOrAdmin && pendingCount > 0 && (
-        <div className="relative z-10 bg-yellow-500/10 border-b border-yellow-500/20 px-6 py-2.5 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-yellow-400 text-sm font-medium">
+        <div className="flex items-center justify-between gap-4 px-4 py-2.5 rounded-[10px]"
+          style={{ background: "color-mix(in oklch, var(--st-expiring) 10%, transparent)", border: "1px solid color-mix(in oklch, var(--st-expiring) 28%, transparent)" }}>
+          <div className="flex items-center gap-2 text-sm font-medium" style={{ color: "var(--st-expiring)" }}>
             <Gavel className="h-4 w-4 shrink-0" />
             {pendingCount} movie{pendingCount !== 1 ? 's' : ''} awaiting legal approval
           </div>
-          <Link href="/legal-approvals" className="text-xs font-semibold text-yellow-300 hover:text-yellow-100 underline underline-offset-2 shrink-0">
+          <Link href="/legal-approvals" className="text-xs font-semibold underline underline-offset-2 shrink-0" style={{ color: "var(--st-expiring)" }}>
             Review now →
           </Link>
         </div>
       )}
 
-      {/* Ambient orbs */}
-      <div className="absolute top-0 left-1/4 w-[700px] h-[400px] bg-purple-600/5 rounded-full blur-[140px] pointer-events-none" />
-      <div className="absolute top-0 right-1/4 w-[600px] h-[400px] bg-blue-600/5 rounded-full blur-[140px] pointer-events-none" />
-      <div className="absolute bottom-1/3 left-0 w-[500px] h-[300px] bg-red-600/3 rounded-full blur-[120px] pointer-events-none" />
-
-      {/* ── Header ── */}
-      <div
-        className={`relative overflow-hidden border-b border-slate-800/60 ${isSatellite
-          ? 'bg-gradient-to-br from-slate-950 via-slate-900/70 to-purple-950/20'
-          : 'bg-gradient-to-br from-slate-950 via-slate-900/70 to-blue-950/20'
-          }`}
-      >
-        <div className="relative px-6 py-6">
-          <div className="max-w-7xl mx-auto">
-            <div className="flex flex-wrap items-center gap-4">
-              {/* Icon + Title */}
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div
-                  className={`p-3 rounded-xl border shadow-lg ${isSatellite
-                    ? 'bg-purple-500/15 border-purple-500/30 shadow-purple-500/10'
-                    : 'bg-blue-500/15 border-blue-500/30 shadow-blue-500/10'
-                    }`}
-                >
-                  {isSatellite
-                    ? <Satellite className="h-6 w-6 text-purple-400" />
-                    : <Globe className="h-6 w-6 text-blue-400" />}
-                </div>
-                <div>
-                  <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
-                    {isSatellite ? 'Satellite Rights Dashboard' : 'Internet Rights Dashboard'}
-                  </h1>
-                  <p className="text-sm text-slate-400 mt-0.5">
-                    {isSatellite
-                      ? 'Monitor and manage your satellite broadcasting rights portfolio'
-                      : 'Monitor and manage your internet / digital streaming rights portfolio'}
-                  </p>
-                </div>
-              </div>
-
-              {/* ── Language Selector ── */}
-              <div className="flex items-center gap-1.5">
-                <Languages className="h-4 w-4 text-slate-400 shrink-0" />
-                <Select value={language || 'all'} onValueChange={handleLanguageChange} disabled={loading}>
-                  <SelectTrigger className="bg-slate-900/60 h-9 border-slate-800/60 text-sm w-36 text-slate-300">
-                    <SelectValue placeholder="Language" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Languages</SelectItem>
-                    {languages.map((l) => (
-                      <SelectItem key={l} value={l}>{l}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* ── Mode Toggle ── */}
-              <div className="flex items-center gap-1 bg-slate-900/80 border border-slate-800/60 rounded-xl p-1 backdrop-blur-sm">
-                <button
-                  onClick={() => setMode('satellite')}
-                  className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${isSatellite
-                    ? 'bg-slate-800/80 border border-slate-700/60 shadow-lg shadow-purple-500/10 text-purple-400'
-                    : 'text-slate-400 hover:text-slate-300'
-                    }`}
-                >
-                  <Satellite className="h-3.5 w-3.5" />
-                  Satellite
-                </button>
-                <button
-                  onClick={() => setMode('internet')}
-                  className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${!isSatellite
-                    ? 'bg-slate-800/80 border border-slate-700/60 shadow-lg shadow-blue-500/10 text-blue-400'
-                    : 'text-slate-400 hover:text-slate-300'
-                    }`}
-                >
-                  <Globe className="h-3.5 w-3.5" />
-                  Internet
-                </button>
-              </div>
-            </div>
-          </div>
+      {/* ── Toolbar: mode toggle + language + export ── */}
+      <div className="flex flex-wrap items-center gap-3">
+        {/* Satellite / Internet segmented toggle */}
+        <div style={{
+          display: "inline-flex", gap: 3, padding: 4, borderRadius: 11,
+          background: "var(--bg-deep)", border: "1px solid var(--svf-border)",
+        }}>
+          {([
+            { v: 'satellite' as DashboardMode, icon: Satellite, label: 'Satellite' },
+            { v: 'internet' as DashboardMode, icon: Globe, label: 'Internet' },
+          ] as const).map(({ v, icon: Icon, label }) => {
+            const on = mode === v
+            return (
+              <button key={v} onClick={() => setMode(v)} style={{
+                display: "inline-flex", alignItems: "center", gap: 7,
+                padding: "7px 16px", borderRadius: 8, cursor: "pointer",
+                fontSize: 13.5, fontWeight: 600,
+                border: on ? "1px solid var(--svf-border-strong)" : "1px solid transparent",
+                background: on ? "var(--bg-raise)" : "transparent",
+                color: on ? (v === 'satellite' ? "var(--st-wtp)" : "var(--st-open)") : "var(--text-faint)",
+                boxShadow: on ? "0 3px 10px -4px hsl(0deg 0% 0% / 0.5)" : "none",
+                transition: "all .2s ease",
+              }}>
+                <Icon style={{ width: 15, height: 15 }} />
+                {label}
+              </button>
+            )
+          })}
         </div>
+
+        <div style={{ flex: 1 }} />
+
+        {/* Language selector */}
+        <div className="flex items-center gap-2">
+          <Languages className="h-4 w-4 shrink-0" style={{ color: "var(--text-faint)" }} />
+          <Select value={language || 'all'} onValueChange={handleLanguageChange} disabled={loading}>
+            <SelectTrigger className="h-9 w-36 bg-(--bg-raise)/40 border-(--svf-border) text-(--text)">
+              <SelectValue placeholder="Language" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Languages</SelectItem>
+              {languages.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+
       </div>
 
-      <div className="px-6 py-8 relative z-10">
-        <div className="max-w-7xl mx-auto space-y-8">
-
-          {/* ── Stat Cards ── */}
-          <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-            {loading || statsLoading ? (
-              <div className="grid gap-4 md:grid-cols-3">
-                {[...Array(3)].map((_, i) => (
-                  <Card key={i} className="glass-card animate-pulse">
-                    <div className="p-6 space-y-3">
-                      <div className="h-4 bg-slate-800/60 rounded w-1/2" />
-                      <div className="h-8 bg-slate-800/60 rounded w-3/4" />
-                      <div className="h-3 bg-slate-800/60 rounded w-full" />
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            ) : (
-              <div className="grid gap-4 md:grid-cols-3">
-                {statsConfig.map((stat, index) => {
-                  const Icon = stat.icon
-                  const isActive = activeCard === stat.id
-                  return (
-                    <Card
-                      key={stat.id}
-                      className={`relative glass-card transition-all duration-300 overflow-hidden group cursor-pointer ${'glow' in stat ? stat.glow : ''} ${isActive
-                        ? `border-2 ${stat.border} shadow-lg`
-                        : 'hover:border-slate-700/60 hover:-translate-y-0.5'
-                        }`}
-                      onClick={() => setActiveCard(stat.id)}
-                    >
-                      <div
-                        className={`pointer-events-none absolute inset-0 bg-linear-to-br ${stat.bgGradient} ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-60'
-                          } transition-opacity duration-300`}
-                      />
-                      <div className="relative p-6">
-                        <div className="flex items-center justify-between mb-4">
-                          <div className={`p-2.5 rounded-lg bg-gradient-to-br ${stat.bgGradient} border border-slate-700/30`}>
-                            <Icon className={`h-5 w-5 ${stat.color}`} />
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Maximize2 className={`h-3.5 w-3.5 ${stat.color} opacity-0 group-hover:opacity-60 transition-opacity`} />
-                            <TrendingUp className={`h-4 w-4 ${stat.color} opacity-60`} />
-                          </div>
-                        </div>
-                        <div className="space-y-1.5">
-                          <h3 className="text-sm font-medium text-slate-400">{stat.title}</h3>
-                          <span className="text-3xl font-bold tracking-tight block">
-                            <AnimatedCounter value={stat.value} duration={800 + index * 100} />
-                          </span>
-                          {'subValues' in stat && (
-                            <div className="flex gap-3 pt-0.5">
-                              {stat.subValues.map((sv) => (
-                                <span key={sv.label} className="text-xs text-slate-400">
-                                  <span className="font-semibold text-foreground/70">{sv.value}</span> {sv.label}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                          <p className="text-xs text-slate-400 pt-0.5">{stat.description}</p>
-                        </div>
-                        <div className={`mt-3 text-xs font-medium ${stat.color} opacity-0 group-hover:opacity-80 transition-opacity flex items-center gap-1`}>
-                          <Maximize2 className="h-3 w-3" /> Click to open full view
-                        </div>
-                      </div>
-                    </Card>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* ── Table (preview below cards) ── */}
-          <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 delay-150">
-            {isSatellite ? (
-              <SatelliteDashboardTable
-                activeCard={satActiveCard}
-                languages={languages}
-                language={language}
-                onLanguageChange={setLanguage}
-                expiryYear={satExpiryYear}
-                onExpiryYearChange={handleSatYearChange}
-                expiryFrom={satExpiryFrom}
-                expiryTo={satExpiryTo}
-                onExpiryFromChange={(v) => { setSatExpiryFrom(v); setSatExpiryYear('custom') }}
-                onExpiryToChange={(v) => { setSatExpiryTo(v); setSatExpiryYear('custom') }}
-                yearOptions={yearOptions}
-              />
-            ) : (
-              <InternetDashboardTable
-                activeCard={intActiveCard}
-                languages={languages}
-                language={language}
-                onLanguageChange={setLanguage}
-                expiryYear={intExpiryYear}
-                onExpiryYearChange={handleIntYearChange}
-                expiryFrom={intExpiryFrom}
-                expiryTo={intExpiryTo}
-                onExpiryFromChange={(v) => { setIntExpiryFrom(v); setIntExpiryYear('custom') }}
-                onExpiryToChange={(v) => { setIntExpiryTo(v); setIntExpiryYear('custom') }}
-                yearOptions={yearOptions}
-              />
-            )}
-          </div>
-
+      {/* ── Stat Cards ── */}
+      {loading || statsLoading ? (
+        <div className="grid gap-4 md:grid-cols-3">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="glass-card animate-pulse" style={{ padding: 20, height: 160 }}>
+              <div className="h-4 rounded w-1/2 mb-3" style={{ background: "var(--hover)" }} />
+              <div className="h-10 rounded w-1/3 mb-2" style={{ background: "var(--hover)" }} />
+              <div className="h-3 rounded w-3/4" style={{ background: "var(--hover)" }} />
+            </div>
+          ))}
         </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-3">
+          {statsConfig.map((stat, index) => {
+            const Icon = stat.icon
+            const isActive = activeCard === stat.id
+            const c = cardColors[stat.color] ?? cardColors['text-cyan-400']
+            return (
+              <div
+                key={stat.id}
+                onClick={() => setActiveCard(stat.id)}
+                style={{
+                  position: "relative",
+                  padding: 0,
+                  overflow: "hidden",
+                  borderRadius: 14,
+                  cursor: "pointer",
+                  background: "var(--panel)",
+                  backdropFilter: "blur(14px)",
+                  WebkitBackdropFilter: "blur(14px)",
+                  border: isActive ? `1.5px solid ${c.border}` : "1px solid var(--svf-border)",
+                  boxShadow: isActive
+                    ? `0 0 0 1px ${c.border}, 0 14px 40px -20px ${c.color}`
+                    : "0 8px 24px -16px hsl(0deg 0% 0% / 0.4)",
+                  transform: "none",
+                  transition: "border .25s, box-shadow .25s, transform .25s cubic-bezier(.16,1,.3,1)",
+                }}
+                onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.transform = "translateY(-2px)" }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = "none" }}
+              >
+                {/* radial accent gradient */}
+                <div style={{
+                  position: "absolute", inset: 0,
+                  background: `radial-gradient(120% 120% at 100% 0%, ${c.bg}, transparent 55%)`,
+                  opacity: isActive ? 1 : 0.5,
+                  transition: "opacity .3s",
+                  pointerEvents: "none",
+                }} />
+                <div style={{ position: "relative", padding: "var(--pad, 18px)" }}>
+                  {/* icon + open label */}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                    <div style={{
+                      width: 40, height: 40, borderRadius: 11,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: c.color,
+                      background: c.bg,
+                      border: `1px solid ${c.border}`,
+                    }}>
+                      <Icon style={{ width: 20, height: 20 }} />
+                    </div>
+                    <div style={{
+                      display: "flex", alignItems: "center", gap: 6,
+                      fontSize: 11.5, fontWeight: 600,
+                      color: c.color,
+                      opacity: isActive ? 1 : 0,
+                      transition: "opacity .2s",
+                    }}>
+                      <Maximize2 style={{ width: 13, height: 13 }} /> Open
+                    </div>
+                  </div>
+
+                  {/* title */}
+                  <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-dim)", marginBottom: 4 }}>
+                    {stat.title}
+                  </div>
+
+                  {/* big number */}
+                  <div style={{ fontFamily: "var(--font-serif)", fontSize: 42, lineHeight: 1, letterSpacing: "0.01em", color: "var(--text)" }}>
+                    <AnimatedCounter value={stat.value} duration={800 + index * 100} />
+                  </div>
+
+                  {/* sub-values */}
+                  {'subValues' in stat && (
+                    <div style={{ display: "flex", gap: 16, marginTop: 12 }}>
+                      {stat.subValues.map((sv) => (
+                        <div key={sv.label} style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                          <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{sv.value}</span>
+                          <span style={{ fontSize: 11.5, color: "var(--text-faint)" }}>{sv.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* description */}
+                  <div style={{ fontSize: 11.5, color: "var(--text-faint)", marginTop: 'subValues' in stat ? 12 : 14, lineHeight: 1.4 }}>
+                    {stat.description}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* ── Table (preview below cards) — all logic unchanged ── */}
+      <div>
+        {isSatellite ? (
+          <SatelliteDashboardTable
+            activeCard={satActiveCard}
+            languages={languages}
+            language={language}
+            onLanguageChange={setLanguage}
+            expiryYear={satExpiryYear}
+            onExpiryYearChange={handleSatYearChange}
+            expiryFrom={satExpiryFrom}
+            expiryTo={satExpiryTo}
+            onExpiryFromChange={(v) => { setSatExpiryFrom(v); setSatExpiryYear('custom') }}
+            onExpiryToChange={(v) => { setSatExpiryTo(v); setSatExpiryYear('custom') }}
+            yearOptions={yearOptions}
+          />
+        ) : (
+          <InternetDashboardTable
+            activeCard={intActiveCard}
+            languages={languages}
+            language={language}
+            onLanguageChange={setLanguage}
+            expiryYear={intExpiryYear}
+            onExpiryYearChange={handleIntYearChange}
+            expiryFrom={intExpiryFrom}
+            expiryTo={intExpiryTo}
+            onExpiryFromChange={(v) => { setIntExpiryFrom(v); setIntExpiryYear('custom') }}
+            onExpiryToChange={(v) => { setIntExpiryTo(v); setIntExpiryYear('custom') }}
+            yearOptions={yearOptions}
+          />
+        )}
       </div>
     </div>
   )

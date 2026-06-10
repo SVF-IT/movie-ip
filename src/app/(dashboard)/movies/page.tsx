@@ -4,10 +4,9 @@ import { ComprehensiveCSVImportDialog } from "@/components/import-export/compreh
 import type { ExportFieldDef } from "@/components/import-export/data-export-dialog";
 import { BulkPostersUploadDialog } from "@/components/movies/bulk-posters-upload-dialog";
 import { RoleGate } from "@/components/role-gate";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
@@ -35,21 +34,20 @@ import { useAppToast } from "@/hooks/use-app-toast";
 import { getDistinctCertifications, getPlatforms, getRightsNatureTypes } from "@/lib/api/dashboard";
 import { getBulkMoviePlatformRights, getGroupedMovies, getLanguages } from "@/lib/api/movies";
 import type { ApprovalStatus, GroupedMovie, MovieLanguageVersion, Platform, PlatformRight, RightsNatureType } from "@/lib/types/database";
-import * as XLSX from "xlsx";
 import { cn } from "@/lib/utils";
 import {
   Activity,
-  AlertTriangle,
   Calendar,
   ChevronDown, ChevronLeft, ChevronRight,
   Download, Edit, ExternalLink, Film,
   Image as ImageIcon,
   Languages,
-  LayoutGrid, Loader2, Plus, Search, Settings2, ShieldCheck,
-  Upload
+  LayoutGrid, List, Loader2, Plus, Search, Settings2, ShieldCheck,
+  Upload, X
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import * as XLSX from "xlsx";
 
 export default function MoviesPage() {
   const { profile } = useAuth();
@@ -85,6 +83,7 @@ export default function MoviesPage() {
   const [exportWithPlatformRights, setExportWithPlatformRights] = useState(false);
   const [exportingXlsx, setExportingXlsx] = useState(false);
   const [showBulkPostersDialog, setShowBulkPostersDialog] = useState(false);
+  const [view, setView] = useState<"list" | "grid">("list");
   const pageSize = 50;
 
   const currentYear = new Date().getFullYear();
@@ -110,13 +109,13 @@ export default function MoviesPage() {
   const fetchMovies = useCallback(async () => {
     try {
       setLoading(true);
-  
+
       const source = (sourceFilter === "all" || sourceFilter === "jointly_owned") ? undefined : (sourceFilter as "home_production" | "acquired" | "expired");
 
       const { data: allGroupedData } = await getGroupedMovies({
         source,
         search: searchQuery || undefined,
-        language: languageFilter !== "all" ? languageFilter : undefined,
+        language: (versionFilter === "multi") ? undefined : (languageFilter !== "all" ? languageFilter : undefined),
         certification: certificationFilter.length > 0 ? certificationFilter : undefined,
         yearFrom: yearFrom ? new Date(yearFrom).getFullYear() : undefined,
         yearTo: yearTo ? new Date(yearTo).getFullYear() : undefined,
@@ -392,6 +391,7 @@ export default function MoviesPage() {
 
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return "—";
+    if (dateStr.startsWith("3099") || dateStr.startsWith("9999")) return "Perpetual";
     return new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   };
 
@@ -424,68 +424,34 @@ export default function MoviesPage() {
   const showAgreementEndCol = sourceFilter !== "home_production" && sourceFilter !== "jointly_owned";
   const showMultiVersionCol = versionFilter === "multi";
 
+  // Duotone hue per movie for poster
+  const movieHue = (movie: GroupedMovie, idx: number) => {
+    const langHues: Record<string, number> = { bengali: 260, hindi: 14, tamil: 160, telugu: 200, malayalam: 130, kannada: 290, marathi: 50 };
+    const langKey = (movie.primary_version?.language || "").toLowerCase();
+    return langHues[langKey] ?? (idx * 37 + 14) % 360;
+  };
+
   return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <div className="relative overflow-hidden rounded-xl bg-slate-900/60 border border-slate-800/60 backdrop-blur-xl p-6 shadow-2xl">
-        <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-red-600 via-amber-500 to-transparent" />
-        <div className="absolute top-4 right-4 w-48 h-48 bg-red-600/5 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-2 right-24 w-32 h-32 bg-amber-500/5 rounded-full blur-2xl pointer-events-none" />
+    <div className="space-y-4">
 
-        <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20">
-              <Film className="h-7 w-7 text-red-400" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-100">
-                Movie Catalog
-              </h1>
-              <p className="text-slate-400 text-sm mt-0.5">Browse and manage your film library and intellectual property rights.</p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <RoleGate action="export" resource="movie">
-              <Button variant="outline" size="sm" className="gap-2 h-9 px-4 bg-slate-800/60 border-slate-700/60 text-slate-300 hover:bg-slate-700/60 hover:text-slate-100" onClick={() => setShowExportDialog(true)}>
-                <Download className="h-4 w-4" /><span>Export</span>
-              </Button>
-            </RoleGate>
-            <Button variant="outline" size="sm" className="gap-2 h-9 px-4 bg-slate-800/60 border-slate-700/60 text-slate-300 hover:bg-slate-700/60 hover:text-slate-100" onClick={() => setShowBulkPostersDialog(true)}>
-              <ImageIcon className="h-4 w-4" /><span>Bulk Posters</span>
-            </Button>
-            <RoleGate action="import" resource="movie">
-              <Button variant="outline" size="sm" className="gap-2 h-9 px-4 bg-slate-800/60 border-slate-700/60 text-slate-300 hover:bg-slate-700/60 hover:text-slate-100" onClick={() => setShowImportDialog(true)}>
-                <Upload className="h-4 w-4" /><span>Upload CSV</span>
-              </Button>
-            </RoleGate>
-            <RoleGate action="create" resource="movie">
-              <Button asChild size="sm" className="gap-2 h-9 px-4 bg-red-600 hover:bg-red-500 text-white border-0 shadow-lg shadow-red-900/30">
-                <Link href="/movies/new"><Plus className="h-4 w-4" /><span>New Movie</span></Link>
-              </Button>
-            </RoleGate>
-          </div>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <Card className="glass-card border-slate-800/60 overflow-hidden">
-        <CardContent className="p-5 space-y-4">
+      {/* Filters — all original filters restored */}
+      <Card className="glass-card overflow-hidden">
+        <CardContent className="px-4 py-3">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
             <div className="col-span-2 sm:col-span-1 xl:col-span-2">
-              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5 block">Movie Keywords</label>
+              <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Movie Keywords</label>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5" style={{ color: "var(--text-faint)" }} />
                 <Input placeholder="Title, Director, Cast…" value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 h-9 bg-slate-950/40 border-slate-700/50 text-slate-200 placeholder:text-slate-400 text-sm focus-visible:ring-red-500/40 focus-visible:border-red-500/60" />
+                  className="pl-9 h-9" />
               </div>
             </div>
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5 block">Source</label>
+              <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Source</label>
               <Select value={sourceFilter} onValueChange={handleSourceChange}>
-                <SelectTrigger className="h-9 w-full bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm">
-                  <div className="flex items-center gap-2"><Film className="h-3.5 w-3.5 text-slate-400 shrink-0" /><SelectValue placeholder="All Sources" /></div>
+                <SelectTrigger className="h-9 w-full">
+                  <div className="flex items-center gap-2"><Film className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} /><SelectValue placeholder="All Sources" /></div>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Sources</SelectItem>
@@ -497,10 +463,10 @@ export default function MoviesPage() {
               </Select>
             </div>
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5 block">Language</label>
+              <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Language</label>
               <Select value={languageFilter} onValueChange={(v) => { setLanguageFilter(v); setPage(0); }}>
-                <SelectTrigger className="h-9 w-full bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm">
-                  <div className="flex items-center gap-2"><Languages className="h-3.5 w-3.5 text-slate-400 shrink-0" /><SelectValue placeholder="Language" /></div>
+                <SelectTrigger className="h-9 w-full">
+                  <div className="flex items-center gap-2"><Languages className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} /><SelectValue placeholder="Language" /></div>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Languages</SelectItem>
@@ -509,12 +475,12 @@ export default function MoviesPage() {
               </Select>
             </div>
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5 block">Certification</label>
+              <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Certification</label>
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" className="h-9 w-full justify-between bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm font-normal hover:bg-slate-800/60">
+                  <Button variant="outline" className="h-9 w-full justify-between text-sm font-normal">
                     <div className="flex items-center gap-2 truncate">
-                      <ShieldCheck className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                      <ShieldCheck className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} />
                       <span className="truncate">
                         {certificationFilter.length === 0
                           ? "All Certs"
@@ -528,30 +494,23 @@ export default function MoviesPage() {
                     <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-40" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-52 p-0 bg-slate-900 border-slate-700/60" align="start">
-                  <div className="p-2 border-b border-slate-800/60 space-y-0.5">
-                    <label className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-800/60 cursor-pointer text-sm text-slate-300">
-                      <Checkbox
-                        checked={certificationFilter.length === 0}
-                        onCheckedChange={() => { setCertificationFilter([]); setPage(0); }}
-                      />
+                <PopoverContent className="w-52 p-0" align="start" style={{ background: "var(--panel-solid)", border: "1px solid var(--svf-border-strong)", borderRadius: 11 }}>
+                  <div className="p-2 space-y-0.5" style={{ borderBottom: "1px solid var(--svf-border)" }}>
+                    <label className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-sm" style={{ color: "var(--text-dim)" }}>
+                      <Checkbox checked={certificationFilter.length === 0} onCheckedChange={() => { setCertificationFilter([]); setPage(0); }} />
                       <span className="font-medium">All</span>
                     </label>
-                    <label className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-800/60 cursor-pointer text-sm text-slate-300">
+                    <label className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-sm" style={{ color: "var(--text-dim)" }}>
                       <Checkbox
                         checked={certificationFilter.length > 0 && !certificationFilter.includes("A") && certificationOptions.filter(c => c !== "A").every(c => certificationFilter.includes(c))}
-                        onCheckedChange={() => {
-                          const exceptA = certificationOptions.filter(c => c !== "A");
-                          setCertificationFilter(exceptA);
-                          setPage(0);
-                        }}
+                        onCheckedChange={() => { setCertificationFilter(certificationOptions.filter(c => c !== "A")); setPage(0); }}
                       />
                       <span className="font-medium">Except A</span>
                     </label>
                   </div>
                   <div className="max-h-56 overflow-y-auto p-2 space-y-0.5">
                     {certificationOptions.map((cert) => (
-                      <label key={cert} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-800/60 cursor-pointer text-sm text-slate-300">
+                      <label key={cert} className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-sm" style={{ color: "var(--text-dim)" }}>
                         <Checkbox checked={certificationFilter.includes(cert)}
                           onCheckedChange={(checked) => {
                             setCertificationFilter(prev => checked ? [...prev, cert] : prev.filter(c => c !== cert));
@@ -565,10 +524,10 @@ export default function MoviesPage() {
               </Popover>
             </div>
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5 block">Versions</label>
+              <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Versions</label>
               <Select value={versionFilter} onValueChange={(v) => { setVersionFilter(v); setPage(0); }}>
-                <SelectTrigger className="h-9 w-full bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm">
-                  <div className="flex items-center gap-2"><Languages className="h-3.5 w-3.5 text-slate-400 shrink-0" /><SelectValue placeholder="All Versions" /></div>
+                <SelectTrigger className="h-9 w-full">
+                  <div className="flex items-center gap-2"><Languages className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} /><SelectValue placeholder="All Versions" /></div>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Movies</SelectItem>
@@ -578,10 +537,10 @@ export default function MoviesPage() {
               </Select>
             </div>
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5 block">Nature</label>
+              <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Nature</label>
               <Select value={natureFilter} onValueChange={(v) => { setNatureFilter(v); setPage(0); }}>
-                <SelectTrigger className="h-9 w-full bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm">
-                  <div className="flex items-center gap-2"><ShieldCheck className="h-3.5 w-3.5 text-slate-400 shrink-0" /><SelectValue placeholder="Any Nature" /></div>
+                <SelectTrigger className="h-9 w-full">
+                  <div className="flex items-center gap-2"><ShieldCheck className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} /><SelectValue placeholder="Any Nature" /></div>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Any Nature</SelectItem>
@@ -591,10 +550,10 @@ export default function MoviesPage() {
               </Select>
             </div>
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5 block">Territory</label>
+              <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Territory</label>
               <Select value={territoryFilter} onValueChange={(v) => { setTerritoryFilter(v === "all" ? "" : v); setPage(0); }}>
-                <SelectTrigger className="h-9 w-full bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm">
-                  <div className="flex items-center gap-2"><LayoutGrid className="h-3.5 w-3.5 text-slate-400 shrink-0" /><SelectValue placeholder="All Territories" /></div>
+                <SelectTrigger className="h-9 w-full">
+                  <div className="flex items-center gap-2"><LayoutGrid className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} /><SelectValue placeholder="All Territories" /></div>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Territories</SelectItem>
@@ -605,28 +564,18 @@ export default function MoviesPage() {
               </Select>
             </div>
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5 block">Release From</label>
-              <Input
-                type="date"
-                value={yearFrom}
-                onChange={(e) => { setYearFrom(e.target.value); setPage(0); }}
-                className="h-9 w-full bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm focus-visible:ring-red-500/40"
-              />
+              <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Release From</label>
+              <Input type="date" value={yearFrom} onChange={(e) => { setYearFrom(e.target.value); setPage(0); }} className="h-9 w-full" />
             </div>
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5 block">Release To</label>
-              <Input
-                type="date"
-                value={yearTo}
-                onChange={(e) => { setYearTo(e.target.value); setPage(0); }}
-                className="h-9 w-full bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm focus-visible:ring-red-500/40"
-              />
+              <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Release To</label>
+              <Input type="date" value={yearTo} onChange={(e) => { setYearTo(e.target.value); setPage(0); }} className="h-9 w-full" />
             </div>
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5 block">Sort By</label>
+              <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Sort By</label>
               <Select value={sortBy} onValueChange={(v: any) => { setSortBy(v); setPage(0); }}>
-                <SelectTrigger className="h-9 w-full bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm">
-                  <div className="flex items-center gap-2"><Settings2 className="h-3.5 w-3.5 text-slate-400 shrink-0" /><SelectValue /></div>
+                <SelectTrigger className="h-9 w-full">
+                  <div className="flex items-center gap-2"><Settings2 className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} /><SelectValue /></div>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="title_asc">A–Z (Title)</SelectItem>
@@ -637,304 +586,384 @@ export default function MoviesPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {canFilterByApproval && (
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>
+                  {canSeeAllStatuses ? "Approval" : "Show"}
+                </label>
+                <Select value={approvalFilter} onValueChange={(v) => { setApprovalFilter(v as ApprovalStatus | "all"); setPage(0); }}>
+                  <SelectTrigger className="h-9 w-full">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} />
+                      <SelectValue placeholder="All" />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Movies</SelectItem>
+                    <SelectItem value="approved">Approved only</SelectItem>
+                    <SelectItem value="pending">Pending Review</SelectItem>
+                    <SelectItem value="rejected">Rejected</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {hasFilters && (
+              <div className="flex items-end">
+                <Button variant="outline" size="sm" className="h-9 gap-1.5 w-full bg-red-500/5 border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50" onClick={() => {
+                  setSearchQuery(""); setSourceFilter("all"); setVersionFilter("all"); setNatureFilter("all");
+                  setLanguageFilter(languages.find(l => l.toLowerCase() === "bengali") ?? "all");
+                  setCertificationFilter([]); setYearFrom(""); setYearTo(""); setTerritoryFilter("");
+                  setAgreementExpiryYear("all"); setApprovalFilter(canSeeAllStatuses ? "approved" : "all"); setPage(0);
+                }}>
+                  <X className="h-3.5 w-3.5" />Clear Filters
+                </Button>
+              </div>
+            )}
           </div>
 
-          {canFilterByApproval && (
-            <div className="pt-3 border-t border-slate-800/40 flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                <ShieldCheck className="h-3.5 w-3.5" />
-                {canSeeAllStatuses ? "Approval Status:" : "Show:"}
-              </div>
-              <Select value={approvalFilter} onValueChange={(v) => { setApprovalFilter(v as ApprovalStatus | "all"); setPage(0); }}>
-                <SelectTrigger className="h-9 w-44 bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm">
-                  <SelectValue placeholder="All" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Movies</SelectItem>
-                  <SelectItem value="approved">Approved only</SelectItem>
-                  <SelectItem value="pending">Pending Review</SelectItem>
-                  <SelectItem value="rejected">Rejected</SelectItem>
-                </SelectContent>
-              </Select>
-              {!canSeeAllStatuses && approvalFilter !== "approved" && (
-                <p className="text-[10px] text-slate-500">
-                  Approved movies are visible to all users in the catalog.
-                </p>
-              )}
-            </div>
-          )}
-
           {showAgreementExpiry && (
-            <div className="pt-3 border-t border-slate-800/40 flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                <Calendar className="h-3.5 w-3.5" />
-                Agreement Expiry Year:
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 pt-2" style={{ borderTop: "1px solid var(--svf-border)" }}>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Agreement Expiry</label>
+                <Select value={agreementExpiryYear} onValueChange={(v) => { setAgreementExpiryYear(v); setPage(0); }}>
+                  <SelectTrigger className="h-9 w-full">
+                    <div className="flex items-center gap-2"><Calendar className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} /><SelectValue placeholder="Any Year" /></div>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Any Year</SelectItem>
+                    {expiryYearOptions.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
-              <Select value={agreementExpiryYear} onValueChange={(v) => { setAgreementExpiryYear(v); setPage(0); }}>
-                <SelectTrigger className="h-9 w-40 bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm">
-                  <SelectValue placeholder="Any Year" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Any Year</SelectItem>
-                  {expiryYearOptions.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              {agreementExpiryYear !== "all" && (
-                <p className="text-xs text-slate-400">
-                  Agreements expiring in <span className="font-semibold text-slate-300">{agreementExpiryYear}</span>
-                </p>
-              )}
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Table */}
-      <Card className="glass-card border-slate-800/60 overflow-hidden">
-        <CardHeader className="py-4 px-6 border-b border-slate-800/60">
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2.5 text-sm font-bold text-slate-200">
-              <Film className="h-4 w-4 text-red-400" />
-              Film Library
-              <Badge className="ml-0.5 bg-slate-800/80 text-slate-300 border-slate-700/50 font-medium text-xs">
-                {loading ? "…" : totalCount}
-              </Badge>
-            </CardTitle>
-            {totalCount > pageSize && (
-              <p className="text-xs text-slate-400">
-                {page * pageSize + 1}–{Math.min((page + 1) * pageSize, totalCount)} of {totalCount}
-              </p>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
+      {/* Count + actions + view toggle — all in one row */}
+      <div className="flex flex-wrap items-center gap-2">
+        <RoleGate action="import" resource="movie">
+          <Button variant="outline" size="sm" className="gap-2 h-9 px-4 bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20 hover:border-amber-500/50 hover:text-amber-300" onClick={() => setShowImportDialog(true)}>
+            <Upload className="h-4 w-4" /><span>Upload CSV</span>
+          </Button>
+        </RoleGate>
+        {!loading && (
+          <p className="text-xs" style={{ color: "var(--text-faint)" }}>
+            <strong style={{ color: "var(--text)" }}>{totalCount}</strong> films
+          </p>
+        )}
+        <div className="flex-1" />
+        <RoleGate action="export" resource="movie">
+          <Button variant="outline" size="sm" className="gap-2 h-9 px-4 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) hover:bg-(--hover)" onClick={() => setShowExportDialog(true)}>
+            <Download className="h-4 w-4" /><span>Export</span>
+          </Button>
+        </RoleGate>
+        {/* <Button variant="outline" size="sm" className="gap-2 h-9 px-4" onClick={() => setShowBulkPostersDialog(true)}>
+          <ImageIcon className="h-4 w-4" /><span>Bulk Posters</span>
+        </Button> */}
+        <RoleGate action="create" resource="movie">
+          <Button asChild size="sm" className="gap-2 h-9 px-4">
+            <Link href="/movies/new"><Plus className="h-4 w-4" /><span>New Movie</span></Link>
+          </Button>
+        </RoleGate>
+        {/* Grid / List toggle */}
+        <div style={{
+          display: "inline-flex", gap: 3, padding: 4, borderRadius: 11,
+          background: "var(--bg-deep)", border: "1px solid var(--svf-border)",
+        }}>
+          {([{ v: "grid" as const, icon: LayoutGrid }, { v: "list" as const, icon: List }]).map(({ v, icon: Icon }) => (
+            <button key={v} onClick={() => setView(v)} style={{
+              display: "inline-flex", alignItems: "center", justifyContent: "center",
+              width: 34, height: 30, borderRadius: 8, cursor: "pointer",
+              border: view === v ? "1px solid var(--svf-border-strong)" : "1px solid transparent",
+              background: view === v ? "var(--bg-raise)" : "transparent",
+              color: view === v ? "var(--text)" : "var(--text-faint)",
+              transition: "all .15s ease",
+            }}>
+              <Icon style={{ width: 15, height: 15 }} />
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Grid view ── */}
+      {view === "grid" && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))", gap: 22 }}>
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-3">
-              <Loader2 className="h-7 w-7 animate-spin text-red-400/60" />
-              <p className="text-slate-400 text-sm">Loading catalog…</p>
+            <div className="col-span-full flex justify-center py-20">
+              <Loader2 className="h-7 w-7 animate-spin" style={{ color: "var(--svf-accent)" }} />
             </div>
           ) : movies.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-3">
-              <div className="p-4 rounded-full bg-slate-800/50 border border-slate-700/40">
-                <Film className="h-8 w-8 text-slate-400" />
-              </div>
-              <p className="text-slate-400 font-medium">No movies found</p>
-              <p className="text-slate-400 text-sm">Try adjusting your filters</p>
+            <div className="col-span-full flex flex-col items-center justify-center py-20 gap-3">
+              <Film className="h-8 w-8" style={{ color: "var(--text-faint)" }} />
+              <p style={{ color: "var(--text-faint)" }}>No movies found</p>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-slate-800/60 hover:bg-transparent">
-                    <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400 pl-6">Title</TableHead>
-                    <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Source</TableHead>
-                    <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hidden sm:table-cell">Release</TableHead>
-                    <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hidden md:table-cell">Cert</TableHead>
-                    {showMultiVersionCol && <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hidden lg:table-cell">Languages</TableHead>}
-                    {showJointProdCols && (
-                      <>
-                        <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hidden lg:table-cell">Rev Share</TableHead>
-                        <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hidden lg:table-cell">Prod House</TableHead>
-                      </>
+          ) : movies.map((movie, idx) => {
+            const pv = movie.primary_version || movie.versions[0];
+            const movieId = pv?.id;
+            const hue = movieHue(movie, idx);
+            const hue2 = (hue + 40) % 360;
+            return (
+              <Link key={movie.production_no ?? idx} href={`/movies/${movieId}`} className="group block">
+                <div className="relative rounded-[10px] overflow-hidden" style={{
+                  aspectRatio: "2/3",
+                  background: `linear-gradient(150deg, oklch(0.42 0.13 ${hue}) 0%, oklch(0.26 0.10 ${hue}) 42%, oklch(0.17 0.06 ${hue2}) 100%)`,
+                  border: "1px solid var(--svf-border)",
+                  transition: "transform .28s cubic-bezier(.16,1,.3,1)",
+                }}
+                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.transform = "translateY(-4px)"}
+                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.transform = "none"}
+                >
+                  <img
+                    src={`https://fileapi.mni.agency/api/FileFolderManager/PreviewFile?path=%2Fmnt%2Fmni%2FMoviePoster%2F${encodeURIComponent(movie.title)}.jpg&userId=1&platform=WebMicrosoft%20Windows%20NT%2010.0.20348.0`}
+                    alt={movie.title}
+                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                  />
+                  {movie.production_no && (
+                    <span className="absolute top-2 left-2" style={{ fontFamily: "var(--font-mono)", fontSize: 9, letterSpacing: "0.07em", color: "rgba(255,255,255,0.55)" }}>
+                      {movie.production_no}
+                    </span>
+                  )}
+                  {pv?.wtp_library && (
+                    <span className="absolute top-2 right-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: "oklch(0.70 0.16 305 / 0.3)", color: "oklch(0.85 0.10 305)", backdropFilter: "blur(4px)" }}>WTP</span>
+                  )}
+                  <div className="absolute bottom-0 left-0 right-0 px-2.5 pb-2.5 pt-8" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.82) 0%, transparent 100%)" }}>
+                    <p className="leading-tight text-white line-clamp-2" style={{ fontFamily: "var(--font-serif)", fontSize: 16, textShadow: "0 2px 10px rgba(0,0,0,0.5)" }}>
+                      {movie.title}
+                    </p>
+                    <p style={{ fontSize: 10, marginTop: 4, color: "rgba(255,255,255,0.6)", fontFamily: "var(--font-mono)" }}>
+                      {movie.release_year || (pv?.release_date ? new Date(pv.release_date).getFullYear() : "")}
+                      {pv?.language ? ` · ${pv.language}` : ""}
+                    </p>
+                  </div>
+                </div>
+                <div style={{ padding: "10px 2px 4px" }}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold truncate" style={{ fontSize: 13.5, color: "var(--text)" }}>{movie.title}</span>
+                    {movie.certification && (
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 5, border: "1px solid var(--svf-border)", color: "var(--text-faint)", flexShrink: 0 }}>{movie.certification}</span>
                     )}
-                    <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hidden lg:table-cell">Rights</TableHead>
-                    {showAgreementEndCol && <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hidden xl:table-cell">Agreement End</TableHead>}
-                    {showBuyBackCol && <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hidden xl:table-cell">Buy Back</TableHead>}
-                    <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hidden xl:table-cell">WTP</TableHead>
-                    <TableHead className="text-right text-[10px] font-bold uppercase tracking-widest text-slate-400 pr-6">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {movies.map((movie) => {
-                    const pv = movie.primary_version || movie.versions[0];
-                    const movieId = pv?.id;
-                    const isSold = movie.nature_of_rights?.toLowerCase().includes("sold");
-                    const isAcquired = movie.source === "acquired" && !isSold;
-                    const isExpiredAgreement = pv?.agreement_end_date && new Date(pv.agreement_end_date) < new Date();
-                    const isExpired = isExpiredAgreement || isSold;
+                  </div>
+                  <p className="truncate" style={{ fontSize: 11.5, color: "var(--text-faint)", marginTop: 2 }}>
+                    {pv?.director_names?.split(/[,&]/)[0]?.trim() || ""}
+                  </p>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
 
-                    return (
-                      <TableRow key={movie.production_no} className="border-slate-800/40 hover:bg-slate-800/30 transition-colors group">
-                        <TableCell className="pl-6 max-w-xs py-3.5">
-                          <Link
-                            href={`/movies/${movieId}`}
-                            className="font-semibold text-sm text-slate-200 hover:text-red-400 transition-colors line-clamp-1 block"
-                          >
-                            {movie.title}
-                          </Link>
-                          {movie.production_no && (
-                            <span className="text-[10px] text-slate-400 font-mono mt-0.5 block">{movie.production_no}</span>
-                          )}
-                        </TableCell>
+      {/* ── Table / list view (default) ── */}
+      {view === "list" && (
+        <div className="glass-card overflow-hidden">
+          <div>
+            {loading ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
+                <Loader2 className="h-7 w-7 animate-spin" style={{ color: "var(--svf-accent)" }} />
+                <p className="text-sm" style={{ color: "var(--text-faint)" }}>Loading catalog…</p>
+              </div>
+            ) : movies.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3">
+                <div className="p-4 rounded-full" style={{ background: "var(--hover)", border: "1px solid var(--svf-border)" }}>
+                  <Film className="h-8 w-8" style={{ color: "var(--text-faint)" }} />
+                </div>
+                <p className="font-medium" style={{ color: "var(--text)" }}>No movies found</p>
+                <p className="text-sm" style={{ color: "var(--text-faint)" }}>Try adjusting your filters</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader style={{ background: "var(--bg-deep)" }}>
+                    <TableRow style={{ borderColor: "var(--svf-border)" }} className="hover:bg-transparent">
+                      <TableHead className="pl-6 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Title</TableHead>
+                      <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Source</TableHead>
+                      <TableHead className="hidden sm:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Release</TableHead>
+                      <TableHead className="hidden md:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Cert</TableHead>
+                      {showMultiVersionCol && <TableHead className="hidden lg:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Languages</TableHead>}
+                      {showJointProdCols && (
+                        <>
+                          <TableHead className="hidden lg:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Rev Share</TableHead>
+                          <TableHead className="hidden lg:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Prod House</TableHead>
+                        </>
+                      )}
+                      <TableHead className="hidden lg:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Rights</TableHead>
+                      {showAgreementEndCol && <TableHead className="hidden xl:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Agreement End</TableHead>}
+                      {showBuyBackCol && <TableHead className="hidden xl:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Buy Back</TableHead>}
+                      <TableHead className="hidden xl:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">WTP</TableHead>
+                      <TableHead className="text-right pr-6 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {movies.map((movie, idx) => {
+                      const pv = movie.primary_version || movie.versions[0];
+                      const movieId = pv?.id;
+                      const isSold = movie.nature_of_rights?.toLowerCase().includes("sold");
+                      const isAcquired = movie.source === "acquired" && !isSold;
+                      const isExpiredAgreement = pv?.agreement_end_date && new Date(pv.agreement_end_date) < new Date();
+                      const isExpired = isExpiredAgreement || isSold;
+                      const hue = movieHue(movie, idx);
+                      const hue2 = (hue + 40) % 360;
 
-                        <TableCell className="py-3.5">
-                          <div className="flex flex-col gap-1">
-                            <Badge
-                              variant="outline"
-                              className={cn("text-[10px] w-fit font-semibold px-2 py-0.5",
-                                movie.source === "acquired"
-                                  ? "bg-violet-500/10 text-violet-400 border-violet-500/25"
-                                  : (movie.nature_of_rights === "Jointly Owned")
-                                    ? "bg-amber-500/10 text-amber-400 border-amber-500/25"
+                      return (
+                        <TableRow key={movie.production_no} style={{ borderColor: "var(--svf-border)" }} className="transition-colors group">
+                          <TableCell className="pl-6 max-w-xs py-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                              {/* Mini poster */}
+                              <div style={{
+                                width: 28, height: 40, borderRadius: 5, flexShrink: 0,
+                                background: `linear-gradient(150deg, oklch(0.42 0.13 ${hue}) 0%, oklch(0.26 0.10 ${hue}) 42%, oklch(0.17 0.06 ${hue2}) 100%)`,
+                                border: "1px solid var(--svf-border)", position: "relative", overflow: "hidden",
+                              }}>
+                                <img
+                                  src={`https://fileapi.mni.agency/api/FileFolderManager/PreviewFile?path=%2Fmnt%2Fmni%2FMoviePoster%2F${encodeURIComponent(movie.title)}.jpg&userId=1&platform=WebMicrosoft%20Windows%20NT%2010.0.20348.0`}
+                                  alt={movie.title}
+                                  style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+                                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                                />
+                                <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "45%", background: "linear-gradient(to top, rgba(0,0,0,0.65), transparent)" }} />
+                              </div>
+                              <div className="min-w-0">
+                                <Link href={`/movies/${movieId}`} className="font-semibold text-sm hover:text-red-400 transition-colors line-clamp-1 block" style={{ color: "var(--text)" }}>
+                                  {movie.title}
+                                </Link>
+                                {movie.production_no && movie.source !== "acquired" && (
+                                  <span className="text-[10px] font-mono mt-0.5 block" style={{ color: "var(--text-faint)" }}>{movie.production_no}</span>
+                                )}
+                              </div>
+                            </div>
+                          </TableCell>
+
+                          <TableCell className="py-3">
+                            <div className="flex flex-col gap-1">
+                              <Badge variant="outline" className={cn("text-[10px] w-fit font-semibold px-2 py-0.5",
+                                movie.source === "acquired" ? "bg-violet-500/10 text-violet-400 border-violet-500/25"
+                                  : (movie.nature_of_rights === "Jointly Owned") ? "bg-amber-500/10 text-amber-400 border-amber-500/25"
                                     : "bg-indigo-500/10 text-indigo-400 border-indigo-500/25"
-                              )}
-                            >
-                              {movie.source === "acquired" ? "Acquired" :
-                                (movie.nature_of_rights === "Jointly Owned") ? "Jointly Owned" : "Home"}
-                            </Badge>
-                            {isExpired && (
-                              <Badge variant="outline" className="text-[10px] w-fit font-semibold px-2 py-0.5 bg-red-500/10 text-red-400 border-red-500/25">
-                                Expired
+                              )}>
+                                {movie.source === "acquired" ? "Acquired" : (movie.nature_of_rights === "Jointly Owned") ? "Jointly Owned" : "Home"}
                               </Badge>
-                            )}
-                            {canFilterByApproval && (movie as any).approval_status === "pending" && (
-                              <Badge variant="outline" className="text-[10px] w-fit font-semibold px-2 py-0.5 bg-yellow-500/10 text-yellow-400 border-yellow-500/25">
-                                Pending
-                              </Badge>
-                            )}
-                            {canFilterByApproval && (movie as any).approval_status === "rejected" && (
-                              <Badge variant="outline" className="text-[10px] w-fit font-semibold px-2 py-0.5 bg-red-500/10 text-red-400 border-red-500/25">
-                                Rejected
-                              </Badge>
-                            )}
-                          </div>
-                        </TableCell>
+                              {isExpired && <Badge variant="destructive" className="text-[10px] w-fit font-semibold px-2 py-0.5">Expired</Badge>}
+                              {canFilterByApproval && (movie as any).approval_status === "pending" && <Badge variant="warning" className="text-[10px] w-fit font-semibold px-2 py-0.5">Pending</Badge>}
+                              {canFilterByApproval && (movie as any).approval_status === "rejected" && <Badge variant="destructive" className="text-[10px] w-fit font-semibold px-2 py-0.5">Rejected</Badge>}
+                            </div>
+                          </TableCell>
 
-                        <TableCell className="hidden sm:table-cell text-xs tabular-nums text-slate-400 py-3.5">
-                          {pv?.release_date ? new Date(pv.release_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : (movie.release_year || "—")}
-                        </TableCell>
+                          <TableCell className="hidden sm:table-cell text-xs tabular-nums py-3" style={{ color: "var(--text-faint)" }}>
+                            {pv?.release_date ? new Date(pv.release_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : (movie.release_year || "—")}
+                          </TableCell>
 
-                        <TableCell className="hidden md:table-cell py-3.5">
-                          {movie.certification ? (
-                            <Badge variant="outline" className="text-[10px] font-bold bg-slate-800/60 text-slate-400 border-slate-700/50">{movie.certification}</Badge>
-                          ) : <span className="text-slate-400 text-xs">—</span>}
-                        </TableCell>
+                          <TableCell className="hidden md:table-cell py-3">
+                            {movie.certification ? (
+                              <Badge variant="secondary" className="text-[10px] font-bold">{movie.certification}</Badge>
+                            ) : <span className="text-xs" style={{ color: "var(--text-faint)" }}>—</span>}
+                          </TableCell>
 
-                        {showMultiVersionCol && (
-                          <TableCell className="hidden lg:table-cell py-3.5">
-                            {movie.total_versions > 1 && (
+                          {showMultiVersionCol && (
+                            <TableCell className="hidden lg:table-cell py-3">
                               <div className="flex items-center gap-1.5">
-                                <span className="text-xs text-slate-400">{movie.total_versions}</span>
+                                <span className="text-xs" style={{ color: "var(--text-faint)" }}>{movie.total_versions}</span>
                                 <div className="flex -space-x-1">
                                   {movie.versions.slice(0, 3).map((v) => (
-                                    <div key={v.id} className="h-5 w-5 rounded-full bg-red-500/10 border border-slate-800 flex items-center justify-center text-[8px] font-bold text-red-400" title={v.language}>
+                                    <div key={v.id} className="h-5 w-5 rounded-full flex items-center justify-center text-[8px] font-bold" style={{ background: "color-mix(in oklch, var(--svf-accent) 12%, transparent)", border: "1px solid var(--svf-border)", color: "var(--svf-accent-bright)" }} title={v.language}>
                                       {v.language?.substring(0, 2).toUpperCase()}
                                     </div>
                                   ))}
                                   {movie.total_versions > 3 && (
-                                    <div className="h-5 w-5 rounded-full bg-slate-800/60 border border-slate-700 flex items-center justify-center text-[8px] font-bold text-slate-400">
+                                    <div className="h-5 w-5 rounded-full flex items-center justify-center text-[8px] font-bold" style={{ background: "var(--hover)", border: "1px solid var(--svf-border)", color: "var(--text-faint)" }}>
                                       +{movie.total_versions - 3}
                                     </div>
                                   )}
                                 </div>
                               </div>
-                            )}
-                          </TableCell>
-                        )}
-
-                        {showJointProdCols && (
-                          <>
-                            <TableCell className="hidden lg:table-cell text-xs text-slate-400 py-3.5">
-                              {pv?.revenue_share || "—"}
                             </TableCell>
-                            <TableCell className="hidden lg:table-cell text-xs text-slate-400 py-3.5">
-                              {movie.production_house_name || "—"}
+                          )}
+
+                          {showJointProdCols && (
+                            <>
+                              <TableCell className="hidden lg:table-cell text-xs py-3" style={{ color: "var(--text-faint)" }}>{pv?.revenue_share || "—"}</TableCell>
+                              <TableCell className="hidden lg:table-cell text-xs py-3" style={{ color: "var(--text-faint)" }}>{movie.production_house_name || "—"}</TableCell>
+                            </>
+                          )}
+
+                          <TableCell className="hidden lg:table-cell py-3">
+                            <div className="flex items-center gap-1.5 text-xs">
+                              <Activity className="h-3 w-3" style={{ color: "var(--text-faint)" }} />
+                              <span className="font-semibold" style={{ color: "var(--st-active)" }}>{movie.total_rights - movie.expired_rights}</span>
+                              {movie.expired_rights > 0 && <span style={{ color: "var(--st-expired)", opacity: 0.7 }}>/ {movie.expired_rights} exp</span>}
+                            </div>
+                          </TableCell>
+
+                          {showAgreementEndCol && (
+                            <TableCell className="hidden xl:table-cell py-3">
+                              {isAcquired ? getAgreementEndBadge(pv?.agreement_end_date) : <span className="text-xs" style={{ color: "var(--text-faint)" }}>—</span>}
                             </TableCell>
-                          </>
-                        )}
+                          )}
 
-                        <TableCell className="hidden lg:table-cell py-3.5">
-                          <div className="flex items-center gap-1.5 text-xs">
-                            <Activity className="h-3 w-3 text-slate-400" />
-                            <span className="text-emerald-400 font-semibold">{movie.total_rights - movie.expired_rights}</span>
-                            {movie.expired_rights > 0 && (
-                              <span className="text-rose-500/70">/ {movie.expired_rights} exp</span>
-                            )}
-                          </div>
-                        </TableCell>
+                          {showBuyBackCol && (
+                            <TableCell className="hidden xl:table-cell text-xs tabular-nums py-3" style={{ color: "var(--text-faint)" }}>
+                              {formatDate(pv?.joint_prod_buy_back_date)}
+                            </TableCell>
+                          )}
 
-                        {showAgreementEndCol && (
-                          <TableCell className="hidden xl:table-cell py-3.5">
-                            {isAcquired
-                              ? getAgreementEndBadge(pv?.agreement_end_date)
-                              : <span className="text-slate-400 text-xs">—</span>}
+                          <TableCell className="hidden xl:table-cell py-3">
+                            {pv?.wtp_library ? (
+                              <Badge variant="outline" className="text-[10px] font-semibold" style={{ color: "var(--st-wtp)", background: "color-mix(in oklch, var(--st-wtp) 12%, transparent)", borderColor: "color-mix(in oklch, var(--st-wtp) 28%, transparent)" }}>
+                                {pv.wtp_library}
+                              </Badge>
+                            ) : <span className="text-xs" style={{ color: "var(--text-faint)" }}>—</span>}
                           </TableCell>
-                        )}
 
-                        {showBuyBackCol && (
-                          <TableCell className="hidden xl:table-cell text-xs tabular-nums text-slate-400 py-3.5">
-                            {formatDate(pv?.joint_prod_buy_back_date)}
-                          </TableCell>
-                        )}
-
-                        <TableCell className="hidden xl:table-cell py-3.5">
-                          {pv?.wtp_library ? (
-                            <Badge variant="outline" className="text-[10px] font-semibold bg-red-500/10 text-red-400 border-red-500/25">
-                              {pv.wtp_library}
-                            </Badge>
-                          ) : <span className="text-slate-400 text-xs">—</span>}
-                        </TableCell>
-
-                        <TableCell className="text-right pr-6 py-3.5">
-                          <div className="flex items-center justify-end gap-1">
-                            <RoleGate action="edit" resource="movie">
-                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10" asChild>
-                                <Link href={`/movies/${movieId}/edit`}>
-                                  <Edit className="h-3.5 w-3.5" />
-                                </Link>
+                          <TableCell className="text-right pr-6 py-3">
+                            <div className="flex items-center justify-end gap-1">
+                              <RoleGate action="edit" resource="movie">
+                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 hover:text-amber-400 hover:bg-amber-500/10" style={{ color: "var(--text-faint)" }} asChild>
+                                  <Link href={`/movies/${movieId}/edit`}><Edit className="h-3.5 w-3.5" /></Link>
+                                </Button>
+                              </RoleGate>
+                              <Button variant="ghost" size="sm" className="h-7 w-7 p-0 hover:text-red-400 hover:bg-red-500/10" style={{ color: "var(--text-faint)" }} asChild>
+                                <Link href={`/movies/${movieId}`}><ExternalLink className="h-3.5 w-3.5" /></Link>
                               </Button>
-                            </RoleGate>
-                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-400 hover:text-red-400 hover:bg-red-500/10" asChild>
-                              <Link href={`/movies/${movieId}`}>
-                                <ExternalLink className="h-3.5 w-3.5" />
-                              </Link>
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-
-          {/* Pagination */}
-          {totalCount > pageSize && (
-            <div className="flex items-center justify-between px-6 py-4 border-t border-slate-800/60">
-              <p className="text-xs text-slate-400">
-                {page * pageSize + 1}–{Math.min((page + 1) * pageSize, totalCount)} of {totalCount}
-              </p>
-              <div className="flex items-center gap-1">
-                <Button variant="outline" size="sm" className="h-7 w-7 p-0 bg-slate-800/40 border-slate-700/50 text-slate-400 hover:bg-slate-700/60"
-                  onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>
-                  <ChevronLeft className="h-3.5 w-3.5" />
-                </Button>
-                {[...Array(Math.min(totalPages, 5))].map((_, i) => (
-                  <Button key={i}
-                    variant="outline"
-                    size="sm"
-                    className={cn("h-7 w-7 p-0 text-xs border",
-                      page === i
-                        ? "bg-red-600 border-red-600 text-white hover:bg-red-500"
-                        : "bg-slate-800/40 border-slate-700/50 text-slate-400 hover:bg-slate-700/60"
-                    )}
-                    onClick={() => setPage(i)}>
-                    {i + 1}
-                  </Button>
-                ))}
-                {totalPages > 5 && page >= 5 && (
-                  <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs bg-red-600 border-red-600 text-white">{page + 1}</Button>
-                )}
-                <Button variant="outline" size="sm" className="h-7 w-7 p-0 bg-slate-800/40 border-slate-700/50 text-slate-400 hover:bg-slate-700/60"
-                  onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}>
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
               </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            )}
+
+            {/* Pagination */}
+            {totalCount > pageSize && (
+              <div className="flex items-center justify-between px-6 py-4" style={{ borderTop: "1px solid var(--svf-border)" }}>
+                <p className="text-xs" style={{ color: "var(--text-faint)" }}>
+                  {page * pageSize + 1}–{Math.min((page + 1) * pageSize, totalCount)} of {totalCount}
+                </p>
+                <div className="flex items-center gap-1">
+                  <Button variant="outline" size="sm" className="h-7 w-7 p-0" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </Button>
+                  {[...Array(Math.min(totalPages, 5))].map((_, i) => (
+                    <Button key={i} variant={page === i ? "default" : "outline"} size="sm" className="h-7 w-7 p-0 text-xs" onClick={() => setPage(i)}>
+                      {i + 1}
+                    </Button>
+                  ))}
+                  {totalPages > 5 && page >= 5 && (
+                    <Button variant="default" size="sm" className="h-7 px-2.5 text-xs">{page + 1}</Button>
+                  )}
+                  <Button variant="outline" size="sm" className="h-7 w-7 p-0" onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}>
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
 
       <BulkPostersUploadDialog open={showBulkPostersDialog} onOpenChange={setShowBulkPostersDialog} onSuccess={() => fetchMovies()} />
       <ComprehensiveCSVImportDialog open={showImportDialog} onOpenChange={setShowImportDialog} onSuccess={() => fetchMovies()} />

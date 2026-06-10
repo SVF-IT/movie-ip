@@ -3,7 +3,6 @@
 import { LanguageSelector } from "@/components/forms/language-selector";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileUpload } from "@/components/ui/file-upload";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -55,9 +54,9 @@ const HOME_NATURE_OPTIONS = [
 const HOLDBACK_PRESETS = ["Audio Rights", "Theatrical Exploitation", "FVOD", "AVOD", "SVOD", "TVOD"];
 
 // ── Shared style strings ─────────────────────────────────────────────────────
-const inputCls = "h-9 bg-slate-950/40 border-slate-700/50 text-slate-200 placeholder:text-slate-400 text-sm focus-visible:ring-red-500/40 focus-visible:border-red-500/60";
-const textareaCls = "bg-slate-950/40 border-slate-700/50 text-slate-200 placeholder:text-slate-400 text-sm resize-none focus-visible:ring-red-500/40 focus-visible:border-red-500/60";
-const selectTriggerCls = "h-9 bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm";
+const inputCls = "h-[38px] bg-(--bg-raise) border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-[13.5px] focus-visible:border-(--svf-accent-line) focus-visible:ring-0";
+const textareaCls = "bg-(--bg-raise) border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-[13.5px] resize-none focus-visible:border-(--svf-accent-line) focus-visible:ring-0";
+const selectTriggerCls = "h-[38px] bg-(--bg-raise) border-(--svf-border) text-(--text) text-[13.5px]";
 
 const STEPS = [
   { id: "basic",    label: "Basic Info",  icon: Film },
@@ -74,11 +73,11 @@ function FormField({ label, required, hint, children }: {
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-[11px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1">
+      <label className="text-[11px] font-bold uppercase tracking-widest text-(--text-faint) flex items-center gap-1">
         {label}{required && <span className="text-red-400">*</span>}
       </label>
       {children}
-      {hint && <p className="text-[10px] text-slate-400 leading-relaxed">{hint}</p>}
+      {hint && <p className="text-[10px] text-(--text-faint) leading-relaxed">{hint}</p>}
     </div>
   );
 }
@@ -87,10 +86,10 @@ function SectionCard({ icon: Icon, title, children }: {
   icon: React.ElementType; title: string; children: React.ReactNode
 }) {
   return (
-    <Card className="glass-card border-slate-800/60">
-      <CardHeader className="pb-3 pt-5 px-5 border-b border-slate-800/50">
-        <CardTitle className="flex items-center gap-2.5 text-sm font-bold text-slate-200">
-          <div className="p-1.5 rounded-md bg-red-500/10 border border-red-500/20">
+    <Card className="glass-card">
+      <CardHeader className="pb-3 pt-5 px-5 border-b border-(--svf-border)">
+        <CardTitle className="flex items-center gap-2.5 text-sm font-bold text-(--text)">
+          <div className="p-1.5 rounded-[9px] bg-red-500/10 border border-red-500/20">
             <Icon className="h-3.5 w-3.5 text-red-400" />
           </div>
           {title}
@@ -106,7 +105,7 @@ function TogglePill({ value, onChange, options = ["Yes", "No"] }: {
   value: string; onChange: (v: string) => void; options?: string[]
 }) {
   return (
-    <div className="inline-flex bg-slate-950/50 border border-slate-700/50 rounded-full p-0.5 gap-0.5">
+    <div className="inline-flex bg-(--bg-raise)/50 border border-(--svf-border) rounded-full p-0.5 gap-0.5">
       {options.map((opt) => {
         const active = value === opt;
         return (
@@ -115,13 +114,43 @@ function TogglePill({ value, onChange, options = ["Yes", "No"] }: {
               "px-3 py-1 rounded-full text-[12.5px] font-semibold transition-all duration-150 whitespace-nowrap select-none",
               active && opt === "Yes" ? "bg-emerald-500/20 text-emerald-400" :
               active && opt === "No"  ? "bg-red-500/20 text-red-400" :
-              active                  ? "bg-slate-700/60 text-slate-300" :
-                                        "text-slate-500 hover:text-slate-300",
+              active                  ? "bg-(--hover) text-(--text)" :
+                                        "text-(--text-faint) hover:text-(--text)",
             ].filter(Boolean).join(" ")}>
             {opt}
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function SyndicationField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const isFixedValue = value === "Yes" || value === "No" || value === "";
+  const [customMode, setCustomMode] = useState(!isFixedValue);
+  const [customText, setCustomText] = useState(isFixedValue ? "" : value);
+  const activePill = customMode ? "Custom" : value;
+  const handlePill = (v: string) => {
+    if (v === "Custom") { setCustomMode(true); onChange(customText); }
+    else { setCustomMode(false); onChange(v); }
+  };
+  const handleTextChange = (text: string) => {
+    setCustomText(text);
+    onChange(text);
+  };
+  return (
+    <div className="flex flex-col gap-2 items-end">
+      <TogglePill value={activePill} onChange={handlePill} options={["Yes", "No", "Custom"]} />
+      {customMode && (
+        <input
+          autoFocus
+          type="text"
+          value={customText}
+          onChange={(e) => handleTextChange(e.target.value)}
+          placeholder="Enter custom syndication terms…"
+          className="w-64 h-8 rounded-xl border border-(--svf-border) bg-(--bg-raise)/40 px-3 text-xs text-(--text) placeholder:text-(--text-faint) focus:outline-none focus:border-(--svf-border-strong)"
+        />
+      )}
     </div>
   );
 }
@@ -132,14 +161,14 @@ function RightsCard({ title, value, onChange, children }: {
 }) {
   const isAcq = value === "Yes";
   return (
-    <div className={["rounded-lg border overflow-hidden transition-colors duration-200",
-      isAcq ? "border-emerald-500/40" : "border-slate-800/50"].join(" ")}>
-      <div className="flex items-center justify-between px-3 py-2.5 bg-slate-950/40 gap-2">
+    <div className={["rounded-[10px] border overflow-hidden transition-colors duration-200",
+      isAcq ? "border-emerald-500/40" : "border-(--svf-border)"].join(" ")}>
+      <div className="flex items-center justify-between px-3 py-2.5 bg-(--bg-raise)/40 gap-2">
         <span className={["text-[11px] font-bold uppercase tracking-widest transition-colors duration-200",
-          isAcq ? "text-emerald-400" : "text-slate-400"].join(" ")}>{title}</span>
+          isAcq ? "text-emerald-400" : "text-(--text-faint)"].join(" ")}>{title}</span>
         <TogglePill value={value} onChange={onChange} />
       </div>
-      {isAcq && <div className="p-3 border-t border-slate-800/50 bg-slate-900/30">{children}</div>}
+      {isAcq && <div className="p-3 border-t border-(--svf-border) bg-(--bg-raise)/30">{children}</div>}
     </div>
   );
 }
@@ -167,13 +196,13 @@ function LangMultiPicker({ value, onChange }: { value: string; onChange: (v: str
           return (
             <button key={lang} type="button" onClick={() => toggle(lang)}
               className={["px-2 py-0.5 rounded-full text-xs font-semibold border transition-all select-none",
-                sel ? "bg-red-500/15 border-red-500/50 text-red-300" : "bg-slate-950/40 border-slate-700/40 text-slate-500 hover:text-slate-300",
+                sel ? "bg-red-500/15 border-red-500/50 text-red-300" : "bg-(--bg-raise)/40 border-(--svf-border) text-(--text-faint) hover:text-(--text)",
               ].join(" ")}>{lang}</button>
           );
         })}
         {!showCustom && (
           <button type="button" onClick={() => { setShowCustom(true); setTimeout(() => inputRef.current?.focus(), 50); }}
-            className="px-2 py-0.5 rounded-full text-xs font-semibold border border-dashed border-slate-600/50 text-slate-500 hover:text-slate-300 transition-all">
+            className="px-2 py-0.5 rounded-full text-xs font-semibold border border-dashed border-(--svf-border-strong) text-(--text-faint) hover:text-(--text) transition-all">
             + Custom
           </button>
         )}
@@ -183,9 +212,9 @@ function LangMultiPicker({ value, onChange }: { value: string; onChange: (v: str
           <Input ref={inputRef} value={customInput} onChange={e => setCustomInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } if (e.key === "Escape") { setShowCustom(false); setCustomInput(""); } }}
             placeholder="Type language…"
-            className="h-7 flex-1 bg-slate-950/40 border-slate-700/50 text-slate-200 placeholder:text-slate-500 text-xs focus-visible:ring-red-500/40" />
-          <button type="button" onClick={addCustom} className="h-7 px-2.5 rounded-md bg-red-600/20 border border-red-500/30 text-red-400 text-xs font-semibold hover:bg-red-600/30">Add</button>
-          <button type="button" onClick={() => { setShowCustom(false); setCustomInput(""); }} className="h-7 w-7 flex items-center justify-center rounded-md text-slate-500 hover:text-slate-300">
+            className="h-7 flex-1 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-xs focus-visible:ring-red-500/40" />
+          <button type="button" onClick={addCustom} className="h-7 px-2.5 rounded-[9px] bg-red-600/20 border border-red-500/30 text-red-400 text-xs font-semibold hover:bg-red-600/30">Add</button>
+          <button type="button" onClick={() => { setShowCustom(false); setCustomInput(""); }} className="h-7 w-7 flex items-center justify-center rounded-[9px] text-(--text-faint) hover:text-(--text)">
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -203,9 +232,9 @@ function LangMultiPicker({ value, onChange }: { value: string; onChange: (v: str
         </div>
       )}
       {dbVal && (
-        <div className="flex items-center gap-2 px-2.5 py-1 rounded-md bg-slate-950/60 border border-slate-800/60">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 shrink-0">DB:</span>
-          <span className="text-[11px] text-slate-400 font-mono break-all">{dbVal}</span>
+        <div className="flex items-center gap-2 px-2.5 py-1 rounded-[9px] bg-(--bg-raise)/60 border border-(--svf-border)">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) shrink-0">DB:</span>
+          <span className="text-[11px] text-(--text-faint) font-mono break-all">{dbVal}</span>
         </div>
       )}
     </div>
@@ -218,12 +247,12 @@ function InlineRightsRow({ label, value, onChange, langValue, onLangChange }: {
   langValue?: string; onLangChange?: (v: string) => void;
 }) {
   return (
-    <div className="py-2.5 border-b border-slate-800/50 last:border-0 last:pb-0">
+    <div className="py-2.5 border-b border-(--svf-border) last:border-0 last:pb-0">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-semibold text-slate-200">{label}</span>
+        <span className="text-sm font-semibold text-(--text)">{label}</span>
         <TogglePill value={value} onChange={onChange} />
       </div>
-      {onLangChange && value === "Yes" && (
+      {onLangChange && (value === "Yes" || value === "No") && (
         <LangMultiPicker value={langValue ?? ""} onChange={onLangChange} />
       )}
     </div>
@@ -281,8 +310,8 @@ function HoldbackPicker({ value, onChange }: { value: string; onChange: (v: stri
           return (
             <button key={opt} type="button" onClick={() => toggle(opt)}
               className={["px-2.5 py-1 rounded-full text-xs font-semibold border transition-all duration-100 select-none",
-                sel ? "bg-slate-600/25 border-slate-500/50 text-slate-200"
-                    : "bg-slate-950/40 border-slate-700/40 text-slate-500 hover:text-slate-300",
+                sel ? "bg-(--hover) border-slate-500/50 text-(--text)"
+                    : "bg-(--bg-raise)/40 border-(--svf-border) text-(--text-faint) hover:text-(--text)",
               ].join(" ")}>
               {opt}
             </button>
@@ -291,7 +320,7 @@ function HoldbackPicker({ value, onChange }: { value: string; onChange: (v: stri
         {/* + Custom button */}
         {!showCustom && (
           <button type="button" onClick={() => { setShowCustom(true); setTimeout(() => inputRef.current?.focus(), 50); }}
-            className="px-2.5 py-1 rounded-full text-xs font-semibold border border-dashed border-slate-600/50 text-slate-500 hover:text-slate-300 hover:border-slate-500 transition-all">
+            className="px-2.5 py-1 rounded-full text-xs font-semibold border border-dashed border-(--svf-border-strong) text-(--text-faint) hover:text-(--text) hover:border-(--svf-border-strong) transition-all">
             + Custom
           </button>
         )}
@@ -303,13 +332,13 @@ function HoldbackPicker({ value, onChange }: { value: string; onChange: (v: stri
           <Input ref={inputRef} value={customInput} onChange={e => setCustomInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } if (e.key === "Escape") { setShowCustom(false); setCustomInput(""); } }}
             placeholder="Type custom value…"
-            className="h-7 flex-1 bg-slate-950/40 border-slate-700/50 text-slate-200 placeholder:text-slate-500 text-xs focus-visible:ring-red-500/40" />
+            className="h-7 flex-1 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-xs focus-visible:ring-red-500/40" />
           <button type="button" onClick={addCustom}
-            className="h-7 px-2.5 rounded-md bg-red-600/20 border border-red-500/30 text-red-400 text-xs font-semibold hover:bg-red-600/30 transition-all">
+            className="h-7 px-2.5 rounded-[9px] bg-red-600/20 border border-red-500/30 text-red-400 text-xs font-semibold hover:bg-red-600/30 transition-all">
             Add
           </button>
           <button type="button" onClick={() => { setShowCustom(false); setCustomInput(""); }}
-            className="h-7 w-7 flex items-center justify-center rounded-md text-slate-500 hover:text-slate-300">
+            className="h-7 w-7 flex items-center justify-center rounded-[9px] text-(--text-faint) hover:text-(--text)">
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -333,9 +362,133 @@ function HoldbackPicker({ value, onChange }: { value: string; onChange: (v: stri
 
       {/* DB preview */}
       {value && (
-        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-slate-950/60 border border-slate-800/60">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 shrink-0">DB value:</span>
-          <span className="text-[11px] text-slate-400 font-mono break-all">{value}</span>
+        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-[9px] bg-(--bg-raise)/60 border border-(--svf-border)">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) shrink-0">DB value:</span>
+          <span className="text-[11px] text-(--text-faint) font-mono break-all">{value}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Other Rights multi-select ────────────────────────────────────────────────
+// Stored as "Yes", "Yes(type1, type2)", or "No"
+const OTHER_RIGHTS_OPTIONS = [
+  "Airborne Rights",
+  "Clip Rights",
+  "Hotel Rights",
+  "Mechanical Synch Rights",
+  "Ship Rights",
+  "Surface Transport Rights",
+  "Other Communication & Broadcasting Rights",
+];
+
+function parseOtherRights(value: string): { isYes: boolean; types: string[] } {
+  if (!value) return { isYes: false, types: [] };
+  const trimmed = value.trim();
+  const lower = trimmed.toLowerCase();
+  if (lower === "no" || lower === "") return { isYes: false, types: [] };
+
+  if (lower.startsWith("yes")) {
+    const openParenIndex = trimmed.indexOf("(");
+    const closeParenIndex = trimmed.lastIndexOf(")");
+    if (openParenIndex !== -1 && closeParenIndex !== -1 && closeParenIndex > openParenIndex) {
+      const content = trimmed.substring(openParenIndex + 1, closeParenIndex);
+      const types = content.split(",").map(s => s.trim()).filter(Boolean);
+      return { isYes: true, types };
+    }
+    return { isYes: true, types: [] };
+  }
+
+  // Handle legacy/other values that are comma-separated without starting with "Yes"
+  const types = trimmed.split(",").map(s => s.trim()).filter(Boolean);
+  return { isYes: true, types };
+}
+
+function commitOtherRights(isYes: boolean, types: string[]): string {
+  if (!isYes) return "No";
+  if (types.length === 0) return "Yes";
+  return `Yes(${types.join(", ")})`;
+}
+
+function OtherRightsMultiPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [customInput, setCustomInput] = useState("");
+  const [showCustom, setShowCustom] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const { isYes, types } = parseOtherRights(value);
+
+  const setYes = (yes: boolean) => onChange(commitOtherRights(yes, yes ? types : []));
+  const toggle = (opt: string) => onChange(commitOtherRights(true,
+    types.includes(opt) ? types.filter(s => s !== opt) : [...types, opt]
+  ));
+  const remove = (s: string) => onChange(commitOtherRights(true, types.filter(x => x !== s)));
+  const addCustom = () => {
+    const v = customInput.trim();
+    if (!v || types.includes(v)) { setCustomInput(""); setShowCustom(false); return; }
+    onChange(commitOtherRights(true, [...types, v]));
+    setCustomInput("");
+    setShowCustom(false);
+  };
+
+  return (
+    <div className="space-y-2.5">
+      {/* Yes / No toggle */}
+      <TogglePill value={isYes ? "Yes" : value === "No" ? "No" : ""} onChange={(v) => setYes(v === "Yes")} />
+
+      {/* Type picker — only when Yes */}
+      {isYes && (
+        <div className="space-y-2 pt-1">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Specify types (optional)</p>
+          <div className="flex flex-wrap gap-1.5">
+            {OTHER_RIGHTS_OPTIONS.map(opt => (
+              <button key={opt} type="button" onClick={() => toggle(opt)}
+                className={[
+                  "px-2 py-0.5 rounded-full text-xs font-semibold border transition-all select-none",
+                  types.includes(opt)
+                    ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
+                    : "bg-(--bg-raise)/40 border-(--svf-border) text-(--text-faint) hover:text-(--text)",
+                ].join(" ")}>
+                {opt}
+              </button>
+            ))}
+            {!showCustom && (
+              <button type="button" onClick={() => { setShowCustom(true); setTimeout(() => inputRef.current?.focus(), 50); }}
+                className="px-2 py-0.5 rounded-full text-xs font-semibold border border-dashed border-(--svf-border-strong) text-(--text-faint) hover:text-(--text) transition-all">
+                + Custom
+              </button>
+            )}
+          </div>
+
+          {showCustom && (
+            <div className="flex gap-2 items-center">
+              <Input ref={inputRef} value={customInput} onChange={e => setCustomInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } if (e.key === "Escape") { setShowCustom(false); setCustomInput(""); } }}
+                placeholder="Type right name…"
+                className="h-7 flex-1 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-xs focus-visible:ring-red-500/40" />
+              <button type="button" onClick={addCustom} className="h-7 px-2.5 rounded-[9px] bg-emerald-600/20 border border-emerald-500/30 text-emerald-400 text-xs font-semibold hover:bg-emerald-600/30">Add</button>
+              <button type="button" onClick={() => { setShowCustom(false); setCustomInput(""); }} className="h-7 w-7 flex items-center justify-center rounded-[9px] text-(--text-faint) hover:text-(--text)">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+
+          {types.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {types.map(s => (
+                <span key={s} className="flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-xs font-semibold text-emerald-300">
+                  {s}
+                  <button type="button" onClick={() => remove(s)} className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-emerald-500/20">
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div className="text-[10px] font-mono text-(--text-faint) pt-0.5">
+            {commitOtherRights(isYes, types)}
+          </div>
         </div>
       )}
     </div>
@@ -375,8 +528,8 @@ function MultiChipsWithCustom({
           return (
             <button key={opt} type="button" onClick={() => toggle(opt)}
               className={["px-2.5 py-1 rounded-full text-xs font-semibold border transition-all duration-100 select-none",
-                sel ? "bg-slate-600/25 border-slate-500/50 text-slate-200"
-                    : "bg-slate-950/40 border-slate-700/40 text-slate-500 hover:text-slate-300",
+                sel ? "bg-(--hover) border-slate-500/50 text-(--text)"
+                    : "bg-(--bg-raise)/40 border-(--svf-border) text-(--text-faint) hover:text-(--text)",
               ].join(" ")}>
               {opt}
             </button>
@@ -384,7 +537,7 @@ function MultiChipsWithCustom({
         })}
         {!showCustom && (
           <button type="button" onClick={() => { setShowCustom(true); setTimeout(() => inputRef.current?.focus(), 50); }}
-            className="px-2.5 py-1 rounded-full text-xs font-semibold border border-dashed border-slate-600/50 text-slate-500 hover:text-slate-300 hover:border-slate-500 transition-all">
+            className="px-2.5 py-1 rounded-full text-xs font-semibold border border-dashed border-(--svf-border-strong) text-(--text-faint) hover:text-(--text) hover:border-(--svf-border-strong) transition-all">
             + Custom
           </button>
         )}
@@ -394,13 +547,13 @@ function MultiChipsWithCustom({
           <Input ref={inputRef} value={customInput} onChange={e => setCustomInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } if (e.key === "Escape") { setShowCustom(false); setCustomInput(""); } }}
             placeholder={placeholder || "Type value…"}
-            className="h-7 flex-1 bg-slate-950/40 border-slate-700/50 text-slate-200 placeholder:text-slate-500 text-xs focus-visible:ring-red-500/40" />
+            className="h-7 flex-1 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-xs focus-visible:ring-red-500/40" />
           <button type="button" onClick={addCustom}
-            className="h-7 px-2.5 rounded-md bg-red-600/20 border border-red-500/30 text-red-400 text-xs font-semibold hover:bg-red-600/30 transition-all">
+            className="h-7 px-2.5 rounded-[9px] bg-red-600/20 border border-red-500/30 text-red-400 text-xs font-semibold hover:bg-red-600/30 transition-all">
             Add
           </button>
           <button type="button" onClick={() => { setShowCustom(false); setCustomInput(""); }}
-            className="h-7 w-7 flex items-center justify-center rounded-md text-slate-500 hover:text-slate-300">
+            className="h-7 w-7 flex items-center justify-center rounded-[9px] text-(--text-faint) hover:text-(--text)">
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -409,7 +562,7 @@ function MultiChipsWithCustom({
         <div className="flex flex-wrap gap-1.5">
           {selected.map(item => (
             <span key={item}
-              className="flex items-center gap-1 pl-2.5 pr-1 py-0.5 rounded-full bg-slate-700/30 border border-slate-600/40 text-xs font-semibold text-slate-300">
+              className="flex items-center gap-1 pl-2.5 pr-1 py-0.5 rounded-full bg-slate-700/30 border border-slate-600/40 text-xs font-semibold text-(--text)">
               {item}
               <button type="button" onClick={() => removeItem(item)}
                 className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-slate-600/40 transition-all">
@@ -420,9 +573,9 @@ function MultiChipsWithCustom({
         </div>
       )}
       {value && (
-        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-slate-950/60 border border-slate-800/60">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 shrink-0">Stored as:</span>
-          <span className="text-[11px] text-slate-400 font-mono break-all">{value}</span>
+        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-[9px] bg-(--bg-raise)/60 border border-(--svf-border)">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) shrink-0">Stored as:</span>
+          <span className="text-[11px] text-(--text-faint) font-mono break-all">{value}</span>
         </div>
       )}
     </div>
@@ -456,9 +609,43 @@ function DurationInput({ value, onChange, className }: { value: string; onChange
         className={className}
       />
       {value && (
-        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold uppercase tracking-widest text-slate-500 pointer-events-none">
+        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) pointer-events-none">
           hh:mm:ss
         </span>
+      )}
+    </div>
+  );
+}
+
+function ClipDurationField({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
+  const isTimestamp = /^\d{0,2}:?\d{0,2}:?\d{0,2}$/.test(value) && !(/[a-zA-Z]/.test(value));
+  const [customMode, setCustomMode] = useState(value !== "" && !isTimestamp);
+  const [customText, setCustomText] = useState(!isTimestamp ? value : "");
+  const activePill = customMode ? "Custom" : "Duration";
+  const handlePill = (v: string) => {
+    if (v === "Custom") { setCustomMode(true); onChange(customText); }
+    else { setCustomMode(false); onChange(""); }
+  };
+  const handleTextChange = (text: string) => {
+    setCustomText(text);
+    onChange(text);
+  };
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <TogglePill value={activePill} onChange={handlePill} options={["Duration", "Custom"]} />
+      </div>
+      {customMode ? (
+        <input
+          autoFocus
+          type="text"
+          value={customText}
+          onChange={(e) => handleTextChange(e.target.value)}
+          placeholder="e.g. 30 seconds, 2 mins…"
+          className={`h-9 rounded-xl border border-(--svf-border) bg-(--bg-raise)/40 px-3 text-xs text-(--text) placeholder:text-(--text-faint) focus:outline-none focus:border-(--svf-border-strong) w-full ${className ?? ""}`}
+        />
+      ) : (
+        <DurationInput value={isTimestamp ? value : ""} onChange={onChange} className={className} />
       )}
     </div>
   );
@@ -484,7 +671,6 @@ export default function NewMoviePage() {
   const [jointlyExploitationRights, setJointlyExploitationRights] = useState("");
   const [colorOrBw, setColorOrBw] = useState("Color");
   const [trailerLink, setTrailerLink] = useState("");
-  const [posterUrl, setPosterUrl] = useState("");
   const [assignorLicensor, setAssignorLicensor] = useState("");
   const [licensee, setLicensee] = useState("");
   const [agreementDate, setAgreementDate] = useState("");
@@ -586,12 +772,6 @@ export default function NewMoviePage() {
 
   const handleSave = async () => {
     if (!title.trim()) { toast.error("Title is required"); return; }
-    if (title.trim().length > 500) { toast.error("Title must be 500 characters or less"); return; }
-    if (releaseYear) {
-      const year = parseInt(releaseYear);
-      if (isNaN(year) || year < 1800 || year > 2100) { toast.error("Release year must be between 1800 and 2100"); return; }
-    }
-    if (trailerLink && !/^https?:\/\/.+/.test(trailerLink)) { toast.error("Trailer link must be a valid URL"); return; }
 
     setSaving(true);
     try {
@@ -618,7 +798,6 @@ export default function NewMoviePage() {
         production_house_name: finalProductionHouseName,
         color_or_bw: colorOrBw || undefined,
         trailer_link: trailerLink || undefined,
-        poster_url: posterUrl || undefined,
         assignor_licensor: assignorLicensor || undefined,
         licensee: licensee || undefined,
         agreement_date: agreementDate || undefined,
@@ -627,8 +806,8 @@ export default function NewMoviePage() {
         internet_rights_classification: internetRightsClassification || undefined,
         prequel_sequel_rights: prequelSequelRights || undefined,
         character_rights: characterRights || undefined,
-        subtitling_rights: (subtitlingRights === "Yes" && subtitlingLang ? `Yes(${subtitlingLang})` : subtitlingRights) || undefined,
-        dubbing_rights: (dubbingRights === "Yes" && dubbingLang ? `Yes(${dubbingLang})` : dubbingRights) || undefined,
+        subtitling_rights: (subtitlingLang ? `${subtitlingRights}(${subtitlingLang})` : subtitlingRights) || undefined,
+        dubbing_rights: (dubbingLang ? `${dubbingRights}(${dubbingLang})` : dubbingRights) || undefined,
         nature_of_rights: finalNatureOfRights,
         territory: finalTerritory || undefined,
         remarks: remarks || undefined,
@@ -674,7 +853,7 @@ export default function NewMoviePage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-3">
         <Loader2 className="h-7 w-7 animate-spin text-red-400/60" />
-        <p className="text-slate-400 text-sm">Checking permissions…</p>
+        <p className="text-(--text-faint) text-sm">Checking permissions…</p>
       </div>
     );
   }
@@ -685,27 +864,25 @@ export default function NewMoviePage() {
   const currentStepIndex = STEPS.findIndex(s => s.id === activeTab);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
-      <div className="relative overflow-hidden rounded-xl bg-slate-900/60 border border-slate-800/60 backdrop-blur-xl p-6 shadow-2xl">
-        <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-red-600 via-amber-500 to-transparent" />
-        <div className="absolute top-4 right-4 w-48 h-48 bg-red-600/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="relative overflow-hidden rounded-[12px] bg-(--bg-raise)/60 border border-(--svf-border) backdrop-blur-xl p-3">
         <div className="relative flex items-center gap-4">
-          <Button variant="ghost" size="sm" asChild className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 h-8 w-8 p-0 shrink-0">
+          <Button variant="ghost" size="sm" asChild className="text-(--text-faint) hover:text-(--text) hover:bg-slate-800/60 h-8 w-8 p-0 shrink-0">
             <Link href="/movies"><ArrowLeft className="h-4 w-4" /></Link>
           </Button>
-          <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20">
-            <Plus className="h-6 w-6 text-red-400" />
+          <div className="p-2 rounded-[9px] bg-red-500/10 border border-red-500/20">
+            <Plus className="h-5 w-5 text-red-400" />
           </div>
           <div>
             <h1 className="text-xl font-bold tracking-tight text-slate-100">Add New Movie</h1>
-            <p className="text-slate-400 text-sm mt-0.5">Add a new film to the catalog. Cast &amp; Crew can be added after saving.</p>
+            <p className="text-(--text-faint) text-sm mt-0.5">Add a new film to the catalog. Cast &amp; Crew can be added after saving.</p>
           </div>
         </div>
       </div>
 
       {/* Step Nav */}
-      <div className="flex items-stretch bg-slate-900/60 border border-slate-800/60 rounded-xl p-1 gap-1 overflow-x-auto">
+      <div className="flex items-stretch bg-(--bg-raise)/60 border border-(--svf-border) rounded-[12px] p-1 gap-1 overflow-x-auto">
         {STEPS.map((step, i) => {
           const isActive = activeTab === step.id;
           const isDone = i < currentStepIndex;
@@ -717,15 +894,15 @@ export default function NewMoviePage() {
           return (
             <button key={step.id} type="button" disabled={isDisabled}
               onClick={() => !isDisabled && setActiveTab(step.id)}
-              className={["flex items-center gap-2 px-3 py-2 rounded-lg text-[12.5px] font-semibold whitespace-nowrap transition-all duration-150 shrink-0 border",
+              className={["flex items-center gap-2 px-3 py-2 rounded-[10px] text-[12.5px] font-semibold whitespace-nowrap transition-all duration-150 shrink-0 border",
                 isActive   ? "bg-slate-800 text-slate-100 border-slate-700/60" :
-                isDisabled ? "opacity-30 cursor-not-allowed text-slate-500 border-transparent" :
-                             "text-slate-500 hover:text-slate-200 hover:bg-slate-800/40 border-transparent",
+                isDisabled ? "opacity-30 cursor-not-allowed text-(--text-faint) border-transparent" :
+                             "text-(--text-faint) hover:text-(--text) hover:bg-slate-800/40 border-transparent",
               ].join(" ")}>
               <span className={["w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black flex-shrink-0 transition-all duration-200",
                 isActive ? "bg-gradient-to-br from-red-500 to-red-700 text-white" :
                 isDone   ? "bg-emerald-500/20 border border-emerald-500/40 text-emerald-400" :
-                           "bg-slate-800 border border-slate-700/60 text-slate-500",
+                           "bg-slate-800 border border-slate-700/60 text-(--text-faint)",
               ].join(" ")}>
                 {isDone ? <CheckCircle className="h-3 w-3" /> : i + 1}
               </span>
@@ -747,7 +924,7 @@ export default function NewMoviePage() {
 
             {/* ── Source selector — compact horizontal row at top ── */}
             <div className="flex items-center gap-2">
-              <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400 shrink-0">Source</span>
+              <span className="text-[11px] font-bold uppercase tracking-widest text-(--text-faint) shrink-0">Source</span>
               <div className="flex gap-2">
                 {[
                   { value: "home_production", label: "Home Production" },
@@ -769,7 +946,7 @@ export default function NewMoviePage() {
                       }}
                       className={["px-3 py-1 rounded-full border text-xs font-semibold transition-all duration-150 select-none",
                         sel ? "border-red-500/70 bg-red-500/12 text-red-400 shadow-[0_0_0_1px] shadow-red-500/20"
-                            : "border-slate-700/50 bg-slate-950/40 text-slate-500 hover:text-slate-200 hover:border-slate-600",
+                            : "border-(--svf-border) bg-(--bg-raise)/40 text-(--text-faint) hover:text-(--text) hover:border-slate-600",
                       ].join(" ")}>
                       {opt.label}
                     </button>
@@ -823,11 +1000,11 @@ export default function NewMoviePage() {
 
               {/* Color / B&W */}
               <FormField label="Color / B&W">
-                <div className="inline-flex bg-slate-950/50 border border-slate-700/50 rounded-full p-0.5 gap-0.5">
+                <div className="inline-flex bg-(--bg-raise)/50 border border-(--svf-border) rounded-full p-0.5 gap-0.5">
                   {["Color", "B&W"].map(opt => (
                     <button key={opt} type="button" onClick={() => setColorOrBw(opt)}
                       className={["px-4 py-1.5 rounded-full text-sm font-semibold transition-all duration-150",
-                        colorOrBw === opt ? "bg-emerald-500/20 text-emerald-400" : "text-slate-500 hover:text-slate-300",
+                        colorOrBw === opt ? "bg-emerald-500/20 text-emerald-400" : "text-(--text-faint) hover:text-(--text)",
                       ].join(" ")}>
                       {opt}
                     </button>
@@ -882,7 +1059,7 @@ export default function NewMoviePage() {
                             }}
                             className={["px-4 py-1.5 rounded-full border text-[12.5px] font-semibold transition-all duration-120 select-none",
                               sel ? "bg-red-500/12 border-red-500/60 text-red-400"
-                                  : "bg-slate-950/40 border-slate-700/40 text-slate-500 hover:text-slate-300",
+                                  : "bg-(--bg-raise)/40 border-(--svf-border) text-(--text-faint) hover:text-(--text)",
                             ].join(" ")}>
                             {opt.label}
                           </button>
@@ -899,7 +1076,7 @@ export default function NewMoviePage() {
                 return (
                   <div key={index} className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
                     <div className="flex items-center justify-between">
-                      <label className="text-[11px] font-bold uppercase tracking-widest text-slate-400">
+                      <label className="text-[11px] font-bold uppercase tracking-widest text-(--text-faint)">
                         Production House {isJointly ? index + 1 : ""}
                       </label>
                       {isJointly && !isSvfLocked && index > 0 && (
@@ -910,9 +1087,9 @@ export default function NewMoviePage() {
                       )}
                     </div>
                     {isSvfLocked ? (
-                      <div className={`${selectTriggerCls} flex items-center px-3 rounded-md border opacity-70 cursor-not-allowed`}>
-                        <span className="text-slate-300 text-sm">SVF</span>
-                        <span className="ml-auto text-[10px] text-slate-500 uppercase tracking-widest">Default</span>
+                      <div className={`${selectTriggerCls} flex items-center px-3 rounded-[9px] border opacity-70 cursor-not-allowed`}>
+                        <span className="text-(--text) text-sm">SVF</span>
+                        <span className="ml-auto text-[10px] text-(--text-faint) uppercase tracking-widest">Default</span>
                       </div>
                     ) : (
                       <Select value={houseId} onValueChange={val => setSelectedHouseIds(ids => { const n = [...ids]; n[index] = val; return n; })}>
@@ -931,7 +1108,7 @@ export default function NewMoviePage() {
               {isHomeProd && isJointly && (
                 <div className="md:col-span-2 pt-1">
                   <Button variant="outline" size="sm" onClick={() => setSelectedHouseIds(ids => [...ids, ""])}
-                    className="w-full border-dashed border-slate-700/50 bg-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 hover:border-slate-600">
+                    className="w-full border-dashed border-(--svf-border) bg-transparent text-(--text-faint) hover:text-(--text) hover:bg-slate-800/40 hover:border-slate-600">
                     + Add Production House
                   </Button>
                 </div>
@@ -971,7 +1148,7 @@ export default function NewMoviePage() {
                         <button key={c} type="button" onClick={() => setCertification(sel ? "" : c)}
                           className={["px-3 py-1.5 rounded-full border text-xs font-semibold transition-all duration-100 select-none",
                             sel ? "bg-red-500/12 border-red-500/60 text-red-400"
-                                : "bg-slate-950/40 border-slate-700/40 text-slate-500 hover:text-slate-300",
+                                : "bg-(--bg-raise)/40 border-(--svf-border) text-(--text-faint) hover:text-(--text)",
                           ].join(" ")}>
                           {c}
                         </button>
@@ -981,15 +1158,6 @@ export default function NewMoviePage() {
                 </FormField>
               </div>
 
-              {/* Poster */}
-              <div className="md:col-span-2">
-                <FormField label="Poster">
-                  <FileUpload bucket="images" folder="movies" variant="image"
-                    accept=".jpg,.jpeg,.png,.webp" maxSizeMB={0.5}
-                    currentUrl={posterUrl} onUpload={setPosterUrl}
-                    onRemove={() => setPosterUrl("")} label="Upload movie poster" />
-                </FormField>
-              </div>
             </div>
           </div>
         </SectionCard>
@@ -1023,24 +1191,24 @@ export default function NewMoviePage() {
       {activeTab === "rights" && !isHomeProd && (
         <div className="space-y-4">
           <SectionCard icon={ShieldCheck} title="Primary Rights">
-            <p className="text-xs text-slate-500 mb-4">Toggle <strong className="text-slate-300">Yes</strong> to expand details for each rights type.</p>
+            <p className="text-xs text-(--text-faint) mb-4">Toggle <strong className="text-(--text)">Yes</strong> to expand details for each rights type.</p>
             <div className="grid gap-3 md:grid-cols-2">
               {/* Satellite */}
               <RightsCard title="Satellite Rights" value={satelliteRights} onChange={setSatelliteRights}>
                 <div className="space-y-2.5">
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Classification</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1.5">Classification</p>
                     <MultiChipsWithCustom options={["Pay TV", "Free TV", "Pay Per View", "DTH"]}
                       value={satelliteRightsClassification} onChange={setSatelliteRightsClassification} />
                   </div>
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Nature</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1.5">Nature</p>
                     <NatureRightsSelect value={natureOfSatelliteRights} onChange={setNatureOfSatelliteRights} />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Start</p>
+                    <div><p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1">Start</p>
                       <Input type="date" value={satelliteRightsStartDate} onChange={e => setSatelliteRightsStartDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
-                    <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">End</p>
+                    <div><p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1">End</p>
                       <Input type="date" value={satelliteRightsEndDate} onChange={e => setSatelliteRightsEndDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
                   </div>
                 </div>
@@ -1050,18 +1218,18 @@ export default function NewMoviePage() {
               <RightsCard title="Internet Rights" value={internetRights} onChange={setInternetRights}>
                 <div className="space-y-2.5">
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Classification</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1.5">Classification</p>
                     <MultiChipsWithCustom options={["AVOD", "FVOD", "SVOD", "NVOD", "TVOD", "IPTV"]}
                       value={internetRightsClassification} onChange={setInternetRightsClassification} />
                   </div>
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Nature</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1.5">Nature</p>
                     <NatureRightsSelect value={natureOfInternetRights} onChange={setNatureOfInternetRights} />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Start</p>
+                    <div><p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1">Start</p>
                       <Input type="date" value={internetRightsStartDate} onChange={e => setInternetRightsStartDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
-                    <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">End</p>
+                    <div><p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1">End</p>
                       <Input type="date" value={internetRightsEndDate} onChange={e => setInternetRightsEndDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
                   </div>
                 </div>
@@ -1071,43 +1239,53 @@ export default function NewMoviePage() {
               <RightsCard title="Negative Rights" value={negativeRights} onChange={setNegativeRights}>
                 <div className="space-y-2.5">
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Nature</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1.5">Nature</p>
                     <NatureRightsSelect value={natureOfNegativeRights} onChange={setNatureOfNegativeRights} />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Start</p>
+                    <div><p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1">Start</p>
                       <Input type="date" value={negativeRightsStartDate} onChange={e => setNegativeRightsStartDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
-                    <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">End</p>
+                    <div><p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1">End</p>
                       <Input type="date" value={negativeRightsEndDate} onChange={e => setNegativeRightsEndDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
                   </div>
                 </div>
               </RightsCard>
 
               {/* Other */}
-              <RightsCard title="Other Rights" value={otherRights} onChange={setOtherRights}>
-                <div className="space-y-2.5">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Nature</p>
-                    <NatureRightsSelect value={natureOfOtherRights} onChange={setNatureOfOtherRights} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Start</p>
-                      <Input type="date" value={otherRightsStartDate} onChange={e => setOtherRightsStartDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
-                    <div><p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">End</p>
-                      <Input type="date" value={otherRightsEndDate} onChange={e => setOtherRightsEndDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
-                  </div>
+              <div className={["rounded-[10px] border overflow-hidden transition-colors duration-200",
+                (otherRights && otherRights !== "No") ? "border-emerald-500/40" : "border-(--svf-border)"].join(" ")}>
+                <div className="flex items-center justify-between px-3 py-2.5 bg-(--bg-raise)/40 gap-2">
+                  <span className={["text-[11px] font-bold uppercase tracking-widest transition-colors duration-200",
+                    (otherRights && otherRights !== "No") ? "text-emerald-400" : "text-(--text-faint)"].join(" ")}>Other Rights</span>
                 </div>
-              </RightsCard>
+                <div className="p-3 border-t border-(--svf-border) bg-(--bg-raise)/30 space-y-2.5">
+                  <OtherRightsMultiPicker value={otherRights} onChange={setOtherRights} />
+                  {(otherRights === "Yes" || (otherRights && otherRights !== "No")) && (
+                    <>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1.5">Nature</p>
+                        <NatureRightsSelect value={natureOfOtherRights} onChange={setNatureOfOtherRights} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div><p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1">Start</p>
+                          <Input type="date" value={otherRightsStartDate} onChange={e => setOtherRightsStartDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
+                        <div><p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1">End</p>
+                          <Input type="date" value={otherRightsEndDate} onChange={e => setOtherRightsEndDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Syndication */}
-            <div className="mt-4 pt-4 border-t border-slate-800/50">
+            <div className="mt-4 pt-4 border-t border-(--svf-border)">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-slate-200">Syndication – Internet Rights</p>
-                  <p className="text-xs text-slate-500 mt-0.5">Sub-licensing for internet syndication</p>
+                  <p className="text-sm font-semibold text-(--text)">Syndication – Internet Rights</p>
+                  <p className="text-xs text-(--text-faint) mt-0.5">Sub-licensing for internet syndication</p>
                 </div>
-                <TogglePill value={syndicationInternetRights} onChange={setSyndicationInternetRights} />
+                <SyndicationField value={syndicationInternetRights} onChange={setSyndicationInternetRights} />
               </div>
             </div>
           </SectionCard>
@@ -1119,7 +1297,7 @@ export default function NewMoviePage() {
                 <TogglePill value={clipRights} onChange={setClipRights} />
               </FormField>
               <FormField label="Clip Duration">
-                <DurationInput value={clipRightsDuration} onChange={setClipRightsDuration} className={inputCls} />
+                <ClipDurationField value={clipRightsDuration} onChange={setClipRightsDuration} className={inputCls} />
               </FormField>
             </div>
           </SectionCard>
@@ -1160,110 +1338,110 @@ export default function NewMoviePage() {
         <SectionCard icon={Users} title="Cast & Crew">
           {!createdMovieId ? (
             <div className="flex flex-col items-center justify-center py-10 gap-3 text-center">
-              <div className="p-3 rounded-xl bg-slate-800/60 border border-slate-700/50">
-                <Users className="h-6 w-6 text-slate-400" />
+              <div className="p-2 rounded-[9px] bg-slate-800/60 border border-(--svf-border)">
+                <Users className="h-5 w-5 text-(--text-faint)" />
               </div>
-              <p className="text-slate-300 font-medium">Save the movie first</p>
-              <p className="text-slate-500 text-sm max-w-xs">Create the movie using the button below, then you can link cast and crew here.</p>
-              <Button variant="outline" size="sm" className="mt-2 border-slate-700/50 text-slate-300 hover:text-slate-100 hover:bg-slate-800/60"
+              <p className="text-(--text) font-medium">Save the movie first</p>
+              <p className="text-(--text-faint) text-sm max-w-xs">Create the movie using the button below, then you can link cast and crew here.</p>
+              <Button variant="outline" size="sm" className="mt-2 border-(--svf-border) text-(--text) hover:text-slate-100 hover:bg-slate-800/60"
                 onClick={() => setActiveTab("basic")}>Go to Basic Info</Button>
             </div>
           ) : (
-            <div className="space-y-6">
-              <div className="flex items-center gap-3 rounded-lg bg-emerald-950/30 border border-emerald-700/40 px-4 py-3 text-sm text-emerald-300">
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 rounded-[10px] bg-emerald-950/30 border border-emerald-700/40 px-4 py-3 text-sm text-emerald-300">
                 <CheckCircle className="h-4 w-4 shrink-0" />
                 Movie created! Now search and link cast &amp; crew.
               </div>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-(--text-faint)">
                 Search existing people and link them as actors or directors. To add a new person first go to the{" "}
-                <Link href="/people" className="underline underline-offset-2 text-slate-300 hover:text-white">People directory</Link>.
+                <Link href="/people" className="underline underline-offset-2 text-(--text) hover:text-white">People directory</Link>.
               </p>
 
               {/* Cast */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-slate-200">Cast (Actors)</span>
-                  <Button variant="outline" size="sm" className="h-7 text-xs border-slate-700/50 text-slate-300 hover:text-slate-100 hover:bg-slate-800/60"
+                  <span className="text-sm font-semibold text-(--text)">Cast (Actors)</span>
+                  <Button variant="outline" size="sm" className="h-7 text-xs border-(--svf-border) text-(--text) hover:text-slate-100 hover:bg-slate-800/60"
                     onClick={() => { setAddingRole(addingRole === "cast" ? null : "cast"); setPersonSearch(""); setPersonResults([]); }}>
                     <Plus className="h-3 w-3 mr-1" />{addingRole === "cast" ? "Cancel" : "Add Actor"}
                   </Button>
                 </div>
                 {addingRole === "cast" && (
-                  <div className="space-y-2 p-3 border border-slate-700/50 rounded-lg bg-slate-950/30">
+                  <div className="space-y-2 p-3 border border-(--svf-border) rounded-[10px] bg-(--bg-deep)/30">
                     <div className="relative">
-                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-(--text-faint)" />
                       <Input placeholder="Search people by name…" value={personSearch} onChange={e => handlePersonSearch(e.target.value)} className={`${inputCls} pl-8`} autoFocus />
                     </div>
-                    {searchingPeople && <div className="flex items-center gap-2 text-xs text-slate-500"><Loader2 className="h-3 w-3 animate-spin" />Searching…</div>}
+                    {searchingPeople && <div className="flex items-center gap-2 text-xs text-(--text-faint)"><Loader2 className="h-3 w-3 animate-spin" />Searching…</div>}
                     {personResults.length > 0 && (
-                      <div className="border border-slate-700/50 rounded-md max-h-40 overflow-y-auto bg-slate-900">
+                      <div className="border border-(--svf-border) rounded-[9px] max-h-40 overflow-y-auto bg-(--panel-solid)">
                         {personResults.map(p => (
-                          <button key={p.id} className="w-full px-3 py-1.5 text-left text-sm text-slate-300 hover:bg-slate-800 flex items-center justify-between" onClick={() => handleAddCast(p)}>
+                          <button key={p.id} className="w-full px-3 py-1.5 text-left text-sm text-(--text) hover:bg-slate-800 flex items-center justify-between" onClick={() => handleAddCast(p)}>
                             <span>{p.name}</span>
-                            {p.role && <span className="text-xs text-slate-500 capitalize">{p.role}</span>}
+                            {p.role && <span className="text-xs text-(--text-faint) capitalize">{p.role}</span>}
                           </button>
                         ))}
                       </div>
                     )}
                     {personSearch.length >= 2 && !searchingPeople && personResults.length === 0 && (
-                      <p className="text-xs text-slate-500 px-1">No results. <Link href="/people" className="underline underline-offset-2 text-slate-400">Create the person</Link> first.</p>
+                      <p className="text-xs text-(--text-faint) px-1">No results. <Link href="/people" className="underline underline-offset-2 text-(--text-faint)">Create the person</Link> first.</p>
                     )}
                   </div>
                 )}
                 <div className="flex flex-wrap gap-2">
                   {cast.map(m => (
-                    <span key={m.id} className="flex items-center gap-1.5 pl-3 pr-1 py-1 rounded-full bg-slate-800 border border-slate-700/60 text-sm text-slate-200">
+                    <span key={m.id} className="flex items-center gap-1.5 pl-3 pr-1 py-1 rounded-full bg-slate-800 border border-slate-700/60 text-sm text-(--text)">
                       {m.person?.name || "Unknown"}
-                      <button onClick={() => handleRemoveCast(m)} className="w-5 h-5 flex items-center justify-center rounded-full text-slate-500 hover:text-red-400 hover:bg-red-500/15 transition-all"><X className="h-3 w-3" /></button>
+                      <button onClick={() => handleRemoveCast(m)} className="w-5 h-5 flex items-center justify-center rounded-full text-(--text-faint) hover:text-red-400 hover:bg-red-500/15 transition-all"><X className="h-3 w-3" /></button>
                     </span>
                   ))}
-                  {cast.length === 0 && <span className="text-xs text-slate-500">No cast linked yet</span>}
+                  {cast.length === 0 && <span className="text-xs text-(--text-faint)">No cast linked yet</span>}
                 </div>
               </div>
 
               {/* Directors */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-slate-200">Directors</span>
-                  <Button variant="outline" size="sm" className="h-7 text-xs border-slate-700/50 text-slate-300 hover:text-slate-100 hover:bg-slate-800/60"
+                  <span className="text-sm font-semibold text-(--text)">Directors</span>
+                  <Button variant="outline" size="sm" className="h-7 text-xs border-(--svf-border) text-(--text) hover:text-slate-100 hover:bg-slate-800/60"
                     onClick={() => { setAddingRole(addingRole === "director" ? null : "director"); setPersonSearch(""); setPersonResults([]); }}>
                     <Plus className="h-3 w-3 mr-1" />{addingRole === "director" ? "Cancel" : "Add Director"}
                   </Button>
                 </div>
                 {addingRole === "director" && (
-                  <div className="space-y-2 p-3 border border-slate-700/50 rounded-lg bg-slate-950/30">
+                  <div className="space-y-2 p-3 border border-(--svf-border) rounded-[10px] bg-(--bg-deep)/30">
                     <div className="relative">
-                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-500" />
+                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-(--text-faint)" />
                       <Input placeholder="Search people by name…" value={personSearch} onChange={e => handlePersonSearch(e.target.value)} className={`${inputCls} pl-8`} autoFocus />
                     </div>
-                    {searchingPeople && <div className="flex items-center gap-2 text-xs text-slate-500"><Loader2 className="h-3 w-3 animate-spin" />Searching…</div>}
+                    {searchingPeople && <div className="flex items-center gap-2 text-xs text-(--text-faint)"><Loader2 className="h-3 w-3 animate-spin" />Searching…</div>}
                     {personResults.length > 0 && (
-                      <div className="border border-slate-700/50 rounded-md max-h-40 overflow-y-auto bg-slate-900">
+                      <div className="border border-(--svf-border) rounded-[9px] max-h-40 overflow-y-auto bg-(--panel-solid)">
                         {personResults.map(p => (
-                          <button key={p.id} className="w-full px-3 py-1.5 text-left text-sm text-slate-300 hover:bg-slate-800 flex items-center justify-between" onClick={() => handleAddDirector(p)}>
+                          <button key={p.id} className="w-full px-3 py-1.5 text-left text-sm text-(--text) hover:bg-slate-800 flex items-center justify-between" onClick={() => handleAddDirector(p)}>
                             <span>{p.name}</span>
-                            {p.role && <span className="text-xs text-slate-500 capitalize">{p.role}</span>}
+                            {p.role && <span className="text-xs text-(--text-faint) capitalize">{p.role}</span>}
                           </button>
                         ))}
                       </div>
                     )}
                     {personSearch.length >= 2 && !searchingPeople && personResults.length === 0 && (
-                      <p className="text-xs text-slate-500 px-1">No results. <Link href="/people" className="underline underline-offset-2 text-slate-400">Create the person</Link> first.</p>
+                      <p className="text-xs text-(--text-faint) px-1">No results. <Link href="/people" className="underline underline-offset-2 text-(--text-faint)">Create the person</Link> first.</p>
                     )}
                   </div>
                 )}
                 <div className="flex flex-wrap gap-2">
                   {directors.map(d => (
-                    <span key={d.id} className="flex items-center gap-1.5 pl-3 pr-1 py-1 rounded-full bg-slate-800 border border-slate-700/60 text-sm text-slate-200">
+                    <span key={d.id} className="flex items-center gap-1.5 pl-3 pr-1 py-1 rounded-full bg-slate-800 border border-slate-700/60 text-sm text-(--text)">
                       {d.person?.name || "Unknown"}
-                      <button onClick={() => handleRemoveDirector(d)} className="w-5 h-5 flex items-center justify-center rounded-full text-slate-500 hover:text-red-400 hover:bg-red-500/15 transition-all"><X className="h-3 w-3" /></button>
+                      <button onClick={() => handleRemoveDirector(d)} className="w-5 h-5 flex items-center justify-center rounded-full text-(--text-faint) hover:text-red-400 hover:bg-red-500/15 transition-all"><X className="h-3 w-3" /></button>
                     </span>
                   ))}
-                  {directors.length === 0 && <span className="text-xs text-slate-500">No directors linked yet</span>}
+                  {directors.length === 0 && <span className="text-xs text-(--text-faint)">No directors linked yet</span>}
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-slate-800/50">
+              <div className="pt-2 border-t border-(--svf-border)">
                 <Button onClick={() => router.push("/movies")}
                   className="h-9 px-6 bg-red-600 hover:bg-red-500 text-white border-0 shadow-lg shadow-red-900/30">
                   Done — Go to Movies
@@ -1276,12 +1454,12 @@ export default function NewMoviePage() {
 
       {/* Footer */}
       <div className="flex items-center justify-between gap-3 pb-6">
-        <span className="text-xs text-slate-500">
+        <span className="text-xs text-(--text-faint)">
           {createdMovieId ? "Movie saved — add cast & crew or finish." : title ? `Ready to create "${title}"` : "Fill in the required fields to create the movie."}
         </span>
         <div className="flex items-center gap-3">
           <Link href="/movies">
-            <Button variant="ghost" className="h-10 px-6 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60">
+            <Button variant="ghost" className="h-10 px-6 text-(--text-faint) hover:text-(--text) hover:bg-slate-800/60">
               {createdMovieId ? "Back to Movies" : "Cancel"}
             </Button>
           </Link>

@@ -21,9 +21,10 @@ import { useRouter } from "next/navigation";
 
 interface HeaderProps {
   title?: string;
+  subtitle?: string;
 }
 
-export function Header({ title = "Bengali IP Management Dashboard" }: HeaderProps) {
+export function Header({ title = "Bengali IP Management Dashboard", subtitle }: HeaderProps) {
   const router = useRouter();
   const { profile, loading, signOut, isAdmin } = useAuth();
 
@@ -38,56 +39,69 @@ export function Header({ title = "Bengali IP Management Dashboard" }: HeaderProp
   };
 
   const getInitials = (name?: string, email?: string) => {
-    if (name) {
-      return name
-        .split(" ")
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2);
-    }
-    if (email) {
-      return email[0].toUpperCase();
-    }
+    if (name) return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
+    if (email) return email[0].toUpperCase();
     return "U";
   };
 
   return (
-    <header className="flex h-16 shrink-0 items-center gap-2 border-b border-slate-800/60 bg-slate-950/80 backdrop-blur-xl px-6 sticky top-0 z-50">
-      <SidebarTrigger className="-ml-2 text-slate-400 hover:text-slate-200 transition-colors" />
+    <header
+      className="flex h-[66px] shrink-0 items-center gap-4 px-6 sticky top-0 z-30"
+      style={{
+        borderBottom: "1px solid var(--svf-border)",
+        background: "color-mix(in oklch, var(--bg) 75%, transparent)",
+        backdropFilter: "blur(16px)",
+        WebkitBackdropFilter: "blur(16px)",
+      }}
+    >
+      <SidebarTrigger
+        className="transition-colors"
+        style={{ color: "var(--text-faint)" }}
+      />
 
-      <div className="flex flex-1 items-center justify-between">
-        <h1 className="text-xl font-semibold bg-gradient-to-r from-red-500 to-amber-500 bg-clip-text text-transparent tracking-tight">
-          {title}
-        </h1>
+      <div className="flex flex-1 items-center justify-between min-w-0 gap-4">
+        {/* Title block */}
+        <div className="min-w-0">
+          <h1
+            className="text-[19px] font-bold truncate"
+            style={{ color: "var(--text)", letterSpacing: "-0.01em", lineHeight: 1.2 }}
+          >
+            {title}
+          </h1>
+          {subtitle && (
+            <p className="text-[12.5px] truncate mt-0.5" style={{ color: "var(--text-faint)" }}>
+              {subtitle}
+            </p>
+          )}
+        </div>
 
-        <div className="flex items-center gap-4">
-          {/* Search */}
-          {/* <div className="relative hidden md:block">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search movies..."
-              className="w-64 pl-8"
-            />
-          </div> */}
-
+        <div className="flex items-center gap-3">
           {/* Notifications */}
-          <div className="flex items-center gap-2">
-            <div className="hidden sm:block text-xs text-slate-400 font-medium tracking-wide mr-2">
-              {profile?.full_name ? `Welcome, ${profile.full_name.split(' ')[0]}` : ''}
-            </div>
-            <NotificationBell />
-          </div>
+          <NotificationBell />
 
-          {/* User Menu */}
+          {/* User menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="relative h-10 w-10 rounded-full hover:ring-2 hover:ring-red-500/50 transition-all p-0 overflow-hidden ring-1 ring-slate-800">
+              <Button
+                variant="ghost"
+                className="relative h-10 w-10 rounded-full p-0 overflow-hidden"
+                style={{
+                  border: "1px solid var(--svf-border)",
+                  background: "var(--bg-raise)",
+                }}
+              >
                 <Avatar className="h-10 w-10">
-                  <AvatarFallback className="bg-gradient-to-br from-red-950 to-slate-900 text-slate-200 border-none">
+                  <AvatarFallback
+                    style={{
+                      background: "linear-gradient(135deg, var(--svf-accent), oklch(0.4 0.16 var(--accent-h)))",
+                      color: "white",
+                      fontSize: 13,
+                      fontWeight: 700,
+                      border: "none",
+                    }}
+                  >
                     {loading ? (
-                      <Skeleton className="h-full w-full rounded-full bg-slate-800" />
+                      <Skeleton className="h-full w-full rounded-full" style={{ background: "var(--hover)" }} />
                     ) : (
                       getInitials(profile?.full_name, profile?.email)
                     )}
@@ -95,27 +109,35 @@ export function Header({ title = "Bengali IP Management Dashboard" }: HeaderProp
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-64 bg-slate-900 border-slate-800/60 text-slate-300 shadow-2xl backdrop-blur-xl rounded-xl" align="end" forceMount>
+
+            <DropdownMenuContent
+              className="w-64 shadow-2xl rounded-[14px]"
+              style={{
+                background: "var(--panel-solid)",
+                border: "1px solid var(--svf-border-strong)",
+                color: "var(--text)",
+                backdropFilter: "blur(14px)",
+              }}
+              align="end"
+              forceMount
+            >
               <DropdownMenuLabel className="font-normal px-3 py-3">
-                <div className="flex flex-col space-y-1.5">
+                <div className="flex flex-col gap-1.5">
                   {loading ? (
                     <>
-                      <Skeleton className="h-4 w-24 bg-slate-800" />
-                      <Skeleton className="h-3 w-32 bg-slate-800" />
+                      <Skeleton className="h-4 w-24" style={{ background: "var(--hover)" }} />
+                      <Skeleton className="h-3 w-32" style={{ background: "var(--hover)" }} />
                     </>
                   ) : (
                     <>
-                      <p className="text-sm font-semibold leading-none text-slate-200">
+                      <p className="text-sm font-semibold" style={{ color: "var(--text)" }}>
                         {profile?.full_name || "User"}
                       </p>
-                      <p className="text-xs leading-none text-slate-400">
+                      <p className="text-xs" style={{ color: "var(--text-faint)" }}>
                         {profile?.email}
                       </p>
                       {profile?.role && (
-                        <Badge
-                          variant="secondary"
-                          className="w-fit mt-2 text-[10px] capitalize bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20"
-                        >
+                        <Badge variant="secondary" className="w-fit mt-1 text-[10px] capitalize">
                           {profile.role}
                         </Badge>
                       )}
@@ -123,32 +145,53 @@ export function Header({ title = "Bengali IP Management Dashboard" }: HeaderProp
                   )}
                 </div>
               </DropdownMenuLabel>
-              <DropdownMenuSeparator className="bg-slate-800/60" />
-              <DropdownMenuItem asChild className="focus:bg-slate-800 focus:text-slate-200 cursor-pointer py-2.5">
+
+              <DropdownMenuSeparator style={{ background: "var(--svf-border)" }} />
+
+              <DropdownMenuItem
+                asChild
+                className="cursor-pointer py-2.5 rounded-[7px] mx-1"
+                style={{ color: "var(--text-dim)" }}
+              >
                 <Link href="/settings" className="flex items-center">
-                  <User className="mr-3 h-4 w-4 text-slate-400" />
+                  <User className="mr-3 h-4 w-4" style={{ color: "var(--text-faint)" }} />
                   Profile
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem asChild className="focus:bg-slate-800 focus:text-slate-200 cursor-pointer py-2.5">
+
+              <DropdownMenuItem
+                asChild
+                className="cursor-pointer py-2.5 rounded-[7px] mx-1"
+                style={{ color: "var(--text-dim)" }}
+              >
                 <Link href="/settings" className="flex items-center">
-                  <Settings className="mr-3 h-4 w-4 text-slate-400" />
+                  <Settings className="mr-3 h-4 w-4" style={{ color: "var(--text-faint)" }} />
                   Settings
                 </Link>
               </DropdownMenuItem>
+
               {isAdmin && (
                 <>
-                  <DropdownMenuSeparator className="bg-slate-800/60" />
-                  <DropdownMenuItem asChild className="focus:bg-slate-800 focus:text-slate-200 cursor-pointer py-2.5">
+                  <DropdownMenuSeparator style={{ background: "var(--svf-border)" }} />
+                  <DropdownMenuItem
+                    asChild
+                    className="cursor-pointer py-2.5 rounded-[7px] mx-1"
+                    style={{ color: "var(--st-wtp)" }}
+                  >
                     <Link href="/admin/users" className="flex items-center">
-                      <Shield className="mr-3 h-4 w-4 text-purple-400" />
+                      <Shield className="mr-3 h-4 w-4" />
                       User Management
                     </Link>
                   </DropdownMenuItem>
                 </>
               )}
-              <DropdownMenuSeparator className="bg-slate-800/60" />
-              <DropdownMenuItem onClick={handleSignOut} className="focus:bg-red-500/10 focus:text-red-400 text-red-500 cursor-pointer py-2.5">
+
+              <DropdownMenuSeparator style={{ background: "var(--svf-border)" }} />
+              <DropdownMenuItem
+                onClick={handleSignOut}
+                className="cursor-pointer py-2.5 rounded-[7px] mx-1 mb-1"
+                style={{ color: "var(--st-expired)" }}
+              >
                 <LogOut className="mr-3 h-4 w-4" />
                 Sign out
               </DropdownMenuItem>

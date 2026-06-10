@@ -46,7 +46,7 @@ export default function ImportPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center gap-4"><Link href="/settings"><Button variant="ghost" size="sm"><ArrowLeft className="mr-2 h-4 w-4" />Back to Settings</Button></Link></div>
       <div><h1 className="text-2xl font-bold flex items-center gap-2"><Upload className="h-6 w-6" />Import Data</h1><p className="text-muted-foreground">Import movies from a CSV file</p></div>
       {step === "select" && (

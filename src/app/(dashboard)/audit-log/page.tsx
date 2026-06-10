@@ -17,8 +17,8 @@ import { getAuditLogs, getAuditLogStats } from "@/lib/api/audit";
 import { EnhancedStatsCard } from "@/components/dashboard/enhanced-stats-card";
 import type { AuditLogEntry } from "@/lib/types/database";
 
-const selectCls = "bg-slate-950/40 border-slate-700/50 text-slate-300 h-9";
-const inputCls  = "bg-slate-950/40 border-slate-700/50 text-slate-200 placeholder:text-slate-500 focus:border-slate-500 h-9";
+const selectCls = "bg-(--bg-raise)/40 border-(--svf-border) text-(--text) h-9";
+const inputCls  = "bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) focus:border-(--svf-border-strong) h-9";
 
 // ── Human-readable field labels ──────────────────────────────
 const FIELD_LABELS: Record<string, string> = {
@@ -117,13 +117,13 @@ function DiffPanel({ log }: { log: AuditLogEntry }) {
     const changed = Object.keys({ ...log.old_values, ...log.new_values }).filter(
       k => !SKIP_FIELDS.has(k) && JSON.stringify(log.old_values![k]) !== JSON.stringify(log.new_values![k])
     );
-    if (changed.length === 0) return <p className="text-xs text-slate-500 italic">No field changes detected.</p>;
+    if (changed.length === 0) return <p className="text-xs text-(--text-faint) italic">No field changes detected.</p>;
     return (
       <div className="space-y-1.5">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Changed Fields</p>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-2">Changed Fields</p>
         {changed.map(k => (
           <div key={k} className="grid grid-cols-[140px_1fr_1fr] gap-2 items-start text-xs">
-            <span className="text-slate-400 font-medium truncate">{FIELD_LABELS[k] || k}</span>
+            <span className="text-(--text-dim) font-medium truncate">{FIELD_LABELS[k] || k}</span>
             <span className="text-red-300 bg-red-500/10 border border-red-500/20 rounded px-2 py-0.5 break-all">
               {formatVal(k, log.old_values![k])}
             </span>
@@ -140,12 +140,12 @@ function DiffPanel({ log }: { log: AuditLogEntry }) {
     const fields = Object.entries(log.new_values).filter(([k]) => !SKIP_FIELDS.has(k) && log.new_values![k] !== null && log.new_values![k] !== "");
     return (
       <div className="space-y-1.5">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Created With</p>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-2">Created With</p>
         <div className="grid grid-cols-2 gap-x-6 gap-y-1">
           {fields.map(([k, v]) => (
             <div key={k} className="flex items-start gap-2 text-xs">
-              <span className="text-slate-500 shrink-0 min-w-27.5">{FIELD_LABELS[k] || k}</span>
-              <span className="text-slate-300 break-all">{formatVal(k, v)}</span>
+              <span className="text-(--text-faint) shrink-0 min-w-27.5">{FIELD_LABELS[k] || k}</span>
+              <span className="text-(--text) break-all">{formatVal(k, v)}</span>
             </div>
           ))}
         </div>
@@ -157,11 +157,11 @@ function DiffPanel({ log }: { log: AuditLogEntry }) {
     const fields = Object.entries(log.old_values).filter(([k]) => !SKIP_FIELDS.has(k) && log.old_values![k] !== null && log.old_values![k] !== "");
     return (
       <div className="space-y-1.5">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Deleted Record</p>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-2">Deleted Record</p>
         <div className="grid grid-cols-2 gap-x-6 gap-y-1">
           {fields.map(([k, v]) => (
             <div key={k} className="flex items-start gap-2 text-xs">
-              <span className="text-slate-500 shrink-0 min-w-27.5">{FIELD_LABELS[k] || k}</span>
+              <span className="text-(--text-faint) shrink-0 min-w-27.5">{FIELD_LABELS[k] || k}</span>
               <span className="text-red-300/80 line-through break-all">{formatVal(k, v)}</span>
             </div>
           ))}
@@ -220,42 +220,38 @@ export default function AuditLogPage() {
   const totalPages = Math.ceil(totalCount / pageSize);
 
   return (
-    <div className="space-y-6 min-w-0">
-      {/* ── Header ── */}
-      <div className="relative overflow-hidden rounded-xl bg-slate-900/60 border border-slate-800/60 backdrop-blur-xl p-6 shadow-2xl">
-        <div className="absolute top-0 left-0 w-full h-0.5 bg-linear-to-r from-slate-500 via-slate-400 to-transparent" />
-        <div className="absolute -top-24 -right-24 w-64 h-64 bg-slate-600/6 rounded-full blur-3xl pointer-events-none" />
-        <div className="relative flex items-center gap-3">
-          <div className="p-3 rounded-xl bg-slate-700/40 border border-slate-600/40 shadow-lg">
-            <History className="h-6 w-6 text-slate-300" />
+    <div className="space-y-4 min-w-0">
+      {/* ── Compact toolbar ── */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20">
+            <span className="text-xs text-blue-400 font-medium">{stats.totalEvents.toLocaleString()} total</span>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight bg-linear-to-r from-white to-slate-400 bg-clip-text text-transparent">
-              Audit Log
-            </h1>
-            <p className="text-sm text-slate-400 mt-0.5">Full history of every data change across the system</p>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+            <span className="text-xs text-emerald-400 font-medium">{stats.eventsToday} today</span>
           </div>
-        </div>
-        <div className="relative mt-5 grid grid-cols-3 gap-3">
-          <EnhancedStatsCard title="Total Events"  value={stats.totalEvents}    description="All recorded changes"   icon={History} accentColor="#3b82f6" />
-          <EnhancedStatsCard title="Today"         value={stats.eventsToday}    description="Changes today"          icon={History} accentColor="#10b981" />
-          <EnhancedStatsCard title="This Week"     value={stats.eventsThisWeek} description="Changes in last 7 days" icon={History} accentColor="#f59e0b" />
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+            <span className="text-xs text-amber-400 font-medium">{stats.eventsThisWeek} this week</span>
+          </div>
         </div>
       </div>
 
-      {/* ── Filters ── */}
-      <div className="rounded-xl bg-slate-900/40 border border-slate-800/60 backdrop-blur-xl p-4 shadow-xl">
-        <div className="flex flex-wrap items-center gap-3">
-          <Search className="h-4 w-4 text-slate-500 shrink-0" />
+      {/* ── Directory Filters ── */}
+      <div className="relative overflow-hidden rounded-[12px] bg-(--panel-solid)/40 border border-(--svf-border) backdrop-blur-xl p-4 shadow-xl">
+        <div className="flex flex-wrap gap-3 items-center">
           <Select value={tableFilter} onValueChange={(v) => { setTableFilter(v); setPage(0); }}>
-            <SelectTrigger className={`${selectCls} w-44`}><SelectValue placeholder="All Tables" /></SelectTrigger>
+            <SelectTrigger className="h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) text-sm w-[160px]">
+              <SelectValue placeholder="All Tables" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Tables</SelectItem>
               {Object.entries(TABLE_NAMES).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={actionFilter} onValueChange={(v) => { setActionFilter(v); setPage(0); }}>
-            <SelectTrigger className={`${selectCls} w-36`}><SelectValue placeholder="All Actions" /></SelectTrigger>
+            <SelectTrigger className="h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) text-sm w-[140px]">
+              <SelectValue placeholder="All Actions" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Actions</SelectItem>
               <SelectItem value="INSERT">Create</SelectItem>
@@ -263,40 +259,42 @@ export default function AuditLogPage() {
               <SelectItem value="DELETE">Delete</SelectItem>
             </SelectContent>
           </Select>
-          <Input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(0); }} className={`${inputCls} w-38`} />
-          <span className="text-slate-600 text-xs">to</span>
-          <Input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(0); }} className={`${inputCls} w-38`} />
+          <Input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(0); }}
+            className="h-9 w-[150px] bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-sm" />
+          <span className="text-(--text-faint) text-xs">to</span>
+          <Input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(0); }}
+            className="h-9 w-[150px] bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-sm" />
           {hasFilters && (
             <Button variant="ghost" size="sm" onClick={clearFilters}
-              className="h-9 px-3 text-slate-500 hover:text-slate-200 hover:bg-slate-800/60 gap-1">
+              className="h-9 gap-1.5 text-(--text-faint) hover:text-(--text) hover:bg-slate-800/50">
               <X className="h-3.5 w-3.5" /> Clear
             </Button>
           )}
-          <span className="ml-auto text-xs text-slate-500 shrink-0">
+          <span className="ml-auto text-xs text-(--text-faint) shrink-0">
             {loading ? "Loading…" : `${totalCount.toLocaleString()} event${totalCount !== 1 ? "s" : ""}`}
           </span>
         </div>
       </div>
 
       {/* ── Log entries ── */}
-      <div className="rounded-xl bg-slate-900/40 border border-slate-800/60 backdrop-blur-xl shadow-xl overflow-hidden">
+      <div className="glass-card overflow-hidden">
         {/* Column header */}
-        <div className="hidden md:grid grid-cols-[160px_180px_90px_100px_1fr_32px] gap-3 px-5 py-2.5 border-b border-slate-800/60 bg-slate-900/60">
+        <div className="hidden md:grid grid-cols-[160px_180px_90px_100px_1fr_32px] gap-3 px-5 py-2.5 border-b border-(--svf-border)" style={{ background: "var(--bg-deep)" }}>
           {["Time", "User", "Action", "Section", "What changed", ""].map((h) => (
-            <span key={h} className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{h}</span>
+            <span key={h} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">{h}</span>
           ))}
         </div>
 
         {loading ? (
           <div className="flex items-center justify-center py-16">
-            <Loader2 className="h-8 w-8 animate-spin text-red-500" />
+            <Loader2 className="h-8 w-8 animate-spin" style={{ color: "var(--svf-accent)" }} />
           </div>
         ) : logs.length === 0 ? (
-          <div className="text-center py-16 text-slate-500 text-sm">
+          <div className="text-center py-16 text-(--text-faint) text-sm">
             No audit log entries match your filters.
           </div>
         ) : (
-          <div className="divide-y divide-slate-800/40">
+          <div className="divide-y divide-(--svf-border)">
             {logs.map((log) => {
               const cfg = actionCfg[log.action] ?? actionCfg.UPDATE;
               const ActionIcon = cfg.icon;
@@ -310,26 +308,26 @@ export default function AuditLogPage() {
                 : 0;
 
               return (
-                <div key={log.id} className="group">
+                <div key={log.id}>
                   {/* ── Row ── */}
                   <div
-                    className={`grid md:grid-cols-[160px_180px_90px_100px_1fr_32px] gap-3 items-center px-5 py-3 transition-colors ${hasDetails ? "cursor-pointer hover:bg-slate-800/30" : ""} ${isOpen ? "bg-slate-800/30" : ""}`}
+                    className={`grid md:grid-cols-[160px_180px_90px_100px_1fr_32px] gap-3 items-center px-5 py-3 transition-colors ${hasDetails ? "cursor-pointer hover:bg-(--hover)" : ""} ${isOpen ? "bg-(--hover)" : ""}`}
                     onClick={() => hasDetails && setExpandedRow(isOpen ? null : log.id)}
                   >
                     {/* Time */}
                     <div className="min-w-0">
-                      <p className="text-sm text-slate-200 tabular-nums whitespace-nowrap">
+                      <p className="text-sm text-(--text) tabular-nums whitespace-nowrap">
                         {log.created_at ? format(new Date(log.created_at), "dd MMM yy, HH:mm") : "—"}
                       </p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">
+                      <p className="text-[10px] text-(--text-faint) mt-0.5">
                         {log.created_at ? formatDistanceToNow(new Date(log.created_at), { addSuffix: true }) : ""}
                       </p>
                     </div>
 
                     {/* User */}
                     <div className="hidden md:block min-w-0">
-                      <p className="text-sm text-slate-200 truncate">{log.user_full_name || "System"}</p>
-                      {log.user_email && <p className="text-[10px] text-slate-500 truncate">{log.user_email}</p>}
+                      <p className="text-sm text-(--text) truncate">{log.user_full_name || "System"}</p>
+                      {log.user_email && <p className="text-[10px] text-(--text-faint) truncate">{log.user_email}</p>}
                     </div>
 
                     {/* Action badge */}
@@ -342,18 +340,17 @@ export default function AuditLogPage() {
 
                     {/* Section (table) */}
                     <div className="hidden md:block">
-                      <span className="text-xs text-slate-400">{TABLE_NAMES[log.table_name] || log.table_name}</span>
+                      <span className="text-xs text-(--text-dim)">{TABLE_NAMES[log.table_name] || log.table_name}</span>
                     </div>
 
                     {/* Summary */}
                     <div className="min-w-0 flex items-center gap-2">
-                      {/* Mobile: show action badge inline */}
                       <span className={`md:hidden inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold border shrink-0 ${cfg.cls}`}>
                         <ActionIcon className="h-2 w-2" />{cfg.label}
                       </span>
-                      <p className="text-sm text-slate-300 truncate">{summary}</p>
+                      <p className="text-sm text-(--text-dim) truncate">{summary}</p>
                       {changedCount > 0 && (
-                        <span className="shrink-0 text-[10px] text-slate-500 bg-slate-800/60 border border-slate-700/40 rounded px-1.5 py-0.5">
+                        <span className="shrink-0 text-[10px] text-(--text-faint) bg-(--bg-raise) border border-(--svf-border) rounded px-1.5 py-0.5">
                           {changedCount} field{changedCount !== 1 ? "s" : ""}
                         </span>
                       )}
@@ -362,14 +359,14 @@ export default function AuditLogPage() {
                     {/* Expand toggle */}
                     <div className="hidden md:flex items-center justify-center">
                       {hasDetails && (
-                        <ChevronRight className={`h-3.5 w-3.5 text-slate-500 transition-transform ${isOpen ? "rotate-90" : ""}`} />
+                        <ChevronRight className={`h-3.5 w-3.5 text-(--text-faint) transition-transform ${isOpen ? "rotate-90" : ""}`} />
                       )}
                     </div>
                   </div>
 
                   {/* ── Expanded diff ── */}
                   {isOpen && hasDetails && (
-                    <div className="px-5 pb-5 pt-1 bg-slate-900/60 border-t border-slate-800/40 animate-in fade-in slide-in-from-top-1 duration-150">
+                    <div className="px-5 pb-5 pt-1 border-t border-(--svf-border) animate-in fade-in slide-in-from-top-1 duration-150" style={{ background: "var(--bg-deep)" }}>
                       <DiffPanel log={log} />
                     </div>
                   )}
@@ -381,18 +378,18 @@ export default function AuditLogPage() {
 
         {/* Pagination */}
         {totalCount > pageSize && (
-          <div className="flex items-center justify-between px-5 py-3 border-t border-slate-800/60 bg-slate-900/40">
-            <p className="text-xs text-slate-500">
+          <div className="flex items-center justify-between px-5 py-3 border-t border-(--svf-border)" style={{ background: "var(--bg-deep)" }}>
+            <p className="text-xs text-(--text-faint)">
               Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, totalCount)} of {totalCount.toLocaleString()}
             </p>
             <div className="flex gap-2 items-center">
               <Button variant="ghost" size="sm" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}
-                className="h-7 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 disabled:opacity-30">
+                className="h-7 text-xs text-(--text-faint) hover:text-(--text) hover:bg-(--hover) disabled:opacity-30">
                 Previous
               </Button>
-              <span className="text-xs text-slate-500">{page + 1} / {totalPages}</span>
+              <span className="text-xs text-(--text-faint)">{page + 1} / {totalPages}</span>
               <Button variant="ghost" size="sm" onClick={() => setPage((p) => p + 1)} disabled={(page + 1) * pageSize >= totalCount}
-                className="h-7 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 disabled:opacity-30">
+                className="h-7 text-xs text-(--text-faint) hover:text-(--text) hover:bg-(--hover) disabled:opacity-30">
                 Next
               </Button>
             </div>

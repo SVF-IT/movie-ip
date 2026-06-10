@@ -689,7 +689,7 @@ export function ComprehensiveCSVImportDialog({
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => setResolutions((r) => ({ ...r, [conflict.title]: "skip" }))}
-                            className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${resolutions[conflict.title] === "skip" ? "bg-slate-700 text-slate-100" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
+                            className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${resolutions[conflict.title] === "skip" ? "bg-slate-700 text-(--text)" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
                           >
                             Skip
                           </button>

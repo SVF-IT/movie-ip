@@ -3,16 +3,11 @@
 import { DataExportDialog, type ExportFieldDef } from "@/components/import-export/data-export-dialog";
 import { MovieSelector } from "@/components/movies/movie-selector";
 import { RoleGate } from "@/components/role-gate";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+
 import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Select,
   SelectContent,
@@ -37,9 +32,9 @@ import {
 import { useAuth } from "@/contexts/auth-context";
 import { useAppToast } from "@/hooks/use-app-toast";
 import { useSortableTable } from "@/hooks/use-sortable-table";
-import { getAllRights } from "@/lib/api/rights";
 import { submitRightChange } from "@/lib/api/pending-changes";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { getAllRights } from "@/lib/api/rights";
+import { createClient } from "@/lib/supabase/client";
 import type { PlatformRight } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
 import { differenceInDays, format } from "date-fns";
@@ -47,19 +42,16 @@ import {
   Download,
   Edit,
   FileText,
-  Filter,
   Loader2,
   MoreHorizontal,
   Plus,
-  Satellite,
   Trash2,
   Tv,
   Wifi,
-  X,
+  X
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 
 const RIGHTS_EXPORT_FIELDS: ExportFieldDef[] = [
   { key: "movie_title", label: "Movie", getter: (r) => (r.movies as any)?.title || "" },
@@ -85,10 +77,10 @@ interface PlatformOption { id: string; name: string; platform_type?: string }
 type RightsTypeFilter = "all" | "satellite" | "internet" | "other";
 
 const rightsTypePills: { id: RightsTypeFilter; label: string; icon: React.ElementType }[] = [
-  { id: "all",       label: "All Rights", icon: FileText },
-  { id: "satellite", label: "Satellite",  icon: Tv },
-  { id: "internet",  label: "Internet",   icon: Wifi },
-  { id: "other",     label: "Other",      icon: MoreHorizontal },
+  { id: "all", label: "All Rights", icon: FileText },
+  { id: "satellite", label: "Satellite", icon: Tv },
+  { id: "internet", label: "Internet", icon: Wifi },
+  { id: "other", label: "Other", icon: MoreHorizontal },
 ];
 
 function platformTypeCategory(platformType: string): "satellite" | "internet" | "other" {
@@ -169,7 +161,8 @@ export default function RightsPage() {
   useEffect(() => { fetchRights(); }, [fetchRights]);
 
   const getExpiryStatus = (endDate?: string) => {
-    if (!endDate) return { label: "No End Date", color: "bg-slate-800/60 text-slate-400 border-slate-700/50" };
+    if (!endDate) return { label: "No End Date", color: "bg-slate-800/60 text-(--text-faint) border-(--svf-border)" };
+    if (endDate.startsWith("3099") || endDate.startsWith("9999")) return { label: "Perpetual", color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/25" };
     const days = differenceInDays(new Date(endDate), new Date());
     if (days < 0) return { label: "Expired", color: "bg-red-500/10 text-red-400 border-red-500/25" };
     if (days <= 30) return { label: `${days}d left`, color: "bg-amber-500/10 text-amber-400 border-amber-500/25" };
@@ -244,161 +237,101 @@ export default function RightsPage() {
   const hasFilters = platformFilter !== "all" || movieIdFilter !== "all" || statusFilter !== "active" || rightsTypeFilter !== "all";
 
   return (
-    <div className="space-y-6 min-w-0">
-      {/* Cinematic Header */}
-      <div className="relative overflow-hidden rounded-xl bg-slate-900/60 border border-slate-800/60 backdrop-blur-xl p-6 shadow-2xl">
-        <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-red-600 via-amber-500 to-transparent" />
-        <div className="absolute top-4 right-4 w-56 h-56 bg-red-600/5 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-2 right-24 w-36 h-36 bg-amber-500/5 rounded-full blur-2xl pointer-events-none" />
-
-        <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20">
-              <FileText className="h-7 w-7 text-red-400" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-100">Rights Management</h1>
-              <p className="text-slate-400 text-sm mt-0.5">Manage platform rights and distribution licenses.</p>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9 px-4 bg-slate-800/60 border-slate-700/60 text-slate-300 hover:bg-slate-700/60 hover:text-slate-100 gap-2"
-              onClick={handleExportClick}
-              disabled={exportLoading}
-            >
-              {exportLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-              Export
-            </Button>
-            <RoleGate action="create" resource="right">
-              <Button asChild size="sm" className="h-9 px-4 bg-red-600 hover:bg-red-500 text-white border-0 shadow-lg shadow-red-900/30 gap-2">
-                <Link href="/rights/new"><Plus className="h-4 w-4" />Add Right</Link>
-              </Button>
-            </RoleGate>
-          </div>
+    <div className="space-y-4 min-w-0">
+      {/* ── Compact toolbar: all filters + actions in one row ── */}
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Movie selector */}
+        <div className="w-56">
+          <MovieSelector selectedId={movieIdFilter} onSelect={(id) => handleFilterChange("movieId", id)} />
         </div>
-      </div>
 
-      {/* Filters */}
-      <Card className="glass-card border-slate-800/60 overflow-hidden">
-        <CardHeader className="border-b border-slate-800/60 py-4 px-6">
-          <CardTitle className="text-sm font-bold flex items-center gap-2.5 text-slate-200">
-            <div className="p-1.5 rounded-md bg-red-500/10 border border-red-500/20">
-              <Filter className="h-3.5 w-3.5 text-red-400" />
-            </div>
-            Filters
-            {hasFilters && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="ml-auto h-7 text-xs text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 gap-1"
-                onClick={() => { setRightsTypeFilter("all"); setPlatformFilter("all"); setMovieIdFilter("all"); setStatusFilter("active"); setPage(0); }}
-              >
-                <X className="h-3 w-3" />Reset
-              </Button>
+        {/* Status */}
+        <Select value={statusFilter} onValueChange={(v) => handleFilterChange("status", v)}>
+          <SelectTrigger className="h-9 w-36 bg-(--bg-raise)/40 border-(--svf-border) text-(--text)">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="active">Active Only</SelectItem>
+            <SelectItem value="expired">Expired Only</SelectItem>
+            <SelectItem value="all">All Status</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Type pills */}
+        {rightsTypePills.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            onClick={() => { setRightsTypeFilter(id); setPage(0); }}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all duration-200 h-9",
+              rightsTypeFilter === id
+                ? "bg-red-600/15 border-red-500/40 text-red-300"
+                : "border-(--svf-border) text-(--text-faint) hover:border-red-500/30 hover:text-red-400"
             )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-5 space-y-4">
+          >
+            <Icon className="h-3 w-3" />{label}
+          </button>
+        ))}
 
-          {/* Row 1: Movie + Status */}
-          <div className="flex flex-col gap-3 md:flex-row md:items-end flex-wrap">
-            <div className="w-full max-w-sm">
-              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5 block">Movie</label>
-              <MovieSelector selectedId={movieIdFilter} onSelect={(id) => handleFilterChange("movieId", id)} />
-            </div>
-            <div className="w-full md:w-44">
-              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5 block">Status</label>
-              <Select value={statusFilter} onValueChange={(v) => handleFilterChange("status", v)}>
-                <SelectTrigger className="h-9 bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active Only</SelectItem>
-                  <SelectItem value="expired">Expired Only</SelectItem>
-                  <SelectItem value="all">All Status</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+        {/* Platform — only when type selected */}
+        {rightsTypeFilter !== "all" && (
+          <Select value={platformFilter} onValueChange={(v) => { setPlatformFilter(v); setPage(0); }}>
+            <SelectTrigger className="h-9 w-40 bg-(--bg-raise)/40 border-(--svf-border) text-(--text)">
+              <SelectValue placeholder="All Platforms" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Platforms</SelectItem>
+              {platformOptions.map((p) => (
+                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
 
-          {/* Row 2: Type pills */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mr-1">Type:</span>
-            {rightsTypePills.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                onClick={() => { setRightsTypeFilter(id); setPage(0); }}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all duration-200",
-                  rightsTypeFilter === id
-                    ? "bg-red-600/15 border-red-500/40 text-red-300"
-                    : "bg-slate-800/50 border-slate-700/50 text-slate-400 hover:border-red-500/30 hover:text-red-400"
-                )}
-              >
-                <Icon className="h-3 w-3" />{label}
-              </button>
-            ))}
-          </div>
+        {hasFilters && (
+          <Button variant="ghost" size="sm" className="h-9 gap-1 text-(--text-faint)" onClick={() => { setRightsTypeFilter("all"); setPlatformFilter("all"); setMovieIdFilter("all"); setStatusFilter("active"); setPage(0); }}>
+            <X className="h-3.5 w-3.5" />Reset
+          </Button>
+        )}
 
-          {/* Row 3: Platform name — only shown when a type is selected */}
-          {rightsTypeFilter !== "all" && (
-            <div className="w-full md:w-64">
-              <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5 block">Platform</label>
-              <Select value={platformFilter} onValueChange={(v) => { setPlatformFilter(v); setPage(0); }}>
-                <SelectTrigger className="h-9 bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm">
-                  <SelectValue placeholder="All Platforms" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Platforms</SelectItem>
-                  {platformOptions.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+        <div className="flex-1" />
 
-        </CardContent>
-      </Card>
+        {/* Actions */}
+        <Button variant="outline" size="sm" className="h-9 gap-2 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) hover:bg-(--hover)" onClick={handleExportClick} disabled={exportLoading}>
+          {exportLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          Export
+        </Button>
+        <RoleGate action="create" resource="right">
+          <Button asChild size="sm" className="h-9 gap-2 bg-red-600 hover:bg-red-500 text-white border-0 shadow-lg shadow-red-900/30">
+            <Link href="/rights/new"><Plus className="h-4 w-4" />Add Right</Link>
+          </Button>
+        </RoleGate>
+      </div>
 
 
 
       {/* Rights Table */}
-      <Card className="glass-card border-slate-800/60 overflow-hidden">
-        <CardHeader className="py-4 px-6 border-b border-slate-800/60">
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2.5 text-sm font-bold text-slate-200">
-              <FileText className="h-4 w-4 text-red-400" />
-              Platform Rights
-              <Badge className="ml-0.5 bg-slate-800/80 text-slate-300 border-slate-700/50 font-medium text-xs">
-                {loading ? "…" : totalCount}
-              </Badge>
-            </CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
+      <div className="glass-card overflow-hidden">
+        <div>
           {loading ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3">
               <Loader2 className="h-7 w-7 animate-spin text-red-400/60" />
-              <p className="text-slate-400 text-sm">Loading rights…</p>
+              <p className="text-(--text-faint) text-sm">Loading rights…</p>
             </div>
           ) : rights.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3">
-              <div className="p-4 rounded-full bg-slate-800/50 border border-slate-700/40">
-                <FileText className="h-8 w-8 text-slate-400" />
+              <div className="p-4 rounded-full bg-slate-800/50 border border-(--svf-border)">
+                <FileText className="h-8 w-8 text-(--text-faint)" />
               </div>
-              <p className="text-slate-400 font-medium">No rights found.</p>
-              <p className="text-slate-400 text-sm">Try adjusting your filters.</p>
+              <p className="text-(--text-faint) font-medium">No rights found.</p>
+              <p className="text-(--text-faint) text-sm">Try adjusting your filters.</p>
             </div>
           ) : (
             <>
               <div className="overflow-x-auto">
                 <Table>
-                  <TableHeader>
-                    <TableRow className="border-slate-800/60 hover:bg-transparent">
+                  <TableHeader style={{ background: "var(--bg-deep)" }}>
+                    <TableRow className="border-(--svf-border) hover:bg-transparent">
                       <TableHead className="w-10 pl-5">
                         <Checkbox
                           checked={rights.length > 0 && selectedIds.size === rights.length}
@@ -407,21 +340,21 @@ export default function RightsPage() {
                           className="border-slate-600"
                         />
                       </TableHead>
-                      <SortableHeader column="movies" label="Movie" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-slate-400" />
-                      <SortableHeader column="platforms" label="Platform" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hidden md:table-cell" />
-                      <SortableHeader column="license_type" label="Type" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hidden lg:table-cell" />
-                      <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hidden lg:table-cell">Category</TableHead>
-                      <SortableHeader column="start_date" label="Start Date" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-slate-400 hidden lg:table-cell" />
-                      <SortableHeader column="end_date" label="End Date" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-slate-400" />
-                      <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Status</TableHead>
-                      <TableHead className="text-right text-[10px] font-bold uppercase tracking-widest text-slate-400 pr-6">Actions</TableHead>
+                      <SortableHeader column="movies" label="Movie" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)" />
+                      <SortableHeader column="platforms" label="Platform" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden md:table-cell" />
+                      <SortableHeader column="license_type" label="Type" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden lg:table-cell" />
+                      <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden lg:table-cell">Category</TableHead>
+                      <SortableHeader column="start_date" label="Start Date" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden lg:table-cell" />
+                      <SortableHeader column="end_date" label="End Date" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)" />
+                      <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Status</TableHead>
+                      <TableHead className="text-right text-[10px] font-bold uppercase tracking-widest text-(--text-faint) pr-6">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {sortedRights.map((right) => {
                       const status = getExpiryStatus(right.end_date);
                       return (
-                        <TableRow key={right.id} className="border-slate-800/40 hover:bg-slate-800/30 transition-colors group">
+                        <TableRow key={right.id} className="border-(--svf-border)/40 hover:bg-slate-800/30 transition-colors group">
                           <TableCell className="pl-5 py-3.5">
                             <Checkbox
                               checked={selectedIds.has(right.id)}
@@ -433,27 +366,31 @@ export default function RightsPage() {
                           <TableCell className="py-3.5">
                             <div className="min-w-0">
                               {right.movies ? (
-                                <Link href={`/movies/${right.movies.id}`} className="font-semibold text-sm text-slate-200 hover:text-red-400 transition-colors truncate block max-w-[200px]">
+                                <Link href={`/movies/${right.movies.id}`} className="font-semibold text-sm text-(--text) hover:text-red-400 transition-colors truncate block max-w-[200px]">
                                   {right.movies.title}
                                 </Link>
-                              ) : <span className="text-slate-400 text-sm">—</span>}
-                              <span className="text-[10px] text-slate-400 font-mono md:hidden">{right.platforms?.name}</span>
+                              ) : <span className="text-(--text-faint) text-sm">—</span>}
+                              <span className="text-[10px] text-(--text-faint) font-mono md:hidden">{right.platforms?.name}</span>
                             </div>
                           </TableCell>
-                          <TableCell className="hidden md:table-cell text-sm text-slate-400 max-w-[130px] truncate py-3.5">
+                          <TableCell className="hidden md:table-cell text-sm text-(--text-faint) max-w-[130px] truncate py-3.5">
                             {right.platforms?.name || "—"}
                           </TableCell>
-                          <TableCell className="hidden lg:table-cell text-sm text-slate-400 py-3.5">
+                          <TableCell className="hidden lg:table-cell text-sm text-(--text-faint) py-3.5">
                             {right.platforms?.platform_type || "—"}
                           </TableCell>
-                          <TableCell className="hidden lg:table-cell text-xs text-slate-400 py-3.5">
+                          <TableCell className="hidden lg:table-cell text-xs text-(--text-faint) py-3.5">
                             {right.category || "—"}
                           </TableCell>
                           <TableCell className="hidden lg:table-cell tabular-nums text-xs text-emerald-400 font-medium py-3.5">
                             {right.start_date ? format(new Date(right.start_date), "dd MMM yy") : "—"}
                           </TableCell>
-                          <TableCell className="tabular-nums text-xs text-slate-300 font-medium py-3.5">
-                            {right.end_date ? format(new Date(right.end_date), "dd MMM yy") : "—"}
+                          <TableCell className="tabular-nums text-xs text-(--text) font-medium py-3.5">
+                            {right.end_date
+                              ? (right.end_date.startsWith("3099") || right.end_date.startsWith("9999"))
+                                ? <span className="text-(--st-active) font-semibold">Perpetual</span>
+                                : format(new Date(right.end_date), "dd MMM yy")
+                              : "—"}
                           </TableCell>
                           <TableCell className="py-3.5">
                             <Badge variant="outline" className={cn("text-[10px] font-semibold px-2 py-0.5 whitespace-nowrap", status.color)}>
@@ -465,7 +402,7 @@ export default function RightsPage() {
                               <div className="flex justify-end gap-0.5">
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <Button size="icon" variant="ghost" className="h-7 w-7 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10" asChild>
+                                    <Button size="icon" variant="ghost" className="h-5 w-5 text-(--text-faint) hover:text-amber-400 hover:bg-amber-500/10" asChild>
                                       <Link href={`/rights/${right.id}/edit`}><Edit className="h-3.5 w-3.5" /></Link>
                                     </Button>
                                   </TooltipTrigger>
@@ -477,7 +414,7 @@ export default function RightsPage() {
                                       <Button
                                         size="icon"
                                         variant="ghost"
-                                        className="h-7 w-7 text-slate-400 hover:text-red-400 hover:bg-red-500/10"
+                                        className="h-5 w-5 text-(--text-faint) hover:text-red-400 hover:bg-red-500/10"
                                         onClick={() => setDeletingRight(right)}
                                       >
                                         <Trash2 className="h-3.5 w-3.5" />
@@ -497,20 +434,20 @@ export default function RightsPage() {
               </div>
 
               {totalCount > pageSize && (
-                <div className="flex items-center justify-between px-6 py-4 border-t border-slate-800/60">
-                  <p className="text-xs text-slate-400 tabular-nums">
+                <div className="flex items-center justify-between px-6 py-4 border-t border-(--svf-border)">
+                  <p className="text-xs text-(--text-faint) tabular-nums">
                     {page * pageSize + 1}–{Math.min((page + 1) * pageSize, totalCount)} of {totalCount}
                   </p>
                   <div className="flex gap-1.5">
-                    <Button variant="outline" size="sm" className="h-8 px-4 bg-slate-800/40 border-slate-700/50 text-slate-400 hover:bg-slate-700/60" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>Previous</Button>
-                    <Button variant="outline" size="sm" className="h-8 px-4 bg-slate-800/40 border-slate-700/50 text-slate-400 hover:bg-slate-700/60" onClick={() => setPage(p => p + 1)} disabled={(page + 1) * pageSize >= totalCount}>Next</Button>
+                    <Button variant="outline" size="sm" className="h-8 px-4 bg-slate-800/40 border-(--svf-border) text-(--text-faint) hover:bg-slate-700/60" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>Previous</Button>
+                    <Button variant="outline" size="sm" className="h-8 px-4 bg-slate-800/40 border-(--svf-border) text-(--text-faint) hover:bg-slate-700/60" onClick={() => setPage(p => p + 1)} disabled={(page + 1) * pageSize >= totalCount}>Next</Button>
                   </div>
                 </div>
               )}
             </>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       <DataExportDialog
         open={showExportDialog}

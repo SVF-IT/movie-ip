@@ -52,8 +52,8 @@ const PEOPLE_EXPORT_FIELDS: ExportFieldDef[] = [
 
 type SortOption = "name_asc" | "name_desc" | "movies_desc" | "movies_asc";
 
-const inputCls = "bg-slate-950/40 border-slate-700/50 text-slate-200 placeholder:text-slate-500 focus:border-slate-500 h-10";
-const selectTriggerCls = "bg-slate-950/40 border-slate-700/50 text-slate-300 h-10";
+const inputCls = "bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) focus:border-slate-500 h-10";
+const selectTriggerCls = "bg-(--bg-raise)/40 border-(--svf-border) text-(--text) h-10";
 
 export default function PeoplePage() {
   const { profile } = useAuth();
@@ -186,31 +186,63 @@ export default function PeoplePage() {
   const hasFilters = searchQuery || roleFilter !== "all";
 
   return (
-    <div className="space-y-6">
-      {/* ── Cinematic Header ── */}
-      <div className="relative overflow-hidden rounded-xl bg-slate-900/60 border border-slate-800/60 backdrop-blur-xl p-6 shadow-2xl">
-        <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-red-600 via-amber-500 to-transparent" />
-        <div className="absolute -top-24 -right-24 w-64 h-64 bg-violet-600/8 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-16 left-1/3 w-48 h-48 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-violet-500/15 border border-violet-500/30 shadow-lg shadow-violet-500/10">
-              <Users className="h-6 w-6 text-violet-400" />
+    <div className="space-y-4">
+      {/* ── Compact toolbar ── */}
+      <div className="flex flex-wrap items-center gap-2">
+        {viewMode === "directory" && (
+          <>
+            <div className="relative min-w-48 flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-(--text-faint)" />
+              <Input
+                placeholder="Search by name…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 h-9 text-sm"
+              />
+              {searchQuery && (
+                <button className="absolute right-2 top-1/2 -translate-y-1/2 text-(--text-faint) hover:text-(--text)" onClick={() => setSearchQuery("")}>
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
-                People Directory
-              </h1>
-              <p className="text-sm text-slate-400 mt-0.5">Browse and manage actors, directors, and crew members</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
+            <Select value={roleFilter} onValueChange={(v) => { setRoleFilter(v as typeof roleFilter); setPage(0); }}>
+              <SelectTrigger className="h-9 w-36 text-sm">
+                <UserCheck className="h-3.5 w-3.5 text-(--text-faint)" />
+                <SelectValue placeholder="All Roles" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Roles</SelectItem>
+                <SelectItem value="actor">Actors</SelectItem>
+                <SelectItem value="director">Directors</SelectItem>
+                <SelectItem value="both">Actor &amp; Director</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
+              <SelectTrigger className="h-9 w-36 text-sm">
+                <ArrowUpDown className="h-3.5 w-3.5 text-(--text-faint)" />
+                <SelectValue placeholder="Sort" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="name_asc">Name (A–Z)</SelectItem>
+                <SelectItem value="name_desc">Name (Z–A)</SelectItem>
+                <SelectItem value="movies_desc">Most Movies</SelectItem>
+                <SelectItem value="movies_asc">Fewest Movies</SelectItem>
+              </SelectContent>
+            </Select>
+            {hasFilters && (
+              <Button variant="ghost" size="sm" className="h-9 gap-1.5 text-(--text-faint) hover:text-(--text)"
+                onClick={() => { setSearchQuery(""); setRoleFilter("all"); setPage(0); }}>
+                <X className="h-3.5 w-3.5" /> Clear
+              </Button>
+            )}
+            <span className="text-xs text-(--text-faint) tabular-nums">{processedPeople.length} people</span>
+          </>
+        )}
+        <div className="flex items-center gap-2 shrink-0 ml-auto">
             <Button
               onClick={handleOpenExport}
               size="sm"
-              className="h-9 gap-2 bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 border border-slate-700/60"
+              className="h-9 gap-2 bg-(--bg-raise) hover:bg-(--hover) text-(--text) border border-(--svf-border)"
             >
               Export
             </Button>
@@ -222,16 +254,16 @@ export default function PeoplePage() {
                     Add Person
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="sm:max-w-md bg-slate-900 border-slate-700/60">
+                <DialogContent className="sm:max-w-md bg-(--panel-solid) border-(--svf-border)/60">
                   <DialogHeader>
-                    <DialogTitle className="text-slate-100">Add New Person</DialogTitle>
-                    <DialogDescription className="text-slate-400">
+                    <DialogTitle className="text-(--text)">Add New Person</DialogTitle>
+                    <DialogDescription className="text-(--text-faint)">
                       Create a new profile. You can assign them to movies later.
                     </DialogDescription>
                   </DialogHeader>
                   <div className="grid gap-4 py-4">
                     <div className="space-y-2">
-                      <Label htmlFor="name" className="text-slate-300">Full Name *</Label>
+                      <Label htmlFor="name" className="text-(--text)">Full Name *</Label>
                       <Input
                         id="name"
                         placeholder="e.g. Satyajit Ray"
@@ -242,7 +274,7 @@ export default function PeoplePage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="role" className="text-slate-300">Role</Label>
+                      <Label htmlFor="role" className="text-(--text)">Role</Label>
                       <Select value={newPersonRole} onValueChange={(v) => setNewPersonRole(v as typeof newPersonRole)}>
                         <SelectTrigger id="role" className={selectTriggerCls}>
                           <SelectValue placeholder="Select role…" />
@@ -257,7 +289,7 @@ export default function PeoplePage() {
                   </div>
                   <DialogFooter>
                     <Button variant="outline" onClick={() => { setCreateDialogOpen(false); setNewPersonName(""); setNewPersonRole(""); }}
-                      className="border-slate-700/50 text-slate-300 hover:bg-slate-800/60">
+                      className="border-(--svf-border) text-(--text) hover:bg-(--hover)">
                       Cancel
                     </Button>
                     <Button onClick={handleCreatePerson} disabled={creating || !newPersonName.trim()}
@@ -269,90 +301,15 @@ export default function PeoplePage() {
               </Dialog>
             )}
           </div>
-        </div>
-
-        {/* Quick stats */}
-        <div className="relative mt-5 grid grid-cols-3 gap-3">
-          {[
-            { label: "Total People", count: totalCount, color: "text-slate-300", bg: "bg-slate-800/60 border-slate-700/40" },
-            { label: "Directors", count: people.filter((p) => p.role === "director" || p.role === "both").length, color: "text-blue-400", bg: "bg-blue-500/10 border-blue-500/20" },
-            { label: "Actors", count: people.filter((p) => p.role === "actor" || p.role === "both").length, color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20" },
-          ].map((s) => (
-            <div key={s.label} className={`rounded-lg border px-4 py-3 ${s.bg}`}>
-              <div className={`text-2xl font-bold tabular-nums ${s.color}`}>{s.count}</div>
-              <div className="text-xs text-slate-400 mt-0.5">{s.label}</div>
-            </div>
-          ))}
-        </div>
       </div>
 
 
 
-      {/* ── Directory Filters (only in directory mode) ── */}
-      {viewMode === "directory" && (
-        <div className="relative overflow-hidden rounded-xl bg-slate-900/40 border border-slate-800/60 backdrop-blur-xl p-4 shadow-xl">
-          <div className="flex flex-wrap gap-3 items-center">
-            {/* Search */}
-            <div className="relative min-w-[200px] flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-              <Input
-                placeholder="Search by name…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 h-9 bg-slate-950/40 border-slate-700/50 text-slate-200 placeholder:text-slate-500 text-sm"
-              />
-              {searchQuery && (
-                <button className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300" onClick={() => setSearchQuery("")}>
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
 
-            {/* Role filter */}
-            <Select value={roleFilter} onValueChange={(v) => { setRoleFilter(v as typeof roleFilter); setPage(0); }}>
-              <SelectTrigger className="h-9 bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm w-[160px] gap-2">
-                <UserCheck className="h-3.5 w-3.5 text-slate-400" />
-                <SelectValue placeholder="All Roles" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Roles</SelectItem>
-                <SelectItem value="actor">Actors</SelectItem>
-                <SelectItem value="director">Directors</SelectItem>
-                <SelectItem value="both">Actors &amp; Directors</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {/* Sort */}
-            <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
-              <SelectTrigger className="h-9 bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm w-[160px] gap-2">
-                <ArrowUpDown className="h-3.5 w-3.5 text-slate-400" />
-                <SelectValue placeholder="Sort" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="name_asc">Name (A–Z)</SelectItem>
-                <SelectItem value="name_desc">Name (Z–A)</SelectItem>
-                <SelectItem value="movies_desc">Most Movies</SelectItem>
-                <SelectItem value="movies_asc">Fewest Movies</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {hasFilters && (
-              <Button variant="ghost" size="sm" className="h-9 gap-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
-                onClick={() => { setSearchQuery(""); setRoleFilter("all"); setPage(0); }}>
-                <X className="h-3.5 w-3.5" /> Clear
-              </Button>
-            )}
-
-            <span className="ml-auto text-xs text-slate-500">{processedPeople.length} people</span>
-          </div>
-        </div>
-      )}
-
-      {/* ── Loading Skeleton ── */}
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {[...Array(8)].map((_, i) => (
-            <div key={i} className="h-56 rounded-xl border border-slate-800/40 bg-slate-900/30 animate-pulse" />
+            <div key={i} className="h-48 rounded-[14px] border border-(--svf-border) bg-(--panel) animate-pulse" />
           ))}
         </div>
       ) : viewMode === "highlights" ? (
@@ -365,11 +322,11 @@ export default function PeoplePage() {
                 <div className="p-2 rounded-lg bg-blue-500/15 border border-blue-500/30">
                   <Clapperboard className="h-4 w-4 text-blue-400" />
                 </div>
-                <h2 className="text-lg font-bold text-slate-100 tracking-tight">Key Directors</h2>
-                <span className="text-xs text-slate-500 tabular-nums">({keyDirectors.length})</span>
+                <h2 className="text-lg font-bold text-(--text) tracking-tight">Key Directors</h2>
+                <span className="text-xs text-(--text-faint) tabular-nums">({keyDirectors.length})</span>
               </div>
               <button
-                className="flex items-center gap-1 text-xs text-slate-400 hover:text-red-400 transition-colors group"
+                className="flex items-center gap-1 text-xs text-(--text-faint) hover:text-red-400 transition-colors group"
                 onClick={() => { setRoleFilter("director"); setViewMode("directory"); }}
               >
                 View all <ChevronRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
@@ -387,11 +344,11 @@ export default function PeoplePage() {
                 <div className="p-2 rounded-lg bg-amber-500/15 border border-amber-500/30">
                   <Star className="h-4 w-4 text-amber-400" />
                 </div>
-                <h2 className="text-lg font-bold text-slate-100 tracking-tight">Key Actors</h2>
-                <span className="text-xs text-slate-500 tabular-nums">({keyActors.length})</span>
+                <h2 className="text-lg font-bold text-(--text) tracking-tight">Key Actors</h2>
+                <span className="text-xs text-(--text-faint) tabular-nums">({keyActors.length})</span>
               </div>
               <button
-                className="flex items-center gap-1 text-xs text-slate-400 hover:text-red-400 transition-colors group"
+                className="flex items-center gap-1 text-xs text-(--text-faint) hover:text-red-400 transition-colors group"
                 onClick={() => { setRoleFilter("actor"); setViewMode("directory"); }}
               >
                 View all <ChevronRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
@@ -406,7 +363,7 @@ export default function PeoplePage() {
           <div className="flex justify-center pt-2">
             <button
               onClick={() => setViewMode("directory")}
-              className="px-8 py-2.5 rounded-xl text-sm font-semibold border border-slate-700/50 text-slate-300 hover:border-slate-600/60 hover:text-slate-100 bg-slate-800/30 hover:bg-slate-800/60 transition-all"
+              className="px-8 py-2.5 rounded-[12px] text-sm font-semibold border border-(--svf-border) text-(--text) hover:bg-(--hover) transition-all"
             >
               Explore Full Directory
             </button>
@@ -414,20 +371,20 @@ export default function PeoplePage() {
         </div>
       ) : paginatedPeople.length === 0 ? (
         /* ── Empty State ── */
-        <div className="flex flex-col items-center justify-center py-20 rounded-xl border border-dashed border-slate-700/40 bg-slate-900/20">
-          <div className="p-4 rounded-full bg-slate-800/40 mb-4">
-            <Users className="h-10 w-10 text-slate-500" />
+        <div className="flex flex-col items-center justify-center py-20 rounded-[14px] border border-dashed border-(--svf-border) bg-(--panel)/30">
+          <div className="p-4 rounded-full bg-(--bg-raise) border border-(--svf-border) mb-4">
+            <Users className="h-9 w-9 text-(--text-faint)" />
           </div>
-          <h3 className="font-bold text-lg text-slate-200">No one found</h3>
-          <p className="text-slate-500 max-w-xs text-center mt-2 text-sm">
+          <h3 className="font-bold text-base text-(--text)">No one found</h3>
+          <p className="text-(--text-faint) max-w-xs text-center mt-2 text-sm">
             Try adjusting your search or filters to find what you're looking for.
           </p>
-          <div className="flex gap-3 mt-6">
-            <Button variant="outline" size="sm" className="border-slate-700/50 text-slate-300 hover:bg-slate-800/60"
+          <div className="flex gap-3 mt-5">
+            <Button variant="outline" size="sm" className="border-(--svf-border) text-(--text) hover:bg-(--hover)"
               onClick={() => { setSearchQuery(""); setRoleFilter("all"); }}>
               Clear Filters
             </Button>
-            <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
+            <Button variant="ghost" size="sm" className="text-(--text-faint) hover:text-(--text) hover:bg-(--hover)"
               onClick={() => setViewMode("highlights")}>
               Back to Highlights
             </Button>
@@ -438,32 +395,31 @@ export default function PeoplePage() {
         <>
           <div className="flex items-center gap-2">
             <button
-              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+              className="flex items-center gap-1.5 text-xs text-(--text-faint) hover:text-(--text) transition-colors"
               onClick={() => setViewMode("highlights")}
             >
               <ArrowLeft className="h-3.5 w-3.5" /> Back to Highlights
             </button>
-            <span className="text-slate-600 text-xs">/</span>
-            <span className="text-xs text-slate-500">Full Directory</span>
+            <span className="text-(--text-faint) text-xs">/</span>
+            <span className="text-xs text-(--text-faint)">Full Directory</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
             {paginatedPeople.map((person) => <PersonCard key={person.id} person={person} />)}
           </div>
 
-          {/* Pagination */}
           {processedPeople.length > pageSize && (
-            <div className="flex items-center justify-between pt-4 border-t border-slate-800/40">
-              <p className="text-xs text-slate-500">
-                <span className="font-medium text-slate-300">{page * pageSize + 1}–{Math.min((page + 1) * pageSize, processedPeople.length)}</span>
+            <div className="flex items-center justify-between pt-4 border-t border-(--svf-border)">
+              <p className="text-xs text-(--text-faint)">
+                <span className="font-medium text-(--text)">{page * pageSize + 1}–{Math.min((page + 1) * pageSize, processedPeople.length)}</span>
                 {" "}of {processedPeople.length}
               </p>
               <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="h-8 bg-slate-800/40 border-slate-700/50 text-slate-300 hover:bg-slate-700/50"
+                <Button variant="outline" size="sm" className="h-8 bg-(--bg-raise) border-(--svf-border) text-(--text) hover:bg-(--hover)"
                   onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}>
                   Previous
                 </Button>
-                <Button variant="outline" size="sm" className="h-8 bg-slate-800/40 border-slate-700/50 text-slate-300 hover:bg-slate-700/50"
+                <Button variant="outline" size="sm" className="h-8 bg-(--bg-raise) border-(--svf-border) text-(--text) hover:bg-(--hover)"
                   onClick={() => setPage((p) => p + 1)} disabled={(page + 1) * pageSize >= processedPeople.length}>
                   Next
                 </Button>

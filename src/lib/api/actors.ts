@@ -2,9 +2,12 @@ import { createClient } from "@/lib/supabase/client";
 
 const supabase = createClient();
 
+const normalizeTitle = (title: string) => title.replace(/\s*\([^)]*\)/g, "").trim();
+
 export interface ActorMovie {
   movie_id: string;
   movie_title: string;
+  production_no: string | null;
   release_year: string | null;
   source: string | null;
   language_name: string | null;
@@ -27,7 +30,7 @@ export async function getActorsWithMovies(options?: {
     const { data: linkedEntries, error: linkedError } = await supabase
       .from("movie_people")
       .select("person_id, movie_id")
-      .eq("role", "Actor");
+      .in("role", ["Actor", "actor"]);
     if (linkedError) throw linkedError;
 
     const linkedPersonIds = [...new Set((linkedEntries || []).map((e: { person_id: string }) => e.person_id))];
@@ -65,13 +68,14 @@ export async function getActorsWithMovies(options?: {
     if (movieIds.length > 0) {
       const { data: movies, error: moviesError } = await supabase
         .from("movies")
-        .select("id, title, release_year, source, language")
+        .select("id, title, production_no, release_year, source, language")
         .in("id", movieIds);
       if (moviesError) throw moviesError;
       for (const movie of movies || []) {
         movieMap.set(movie.id, {
           movie_id: movie.id,
           movie_title: movie.title,
+          production_no: movie.production_no || null,
           release_year: movie.release_year,
           source: movie.source,
           language_name: movie.language || null,
@@ -94,7 +98,8 @@ export async function getActorsWithMovies(options?: {
         if (m) actorMovies.push(m);
       }
       actorMovies.sort((a, b) => (parseInt(b.release_year || "0") || 0) - (parseInt(a.release_year || "0") || 0));
-      return { id: person.id, name: person.name, movies: actorMovies, movies_count: actorMovies.length };
+      const uniqueKeys = new Set(actorMovies.map((m) => m.production_no?.trim() || normalizeTitle(m.movie_title)));
+      return { id: person.id, name: person.name, movies: actorMovies, movies_count: uniqueKeys.size };
     });
 
     const totalCount = actors.length;
@@ -123,7 +128,7 @@ export async function getActorById(id: string): Promise<ActorWithMovies | null> 
       .from("movie_people")
       .select("movie_id")
       .eq("person_id", id)
-      .eq("role", "Actor");
+      .in("role", ["Actor", "actor"]);
 
     if (entriesError) throw entriesError;
 
@@ -133,7 +138,7 @@ export async function getActorById(id: string): Promise<ActorWithMovies | null> 
 
     const { data: movies, error: moviesError } = await supabase
       .from("movies")
-      .select("id, title, release_year, source, language")
+      .select("id, title, production_no, release_year, source, language")
       .in("id", movieIds);
 
     if (moviesError) throw moviesError;
@@ -141,14 +146,15 @@ export async function getActorById(id: string): Promise<ActorWithMovies | null> 
     const actorMovies: ActorMovie[] = (movies || []).map((movie: any) => ({
       movie_id: movie.id,
       movie_title: movie.title,
+      production_no: movie.production_no || null,
       release_year: movie.release_year,
       source: movie.source,
       language_name: movie.language || null,
     }));
 
     actorMovies.sort((a, b) => (parseInt(b.release_year || "0") || 0) - (parseInt(a.release_year || "0") || 0));
-
-    return { id: person.id, name: person.name, movies: actorMovies, movies_count: actorMovies.length };
+    const uniqueKeys = new Set(actorMovies.map((m) => m.production_no?.trim() || normalizeTitle(m.movie_title)));
+    return { id: person.id, name: person.name, movies: actorMovies, movies_count: uniqueKeys.size };
   } catch (error) {
     console.error("Error fetching actor:", error);
     return null;

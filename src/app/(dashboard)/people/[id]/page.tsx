@@ -1,17 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
-import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -29,26 +18,29 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  ArrowLeft,
-  Loader2,
-  AlertTriangle,
-  Film,
-  User,
-  Video,
-  Star,
-  Clapperboard,
-  Calendar,
-  Layers,
-  ArrowUpRight,
-  Edit,
-  Trash2
-} from "lucide-react";
-import { getPersonById, updatePerson, deletePerson, type PersonWithStats } from "@/lib/api/people";
 import { useAuth } from "@/contexts/auth-context";
 import { useAppToast } from "@/hooks/use-app-toast";
+import { deletePerson, getPersonById, updatePerson, type PersonWithStats } from "@/lib/api/people";
 import { createClient } from "@/lib/supabase/client";
-import { cn } from "@/lib/utils";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ArrowUpRight,
+  Calendar,
+  Clapperboard,
+  Download,
+  Edit,
+  Film,
+  Loader2,
+  Megaphone,
+  Star,
+  Ticket,
+  Trash2,
+  User
+} from "lucide-react";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 interface MovieEntry {
   id: string;
@@ -59,21 +51,31 @@ interface MovieEntry {
   role: "actor" | "director";
 }
 
+// Same hue palette as PersonCard for consistency
+const HUE_PALETTE = [330, 20, 45, 160, 185, 210, 260, 290, 310, 140, 0];
+function getAvatarHue(name: string, id: string): number {
+  const s = name + (id || "");
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = s.charCodeAt(i) + ((h << 5) - h);
+  return HUE_PALETTE[Math.abs(h) % HUE_PALETTE.length];
+}
+
+const inputCls = "bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) h-10";
+const selectCls = "bg-(--bg-raise)/40 border-(--svf-border) text-(--text) h-10";
+const labelCls = "text-xs font-semibold text-(--text-faint) uppercase tracking-wider";
+
 export default function PersonDetailPage() {
   const params = useParams();
   const router = useRouter();
   const personId = params.id as string;
   const { profile } = useAuth();
-  const userRole = profile?.role;
-  
-  const canEdit = userRole === 'admin' || userRole === 'legal' || userRole === 'editor';
+  const canEdit = profile?.role === "admin" || profile?.role === "legal" || profile?.role === "editor";
 
   const [person, setPerson] = useState<PersonWithStats | null>(null);
   const [movies, setMovies] = useState<MovieEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const toast = useAppToast();
 
-  // Edit / Delete State
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editName, setEditName] = useState("");
   const [editRole, setEditRole] = useState<"actor" | "director" | "both" | "">("");
@@ -85,65 +87,41 @@ export default function PersonDetailPage() {
   const fetchPerson = useCallback(async () => {
     try {
       setLoading(true);
-  
       const personData = await getPersonById(personId);
-      if (!personData) {
-        toast.error("Person not found");
-        return;
-      }
+      if (!personData) { toast.error("Person not found"); return; }
       setPerson(personData);
 
-      // Fetch movies via unified movie_people table
       const supabase = createClient();
-
       const { data: peopleData } = await supabase
         .from("movie_people")
         .select("id, movie_id, role, movies(id, title, release_year, source)")
         .eq("person_id", personId);
 
       const movieEntries: MovieEntry[] = [];
-
       for (const entry of peopleData || []) {
-        const movie = entry.movies as unknown as {
-          id: string;
-          title: string;
-          release_year: string | null;
-          source: string | null;
-        } | null;
+        const movie = entry.movies as unknown as { id: string; title: string; release_year: string | null; source: string | null } | null;
         if (movie) {
           movieEntries.push({
-            id: entry.id,
-            movie_id: movie.id,
-            movie_title: movie.title,
-            release_year: movie.release_year,
-            source: movie.source,
+            id: entry.id, movie_id: movie.id, movie_title: movie.title,
+            release_year: movie.release_year, source: movie.source,
             role: (entry.role as string).toLowerCase() as "actor" | "director",
           });
         }
       }
-
-      // Sort by release year (newest first)
       movieEntries.sort((a, b) => (parseInt(b.release_year || "0") || 0) - (parseInt(a.release_year || "0") || 0));
-
+      // Debug: log raw counts
+      const actorRaw = movieEntries.filter(m => m.role === "actor");
+      const actorIds = new Set(actorRaw.map(m => m.movie_id));
+      const actorTitles = new Set(Array.from(actorIds).map(id => { const m = actorRaw.find(x => x.movie_id === id); return m ? m.movie_title.replace(/\s*\([^)]*\)/g, "").trim() : ""; }));
+      console.log("[PersonDetail] raw actor entries:", actorRaw.length, "| unique movie_ids:", actorIds.size, "| unique normalized titles:", actorTitles.size);
       setMovies(movieEntries);
     } catch (err) {
-      console.error("Error fetching person:", err);
       toast.error(err instanceof Error ? err.message : "Failed to load person");
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }, [personId]);
 
-  useEffect(() => {
-    fetchPerson();
-  }, [fetchPerson]);
-
-  useEffect(() => {
-    if (person) {
-      setEditName(person.name);
-      setEditRole(person.role || "");
-    }
-  }, [person]);
+  useEffect(() => { fetchPerson(); }, [fetchPerson]);
+  useEffect(() => { if (person) { setEditName(person.name); setEditRole(person.role || ""); } }, [person]);
 
   const handleUpdatePerson = async () => {
     if (!editName.trim()) return;
@@ -154,9 +132,7 @@ export default function PersonDetailPage() {
       fetchPerson();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to update person");
-    } finally {
-      setIsUpdating(false);
-    }
+    } finally { setIsUpdating(false); }
   };
 
   const handleDeletePerson = async () => {
@@ -173,53 +149,68 @@ export default function PersonDetailPage() {
 
   const initials = useMemo(() => {
     if (!person?.name) return "?";
-    return person.name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .substring(0, 2);
+    return person.name.split(" ").map((n) => n[0]).join("").toUpperCase().substring(0, 2);
   }, [person?.name]);
 
-  const getRoleLabel = () => {
-    if (!person) return "";
-    switch (person.role) {
-      case "actor": return "Actor";
-      case "director": return "Director";
-      case "both": return "Actor & Director";
-      default: return "Profile";
-    }
-  };
+  // Same deduplication as the filmography grid: collapse "(version)" suffix variants
+  const normalizeTitle = (title: string) => title.replace(/\s*\([^)]*\)/g, "").trim();
 
-  const getRoleBadgeVariant = () => {
-    if (!person) return "outline";
-    switch (person.role) {
-      case "actor": return "secondary";
-      case "director": return "default";
-      case "both": return "secondary";
-      default: return "outline";
-    }
-  };
+  // Match actors/directors API logic: unique movie_ids per role → unique normalized titles
+  const { directorCount, actorCount, uniqueFilmCount } = useMemo(() => {
+    // Step 1: unique movie_id → title map per role (mirrors API Set<movie_id> dedup)
+    const directorIdTitles = new Map<string, string>();
+    const actorIdTitles = new Map<string, string>();
+    movies.forEach((m) => {
+      if (m.role === "director") directorIdTitles.set(m.movie_id, m.movie_title);
+      else actorIdTitles.set(m.movie_id, m.movie_title);
+    });
+    // Step 2: normalize titles (mirrors API normalizeTitle dedup)
+    const directorTitles = new Set(Array.from(directorIdTitles.values()).map(normalizeTitle));
+    const actorTitles = new Set(Array.from(actorIdTitles.values()).map(normalizeTitle));
+    const allTitles = new Set([...directorTitles, ...actorTitles]);
+    return { directorCount: directorTitles.size, actorCount: actorTitles.size, uniqueFilmCount: allTitles.size };
+  }, [movies]);
+
+  const handleExportCSV = useCallback(() => {
+    if (!person || movies.length === 0) return;
+    const header = ["Title", "Year", "Role", "Source"];
+    const rows = movies.map((m) => [
+      `"${m.movie_title.replace(/"/g, '""')}"`,
+      m.release_year || "",
+      m.role === "director" ? "Director" : "Actor",
+      m.source || "",
+    ]);
+    const csv = [header.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${person.name.replace(/\s+/g, "_")}_filmography.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [person, movies]);
+
+  const hue = person ? getAvatarHue(person.name, person.id) : 260;
+  const avatarBg = `linear-gradient(145deg, oklch(0.52 0.20 ${hue}), oklch(0.38 0.22 ${(hue + 30) % 360}))`;
+  const glowColor = `oklch(0.52 0.20 ${hue} / 0.2)`;
+
+  const roleLabel = useMemo(() => {
+    if (!person) return "Profile";
+    if (person.role === "both") return "Actor & Director";
+    if (person.role === "director") return "Director";
+    return "Actor";
+  }, [person?.role]);
 
   if (loading) {
     return (
-      <div className="space-y-8 animate-in fade-in duration-500">
-        <div className="flex items-center gap-4">
-          <div className="h-9 w-32 rounded-lg bg-muted animate-pulse" />
+      <div className="space-y-5">
+        <div className="h-9 w-32 rounded-[9px] bg-(--panel) animate-pulse" />
+        <div className="h-44 rounded-[14px] bg-(--panel) animate-pulse" />
+        <div className="grid gap-4 sm:grid-cols-3">
+          {[...Array(3)].map((_, i) => <div key={i} className="h-28 rounded-[14px] bg-(--panel) animate-pulse" />)}
         </div>
-        <div className="h-48 w-full rounded-2xl bg-muted/40 animate-pulse border border-border/40" />
-        <div className="grid gap-6 md:grid-cols-3">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-28 rounded-xl bg-muted/30 animate-pulse border border-border/30" />
-          ))}
-        </div>
-        <div className="space-y-4">
-          <div className="h-8 w-48 bg-muted animate-pulse rounded" />
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-40 rounded-xl border border-border/40 bg-muted/20 animate-pulse" />
-            ))}
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[...Array(6)].map((_, i) => <div key={i} className="h-36 rounded-[14px] bg-(--panel) animate-pulse" />)}
         </div>
       </div>
     );
@@ -227,72 +218,222 @@ export default function PersonDetailPage() {
 
   if (!person) {
     return (
-      <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500">
-        <div className="flex items-center gap-4">
-          <Link href="/people">
-            <Button variant="ghost" size="sm" className="gap-2">
-              <ArrowLeft className="h-4 w-4" />
-              Back to People
-            </Button>
-          </Link>
-        </div>
+      <div className="space-y-4">
+        <Link href="/people">
+          <Button variant="ghost" size="sm" className="gap-2 text-(--text-faint) hover:text-(--text)">
+            <ArrowLeft className="h-4 w-4" /> Back to People
+          </Button>
+        </Link>
         <div className="flex justify-center py-20 opacity-20">
-          <User className="h-32 w-32" />
+          <User className="h-24 w-24 text-(--text-faint)" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-10 animate-in fade-in duration-700">
-      {/* Navigation */}
+    <div className="space-y-5">
+      {/* ── Toolbar ── */}
       <div className="flex items-center justify-between gap-4">
         <Link href="/people">
-          <Button variant="outline" size="sm" className="gap-2 bg-background/50 hover:bg-background border-border/60 soft-shadow">
-            <ArrowLeft className="h-4 w-4" />
-            Back to Directory
+          <Button variant="ghost" size="sm" className="gap-2 text-(--text-faint) hover:text-(--text) hover:bg-(--hover)">
+            <ArrowLeft className="h-4 w-4" /> Back to Directory
           </Button>
         </Link>
-        {canEdit && (
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="gap-2" onClick={() => setEditDialogOpen(true)}>
-              <Edit className="h-4 w-4" />
-              Edit Person
+        <div className="flex items-center gap-2">
+          {movies.length > 0 && (
+            <Button variant="outline" size="sm" className="gap-1.5 h-8 border-(--svf-border) text-(--text) hover:bg-(--hover)" onClick={handleExportCSV}>
+              <Download className="h-3.5 w-3.5" /> Export
             </Button>
-            <Button variant="destructive" size="sm" className="gap-2" onClick={() => setDeleteDialogOpen(true)}>
-              <Trash2 className="h-4 w-4" />
-              Delete
-            </Button>
+          )}
+          {canEdit && (
+            <>
+              <Button variant="outline" size="sm" className="gap-1.5 h-8 border-(--svf-border) text-(--text) hover:bg-(--hover)" onClick={() => setEditDialogOpen(true)}>
+                <Edit className="h-3.5 w-3.5" /> Edit
+              </Button>
+              <Button size="sm" className="gap-1.5 h-8 bg-red-600/80 hover:bg-red-600 text-white border-0" onClick={() => setDeleteDialogOpen(true)}>
+                <Trash2 className="h-3.5 w-3.5" /> Delete
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ── Profile header card ── */}
+      <div
+        className="glass-card p-6 flex flex-col sm:flex-row items-center sm:items-start gap-6"
+        style={{ borderColor: `oklch(0.52 0.20 ${hue} / 0.3)` }}
+      >
+        {/* Large avatar */}
+        <div
+          style={{
+            width: 96, height: 96, borderRadius: "50%", flexShrink: 0,
+            background: avatarBg,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 32, fontWeight: 800, color: "white", letterSpacing: "-0.02em",
+            boxShadow: `0 0 0 3px oklch(0.52 0.20 ${hue} / 0.3), 0 8px 28px ${glowColor}`,
+          }}
+        >
+          {initials}
+        </div>
+
+        {/* Name + role + badges */}
+        <div className="flex-1 min-w-0 text-center sm:text-left">
+          <h1 style={{ fontSize: 28, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.02em", lineHeight: 1.1 }}>
+            {person.name}
+          </h1>
+          <p style={{ fontSize: 13, color: "var(--text-faint)", marginTop: 4, fontWeight: 500 }}>{roleLabel}</p>
+
+
+        </div>
+      </div>
+
+      {/* ── Stat cards ── */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        {[
+          { label: "Total Films", value: uniqueFilmCount, icon: Film, color: `oklch(0.52 0.20 ${hue})`, bg: `oklch(0.52 0.20 ${hue} / 0.1)`, border: `oklch(0.52 0.20 ${hue} / 0.2)` },
+          { label: "Acting Roles", value: actorCount, icon: Ticket, color: "oklch(0.75 0.15 200)", bg: "oklch(0.75 0.15 200 / 0.08)", border: "oklch(0.75 0.15 200 / 0.2)" },
+          { label: "Directed Works", value: directorCount, icon: Megaphone, color: "oklch(0.75 0.15 290)", bg: "oklch(0.75 0.15 290 / 0.08)", border: "oklch(0.75 0.15 290 / 0.2)" },
+        ].map(({ label, value, icon: Icon, color, bg, border }) => (
+          <div key={label} className="glass-card p-5" style={{ borderColor: border }}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--text-faint)", marginBottom: 6 }}>{label}</p>
+                <p style={{ fontSize: 38, fontWeight: 800, letterSpacing: "-0.03em", color, lineHeight: 1, fontFamily: "var(--font-display)" }}>{value}</p>
+              </div>
+              <div style={{ padding: 10, borderRadius: 10, background: bg, border: `1px solid ${border}`, flexShrink: 0 }}>
+                <Icon style={{ width: 20, height: 20, color }} />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Filmography ── */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div style={{ padding: 8, borderRadius: 9, background: `oklch(0.52 0.20 ${hue} / 0.1)`, border: `1px solid oklch(0.52 0.20 ${hue} / 0.25)` }}>
+              <Film style={{ width: 16, height: 16, color: `oklch(0.72 0.18 ${hue})` }} />
+            </div>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.01em" }}>Career Filmography</h2>
+          </div>
+          <span style={{ fontSize: 11, color: "var(--text-faint)", fontFamily: "var(--font-mono)" }}>
+            {uniqueFilmCount} film{uniqueFilmCount === 1 ? "" : "s"}{movies.length > uniqueFilmCount ? ` (${movies.length} versions)` : ""}
+          </span>
+        </div>
+
+        {movies.length === 0 ? (
+          <div className="glass-card flex flex-col items-center justify-center py-16 gap-3">
+            <Film style={{ width: 40, height: 40, color: "var(--text-faint)", opacity: 0.4 }} />
+            <p style={{ fontSize: 14, color: "var(--text-faint)" }}>No filmography records available.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {(() => {
+              const groups = new Map<string, MovieEntry[]>();
+              movies.forEach(m => {
+                const base = normalizeTitle(m.movie_title);
+                if (!groups.has(base)) groups.set(base, []);
+                groups.get(base)!.push(m);
+              });
+
+              return Array.from(groups.entries()).map(([baseTitle, group]) => {
+                const uniqueGroup = Array.from(new Map(group.map(m => [m.movie_id, m])).values());
+                const primary = uniqueGroup.sort((a, b) => (parseInt(b.release_year || "0") || 0) - (parseInt(a.release_year || "0") || 0))[0];
+                const roles = Array.from(new Set(group.map(m => m.role)));
+                const isDirector = roles.includes("director");
+                const isActor = roles.includes("actor");
+                const roleColor = isDirector && isActor ? "oklch(0.75 0.15 290)" : isDirector ? `oklch(0.72 0.18 ${hue})` : "oklch(0.75 0.15 200)";
+                const roleBg = isDirector && isActor ? "oklch(0.75 0.15 290 / 0.1)" : isDirector ? `oklch(0.52 0.20 ${hue} / 0.1)` : "oklch(0.75 0.15 200 / 0.08)";
+                const roleBorder = isDirector && isActor ? "oklch(0.75 0.15 290 / 0.25)" : isDirector ? `oklch(0.52 0.20 ${hue} / 0.25)` : "oklch(0.75 0.15 200 / 0.2)";
+                const roleText = isDirector && isActor ? "Both" : isDirector ? "Director" : "Actor";
+                const RoleIcon = isDirector ? Clapperboard : Star;
+
+                return (
+                  <Link
+                    key={baseTitle}
+                    href={`/movies/${primary.movie_id}`}
+                    style={{
+                      display: "flex", flexDirection: "column", padding: "14px 16px", borderRadius: 12,
+                      border: "1px solid var(--svf-border)", background: "var(--panel)",
+                      backdropFilter: "blur(12px)", textDecoration: "none", gap: 10, transition: "all 0.18s ease",
+                    }}
+                    onMouseEnter={(e) => {
+                      const el = e.currentTarget as HTMLElement;
+                      el.style.borderColor = `oklch(0.52 0.20 ${hue} / 0.4)`;
+                      el.style.background = "var(--hover)";
+                    }}
+                    onMouseLeave={(e) => {
+                      const el = e.currentTarget as HTMLElement;
+                      el.style.borderColor = "var(--svf-border)";
+                      el.style.background = "var(--panel)";
+                    }}
+                  >
+                    {/* Title + role badge */}
+                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                      <h3 style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", lineHeight: 1.3, flex: 1 }} className="line-clamp-2">
+                        {baseTitle}
+                      </h3>
+                      <span style={{
+                        display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px",
+                        borderRadius: 6, fontSize: 10, fontWeight: 700, flexShrink: 0,
+                        color: roleColor, background: roleBg, border: `1px solid ${roleBorder}`,
+                      }}>
+                        <RoleIcon style={{ width: 9, height: 9 }} />
+                        {roleText}
+                      </span>
+                    </div>
+
+                    {/* Meta row */}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--text-faint)", fontSize: 11 }}>
+                        <Calendar style={{ width: 11, height: 11 }} />
+                        {primary.release_year || "—"}
+                        {primary.source && (
+                          <span style={{
+                            marginLeft: 4, padding: "1px 6px", borderRadius: 4, fontSize: 10, fontWeight: 600,
+                            color: primary.source === "home_production" ? "oklch(0.75 0.15 260)" : "oklch(0.75 0.15 290)",
+                            background: primary.source === "home_production" ? "oklch(0.75 0.15 260 / 0.1)" : "oklch(0.75 0.15 290 / 0.1)",
+                            border: `1px solid ${primary.source === "home_production" ? "oklch(0.75 0.15 260 / 0.2)" : "oklch(0.75 0.15 290 / 0.2)"}`,
+                          }}>
+                            {primary.source === "home_production" ? "Home" : "Acq"}
+                          </span>
+                        )}
+                      </div>
+                      <ArrowUpRight style={{ width: 13, height: 13, color: "var(--text-faint)" }} />
+                    </div>
+
+                    {uniqueGroup.length > 1 && (
+                      <p style={{ fontSize: 10, color: "var(--text-faint)", marginTop: -4 }}>
+                        {uniqueGroup.length} versions
+                      </p>
+                    )}
+                  </Link>
+                );
+              });
+            })()}
           </div>
         )}
       </div>
 
-      {/* Edit Dialog */}
+      {/* ── Edit Dialog ── */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md bg-(--panel-solid) border-(--svf-border)">
           <DialogHeader>
-            <DialogTitle>Edit Profile</DialogTitle>
-            <DialogDescription>
-              Update the details for this person.
-            </DialogDescription>
+            <DialogTitle className="text-(--text)">Edit Profile</DialogTitle>
+            <DialogDescription className="text-(--text-faint)">Update the details for this person.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-name">Full Name *</Label>
-              <Input
-                id="edit-name"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleUpdatePerson()}
-                className="h-11"
-              />
+              <Label className={labelCls}>Full Name *</Label>
+              <Input value={editName} onChange={(e) => setEditName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleUpdatePerson()} className={inputCls} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-role">Role</Label>
+              <Label className={labelCls}>Role</Label>
               <Select value={editRole} onValueChange={(v) => setEditRole(v as typeof editRole)}>
-                <SelectTrigger id="edit-role" className="h-11">
-                  <SelectValue placeholder="Select role…" />
-                </SelectTrigger>
+                <SelectTrigger className={selectCls}><SelectValue placeholder="Select role…" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="actor">Actor</SelectItem>
                   <SelectItem value="director">Director</SelectItem>
@@ -302,245 +443,38 @@ export default function PersonDetailPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)} className="h-11">
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)} className="border-(--svf-border) text-(--text) hover:bg-(--hover)">
               Cancel
             </Button>
-            <Button onClick={handleUpdatePerson} disabled={isUpdating || !editName.trim()} className="h-11 px-8">
-              {isUpdating ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Updating...
-                </>
-              ) : (
-                "Save Changes"
-              )}
+            <Button onClick={handleUpdatePerson} disabled={isUpdating || !editName.trim()} className="bg-red-600 hover:bg-red-500 text-white border-0">
+              {isUpdating ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Updating…</> : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Delete Dialog */}
+      {/* ── Delete Dialog ── */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md bg-(--panel-solid) border-(--svf-border)">
           <DialogHeader>
-            <DialogTitle className="text-destructive flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5" />
-              Delete Person
+            <DialogTitle className="text-red-400 flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" /> Delete Person
             </DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete <strong>{person.name}</strong>? This action cannot be undone. Any references to this person in movies might be removed or broken.
+            <DialogDescription className="text-(--text-faint)">
+              Are you sure you want to delete <strong className="text-(--text)">{person.name}</strong>? This cannot be undone.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="mt-4">
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={isDeleting}>
+          <DialogFooter className="mt-2">
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={isDeleting}
+              className="border-(--svf-border) text-(--text) hover:bg-(--hover)">
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleDeletePerson} disabled={isDeleting}>
-              {isDeleting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                "Delete Profile"
-              )}
+            <Button onClick={handleDeletePerson} disabled={isDeleting} className="bg-red-600 hover:bg-red-500 text-white border-0">
+              {isDeleting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Deleting…</> : "Delete Profile"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Profile Header */}
-      <Card className="glass-card border-border/40 overflow-hidden relative soft-shadow-lg">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-primary/5 pointer-events-none" />
-        <CardContent className="p-8 md:p-10 relative">
-          <div className="flex flex-col md:flex-row items-center md:items-start gap-8">
-            {/* Avatar Section */}
-            <div className="relative">
-              <div className="h-32 w-32 md:h-40 md:w-40 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 border-2 border-primary/30 flex items-center justify-center text-4xl md:text-5xl font-bold text-primary shadow-xl ring-8 ring-primary/5">
-                {initials}
-              </div>
-              <div className="absolute -bottom-2 -right-2 h-10 w-10 rounded-full bg-background border-2 border-border shadow-lg flex items-center justify-center text-primary">
-                {person.role === 'director' ? <Video className="h-5 w-5" /> : <Star className="h-5 w-5" />}
-              </div>
-            </div>
-
-            {/* Info Section */}
-            <div className="flex-1 text-center md:text-left space-y-4">
-              <div className="space-y-1">
-                <div className="flex flex-wrap items-center justify-center md:justify-start gap-3">
-                  <h1 className="text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight">
-                    {person.name}
-                  </h1>
-                  <Badge variant={getRoleBadgeVariant()} className="text-sm font-bold h-7 px-3 mt-1">
-                    {getRoleLabel()}
-                  </Badge>
-                </div>
-              </div>
-
-              <div className="pt-4 max-w-2xl text-muted-foreground leading-relaxed">
-                Comprehensive filmography and career overview for {person.name}. This profile includes all contributions as both a performer and creative director within the catalog.
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Career Stats Overview */}
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        <Card className="glass-card border-border/40 bg-primary/[0.03] hover:bg-primary/[0.06] transition-colors soft-shadow border-l-4 border-l-primary group">
-          <CardContent className="p-6 pt-7">
-            <div className="flex items-start justify-between">
-              <div className="space-y-1">
-                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Total Filmography</p>
-                <p className="text-4xl font-extrabold tracking-tighter text-foreground group-hover:scale-105 transition-transform origin-left">
-                  {person.movies_count || 0}
-                </p>
-              </div>
-              <div className="p-3 rounded-xl bg-primary/10 border border-primary/20 text-primary">
-                <Film className="h-6 w-6" />
-              </div>
-            </div>
-            <div className="mt-4 text-sm text-muted-foreground font-medium flex items-center gap-1.5">
-              <div className="h-1.5 w-1.5 rounded-full bg-primary" />
-              Movies across all roles
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="glass-card border-border/40 bg-cyan-500/[0.03] hover:bg-cyan-500/[0.06] transition-colors soft-shadow border-l-4 border-l-cyan-500 group">
-          <CardContent className="p-6 pt-7">
-            <div className="flex items-start justify-between">
-              <div className="space-y-1">
-                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Acting Roles</p>
-                <p className="text-4xl font-extrabold tracking-tighter text-foreground group-hover:scale-105 transition-transform origin-left">
-                  {person.movies_as_actor || 0}
-                </p>
-              </div>
-              <div className="p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-500">
-                <Star className="h-6 w-6" />
-              </div>
-            </div>
-            <div className="mt-4 text-sm text-muted-foreground font-medium flex items-center gap-1.5">
-              <div className="h-1.5 w-1.5 rounded-full bg-cyan-500" />
-              Performances on screen
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="glass-card border-border/40 bg-purple-500/[0.03] hover:bg-purple-500/[0.06] transition-colors soft-shadow border-l-4 border-l-purple-500 group">
-          <CardContent className="p-6 pt-7">
-            <div className="flex items-start justify-between">
-              <div className="space-y-1">
-                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Directed Works</p>
-                <p className="text-4xl font-extrabold tracking-tighter text-foreground group-hover:scale-105 transition-transform origin-left">
-                  {person.movies_as_director || 0}
-                </p>
-              </div>
-              <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-500">
-                <Clapperboard className="h-6 w-6" />
-              </div>
-            </div>
-            <div className="mt-4 text-sm text-muted-foreground font-medium flex items-center gap-1.5">
-              <div className="h-1.5 w-1.5 rounded-full bg-purple-500" />
-              Creative leadership roles
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Career Filmography Grid */}
-      <div className="space-y-6">
-        <div className="flex items-center justify-between border-b border-border/40 pb-4">
-          <h2 className="text-2xl font-bold tracking-tight flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10 border border-primary/20">
-              <Layers className="h-5 w-5 text-primary" />
-            </div>
-            Career Filmography
-          </h2>
-          <Badge variant="outline" className="bg-muted/50 font-bold px-3">
-            {person.movies_count} {person.movies_count === 1 ? 'Entry' : 'Entries'}
-          </Badge>
-        </div>
-
-        {movies.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 bg-muted/10 rounded-2xl border border-dashed border-border/60">
-            <Film className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />
-            <p className="text-lg font-medium text-muted-foreground">No filmography records available.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {(() => {
-              // Group movies by normalized title
-              const normalizedGroups = new Map<string, MovieEntry[]>();
-
-              const normalize = (title: string) => title.replace(/\s*\([^)]*\)/g, "").trim();
-
-              movies.forEach(movie => {
-                const baseTitle = normalize(movie.movie_title);
-                if (!normalizedGroups.has(baseTitle)) {
-                  normalizedGroups.set(baseTitle, []);
-                }
-                normalizedGroups.get(baseTitle)!.push(movie);
-              });
-
-              return Array.from(normalizedGroups.entries()).map(([baseTitle, group]) => {
-                // Use the most comprehensive entry as primary (usually the one with a year if others lack it)
-                const primary = group.sort((a, b) => (parseInt(b.release_year || "0") || 0) - (parseInt(a.release_year || "0") || 0))[0];
-                const roles = Array.from(new Set(group.map(m => m.role)));
-                const roleLabel = roles.length > 1 ? "BOTH" : roles[0].toUpperCase();
-
-                return (
-                  <Card key={baseTitle} className="glass-card group hover:border-primary/40 border-border/40 soft-shadow-lg duration-300 overflow-hidden bg-card/50">
-                    <CardContent className="p-0">
-                      <div className="p-5 space-y-4">
-                        <div className="flex justify-between items-start">
-                          <div className="space-y-1.5 flex-1 pr-4">
-                            <Link href={`/movies/${primary.movie_id}`}>
-                              <h3 className="font-bold text-lg leading-snug group-hover:text-primary transition-colors line-clamp-2">
-                                {baseTitle}
-                              </h3>
-                            </Link>
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground font-medium">
-                              <Calendar className="h-3 w-3" />
-                              <span>{primary.release_year || "Release Year N/A"}</span>
-                            </div>
-                          </div>
-                          <div className="flex flex-col items-end gap-1.5">
-                            <Badge
-                              variant={roleLabel === "DIRECTOR" ? "default" : "secondary"}
-                              className="font-bold text-[10px] h-5 px-2 flex shrink-0 gap-1 items-center"
-                            >
-                              {roleLabel === "DIRECTOR" ? <Video className="h-2.5 w-2.5" /> : <User className="h-2.5 w-2.5" />}
-                              {roleLabel}
-                            </Badge>
-                            {group.length > 1 && (
-                              <Badge variant="outline" className="text-[10px] h-4 px-1.5 font-bold border-primary/20 bg-primary/5 text-primary">
-                                {group.length} VERSIONS
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between pt-2 border-t border-border/30">
-                          <Badge variant="outline" className="bg-muted/30 text-[10px] font-mono h-5">
-                            {primary.source === "home_production" ? "Home Prod" : "Acquired"}
-                          </Badge>
-                          <Button asChild variant="ghost" size="sm" className="h-8 px-2 text-xs gap-1 group/btn hover:text-primary hover:bg-primary/5">
-                            <Link href={`/movies/${primary.movie_id}`}>
-                              View Details
-                              <ArrowUpRight className="h-3.5 w-3.5 opacity-50 group-hover/btn:opacity-100 group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-all" />
-                            </Link>
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              });
-            })()}
-          </div>
-        )}
-      </div>
     </div>
   );
 }

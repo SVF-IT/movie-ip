@@ -144,19 +144,17 @@ export default function AdminNotificationsPage() {
   }
 
   return (
-    <div className="space-y-6 min-w-0">
+    <div className="space-y-4 min-w-0">
       {/* ── Cinematic Header ── */}
-      <div className="relative overflow-hidden rounded-xl bg-slate-900/60 border border-slate-800/60 backdrop-blur-xl p-6 shadow-2xl">
-        <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-indigo-600 via-violet-500 to-transparent" />
-        <div className="absolute -top-24 -right-24 w-64 h-64 bg-indigo-600/6 rounded-full blur-3xl pointer-events-none" />
+      <div className="relative overflow-hidden rounded-xl bg-slate-900/60 border border-slate-800/60 backdrop-blur-xl p-3">
 
         <div className="relative flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="p-3 rounded-xl bg-indigo-500/15 border border-indigo-500/30 shadow-lg shadow-indigo-500/10">
-              <Bell className="h-6 w-6 text-indigo-400" />
+              <Bell className="h-5 w-5 text-indigo-400" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
+              <h1 className="text-base font-bold tracking-tight text-(--text)">
                 Notification Settings
               </h1>
               <p className="text-sm text-slate-400 mt-0.5">Configure which notifications are available for users</p>
@@ -241,16 +239,16 @@ export default function AdminNotificationsPage() {
               </div>
               <div className="overflow-x-auto">
                 <Table>
-                  <TableHeader>
-                    <TableRow className="border-slate-800/60 hover:bg-transparent">
-                      <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-500 h-9">Notification Type</TableHead>
-                      <TableHead className="hidden md:table-cell text-[10px] font-bold uppercase tracking-widest text-slate-500 h-9">Description</TableHead>
-                      <TableHead className="text-right text-[10px] font-bold uppercase tracking-widest text-slate-500 h-9">Enabled</TableHead>
+                  <TableHeader style={{ background: "var(--bg-deep)" }}>
+                    <TableRow className="border-(--svf-border) hover:bg-transparent">
+                      <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Notification Type</TableHead>
+                      <TableHead className="hidden md:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Description</TableHead>
+                      <TableHead className="text-right text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Enabled</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {categorySettings.map((setting) => (
-                      <TableRow key={setting.notification_type} className="border-slate-800/40 hover:bg-slate-800/20 transition-colors">
+                      <TableRow key={setting.notification_type} className="border-(--svf-border) hover:bg-(--hover) transition-colors">
                         <TableCell>
                           <span className="font-medium text-slate-200 capitalize">
                             {setting.notification_type.replace(/_/g, " ")}

@@ -10,13 +10,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Select,
   SelectContent,
@@ -34,19 +28,16 @@ import {
 } from "@/components/ui/table";
 import { useAuth } from "@/contexts/auth-context";
 import { useAppToast } from "@/hooks/use-app-toast";
-import { deleteMovie, getMovieById, getMovieRights, getMovieExpiredRights, getMovieVersions } from "@/lib/api/movies";
-import { deleteRight } from "@/lib/api/rights";
+import { deleteMovie, getMovieById, getMovieExpiredRights, getMovieRights, getMovieVersions } from "@/lib/api/movies";
 import { submitRightChange } from "@/lib/api/pending-changes";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { deleteRight } from "@/lib/api/rights";
 import type { MovieLanguageVersion, MovieWithDetails, PlatformRight } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import {
-  AlertTriangle,
   ArrowLeft,
   Calendar,
   CheckCircle2,
-  Download,
   Edit,
   ExternalLink,
   FileText,
@@ -60,14 +51,36 @@ import {
   PlayCircle,
   Plus,
   ShieldCheck,
-  Tv,
   Trash2,
+  Tv,
   Users,
   Wifi,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+
+function parseOtherRights(value: string): { isYes: boolean; types: string[] } {
+  if (!value) return { isYes: false, types: [] };
+  const trimmed = value.trim();
+  const lower = trimmed.toLowerCase();
+  if (lower === "no" || lower === "") return { isYes: false, types: [] };
+
+  if (lower.startsWith("yes")) {
+    const openParenIndex = trimmed.indexOf("(");
+    const closeParenIndex = trimmed.lastIndexOf(")");
+    if (openParenIndex !== -1 && closeParenIndex !== -1 && closeParenIndex > openParenIndex) {
+      const content = trimmed.substring(openParenIndex + 1, closeParenIndex);
+      const types = content.split(",").map(s => s.trim()).filter(Boolean);
+      return { isYes: true, types };
+    }
+    return { isYes: true, types: [] };
+  }
+
+  // Handle legacy/other values that are comma-separated without starting with "Yes"
+  const types = trimmed.split(",").map(s => s.trim()).filter(Boolean);
+  return { isYes: true, types };
+}
 
 interface RightWithDetails extends PlatformRight {
   platforms?: { name: string; platform_type?: string };
@@ -79,9 +92,9 @@ type NavSection = "basic" | "cast" | "rights" | "acquisition" | "notes" | "explo
 function InfoRow({ label, value, mono }: { label: string; value?: string | null; mono?: boolean }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{label}</span>
-      <span className={cn("text-sm text-slate-200 leading-snug", mono && "font-mono text-xs")}>
-        {value || <span className="text-slate-500">—</span>}
+      <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">{label}</span>
+      <span className={cn("text-sm text-(--text) leading-snug", mono && "font-mono text-xs")}>
+        {value || <span className="text-(--text-faint)">—</span>}
       </span>
     </div>
   );
@@ -90,10 +103,10 @@ function InfoRow({ label, value, mono }: { label: string; value?: string | null;
 function SectionTitle({ icon: Icon, title, accent = false }: { icon: React.ElementType; title: string; accent?: boolean }) {
   return (
     <div className="flex items-center gap-2.5 mb-5">
-      <div className={cn("p-1.5 rounded-lg border", accent ? "bg-red-500/10 border-red-500/20" : "bg-slate-800/60 border-slate-700/40")}>
-        <Icon className={cn("h-4 w-4", accent ? "text-red-400" : "text-slate-400")} />
+      <div className={cn("p-1.5 rounded-[10px] border", accent ? "bg-red-500/10 border-red-500/20" : "bg-slate-800/60 border-(--svf-border)")}>
+        <Icon className={cn("h-4 w-4", accent ? "text-red-400" : "text-(--text-faint)")} />
       </div>
-      <h3 className="text-sm font-bold text-slate-200 tracking-tight">{title}</h3>
+      <h3 className="text-sm font-bold text-(--text) tracking-tight">{title}</h3>
     </div>
   );
 }
@@ -113,9 +126,6 @@ export default function MovieDetailPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [activeSection, setActiveSection] = useState<NavSection>("basic");
-  const [exportingPlatformRights, setExportingPlatformRights] = useState(false);
-  const [showExportOptions, setShowExportOptions] = useState(false);
-
   const [requestDeletingRight, setRequestDeletingRight] = useState<RightWithDetails | null>(null);
   const [isSubmittingDelete, setIsSubmittingDelete] = useState(false);
 
@@ -216,86 +226,16 @@ export default function MovieDetailPage() {
 
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return "—";
+    if (dateStr.startsWith("3099") || dateStr.startsWith("9999")) return "Perpetual";
     try { return format(new Date(dateStr), "MMM dd, yyyy"); }
     catch { return dateStr; }
-  };
-
-  const handleExport = async (includePlatformRights: boolean) => {
-    if (!movie || !currentVersion) return;
-    setExportingPlatformRights(true);
-    setShowExportOptions(false);
-    try {
-      const XLSX = await import("xlsx");
-      const wb = XLSX.utils.book_new();
-
-      // Sheet 1: Movie metadata
-      const meta: Record<string, string | number | null | undefined> = {
-        "Title": currentVersion.title,
-        "Source": movie.source === "home_production" ? "Home Production" : "Acquired",
-        "Production No": currentVersion.production_no ?? "",
-        "Language": currentVersion.language ?? "",
-        "Release Date": formatDate(currentVersion.release_date),
-        "Release Year": currentVersion.release_year ?? "",
-        "Certification": currentVersion.certification ?? "",
-        "Color / B&W": currentVersion.color_or_bw ?? "",
-        "Director(s)": currentVersion.director_names ?? "",
-        "Cast": currentVersion.cast_names ?? "",
-        "Production House": currentVersion.production_house_name ?? "",
-        "Territory": currentVersion.territory ?? "",
-        "Nature of Rights": currentVersion.nature_of_rights ?? "",
-        "Satellite Rights": currentVersion.satellite_rights ?? "",
-        "Internet Rights": currentVersion.internet_rights ?? "",
-        "Negative Rights": currentVersion.negative_rights ?? "",
-        "Other Rights": currentVersion.other_rights ?? "",
-        "Assignor / Licensor": currentVersion.assignor_licensor ?? "",
-        "Licensee": currentVersion.licensee ?? "",
-        "Agreement Date": formatDate(currentVersion.agreement_date),
-        "Agreement Start": formatDate(currentVersion.agreement_start_date),
-        "Agreement End": formatDate(currentVersion.agreement_end_date),
-        "Holdbacks": currentVersion.holdbacks ?? "",
-        "Remarks": currentVersion.remarks ?? "",
-        "Actionables": currentVersion.actionables ?? "",
-        "WTP / Library": currentVersion.wtp_library ?? "",
-      };
-      const metaWs = XLSX.utils.json_to_sheet([meta]);
-      metaWs["!cols"] = Object.keys(meta).map(k => ({ wch: Math.max(k.length, String(meta[k] ?? "").length) + 2 }));
-      XLSX.utils.book_append_sheet(wb, metaWs, "Movie Details");
-
-      if (includePlatformRights) {
-        const allRights = [...rights, ...expiredRights];
-        if (allRights.length > 0) {
-          const rightsRows = allRights.map(r => ({
-            "Platform": r.platforms?.name ?? "",
-            "Platform Type": r.platforms?.platform_type ?? "",
-            "Category": r.category ?? "",
-            "Nature": r.nature ?? "",
-            "Start Date": formatDate(r.start_date),
-            "End Date": r.end_date === "3099-12-31" ? "Perpetual" : formatDate(r.end_date),
-            "Territory": r.territory ?? "World",
-            "Status": r.is_current ? "Active" : "Expired",
-            "Remarks": r.remarks ?? "",
-          }));
-          const rightsWs = XLSX.utils.json_to_sheet(rightsRows);
-          rightsWs["!cols"] = Object.keys(rightsRows[0]).map(k => ({
-            wch: Math.max(k.length, ...rightsRows.map(r => String((r as Record<string, string>)[k] ?? "").length)) + 2,
-          }));
-          XLSX.utils.book_append_sheet(wb, rightsWs, "Platform Rights");
-        }
-      }
-
-      XLSX.writeFile(wb, `${currentVersion.title ?? "movie"}-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Export failed");
-    } finally {
-      setExportingPlatformRights(false);
-    }
   };
 
   if (loading && !movie) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-3">
         <Loader2 className="h-8 w-8 animate-spin text-red-400/60" />
-        <p className="text-slate-400 text-sm">Loading movie…</p>
+        <p className="text-(--text-faint) text-sm">Loading movie…</p>
       </div>
     );
   }
@@ -303,10 +243,10 @@ export default function MovieDetailPage() {
   if (!movie && !loading) {
     return (
       <div className="space-y-4">
-        <Button variant="ghost" size="sm" asChild className="text-slate-400 hover:text-slate-200">
+        <Button variant="ghost" size="sm" asChild className="text-(--text-faint) hover:text-(--text)">
           <Link href="/movies"><ArrowLeft className="mr-2 h-4 w-4" />Back to Movies</Link>
         </Button>
-        <p className="text-slate-400 text-sm">Movie not found.</p>
+        <p className="text-(--text-faint) text-sm">Movie not found.</p>
       </div>
     );
   }
@@ -340,51 +280,51 @@ export default function MovieDetailPage() {
   const RightsTable = ({ items, expired = false }: { items: RightWithDetails[]; expired?: boolean }) =>
     items.length === 0 ? (
       <div className="flex flex-col items-center justify-center py-14 gap-3">
-        <div className="p-3 rounded-full bg-slate-800/50 border border-slate-700/40">
-          {expired ? <History className="h-6 w-6 text-slate-500" /> : <FileText className="h-6 w-6 text-slate-400" />}
+        <div className="p-3 rounded-full bg-slate-800/50 border border-(--svf-border)">
+          {expired ? <History className="h-5 w-5 text-(--text-faint)" /> : <FileText className="h-5 w-5 text-(--text-faint)" />}
         </div>
-        <p className="text-slate-500 text-sm">{expired ? "No expired rights in this category" : "No rights in this category"}</p>
+        <p className="text-(--text-faint) text-sm">{expired ? "No expired rights in this category" : "No rights in this category"}</p>
       </div>
     ) : (
       <div className="overflow-x-auto">
         <Table>
-          <TableHeader>
-            <TableRow className="border-slate-800/60 hover:bg-transparent">
-              <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Platform</TableHead>
-              <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Type</TableHead>
-              <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Category</TableHead>
-              <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Nature</TableHead>
-              <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Start</TableHead>
-              <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-500">End</TableHead>
-              <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Territory</TableHead>
-              {!expired && <TableHead className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Status</TableHead>}
-              {!expired && <TableHead className="text-right text-[10px] font-bold uppercase tracking-widest text-slate-500">Actions</TableHead>}
+          <TableHeader style={{ background: "var(--bg-deep)" }}>
+            <TableRow className="border-(--svf-border) hover:bg-transparent">
+              <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Platform</TableHead>
+              <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Type</TableHead>
+              <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Category</TableHead>
+              <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Nature</TableHead>
+              <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Start</TableHead>
+              <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">End</TableHead>
+              <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Territory</TableHead>
+              {!expired && <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Status</TableHead>}
+              {!expired && <TableHead className="text-right text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Actions</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {items.map((right) => (
               <TableRow key={right.id} className={cn("border-slate-800/40 hover:bg-slate-800/20 transition-colors", expired && "opacity-65")}>
-                <TableCell className="font-semibold text-sm text-slate-200">{right.platforms?.name || "—"}</TableCell>
-                <TableCell className="text-xs text-slate-400">{right.platforms?.platform_type || "—"}</TableCell>
-                <TableCell className="text-xs text-slate-400">{right.category || "—"}</TableCell>
+                <TableCell className="font-semibold text-sm text-(--text)">{right.platforms?.name || "—"}</TableCell>
+                <TableCell className="text-xs text-(--text-faint)">{right.platforms?.platform_type || "—"}</TableCell>
+                <TableCell className="text-xs text-(--text-faint)">{right.category || "—"}</TableCell>
                 <TableCell>
                   {right.nature ? (
                     <Badge variant="outline" className={cn("text-[10px] font-semibold px-2 py-0.5",
                       right.nature.toLowerCase().includes("exclusive")
                         ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
-                        : "bg-slate-800/60 text-slate-400 border-slate-700/50"
+                        : "bg-slate-800/60 text-(--text-faint) border-(--svf-border)"
                     )}>
                       {right.nature.replace(/_/g, '-').replace(/\b\w/g, c => c.toUpperCase())}
                     </Badge>
-                  ) : <span className="text-slate-500 text-xs">—</span>}
+                  ) : <span className="text-(--text-faint) text-xs">—</span>}
                 </TableCell>
-                <TableCell className="text-xs tabular-nums text-slate-400">{formatDate(right.start_date)}</TableCell>
-                <TableCell className="text-xs tabular-nums text-slate-400">
+                <TableCell className="text-xs tabular-nums text-(--text-faint)">{formatDate(right.start_date)}</TableCell>
+                <TableCell className="text-xs tabular-nums text-(--text-faint)">
                   {right.end_date === "3099-12-31" ? <span className="text-emerald-400/70 text-xs">Perpetual</span> : formatDate(right.end_date)}
                 </TableCell>
                 <TableCell>
-                  <div className="flex items-center gap-1 text-xs text-slate-400">
-                    <Globe className="h-3 w-3 text-slate-500" />{right.territory || "World"}
+                  <div className="flex items-center gap-1 text-xs text-(--text-faint)">
+                    <Globe className="h-3 w-3 text-(--text-faint)" />{right.territory || "World"}
                   </div>
                 </TableCell>
                 {!expired && (
@@ -392,18 +332,18 @@ export default function MovieDetailPage() {
                     {right.is_current ? (
                       <Badge variant="outline" className="text-[10px] font-semibold px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border-emerald-500/25">Active</Badge>
                     ) : (
-                      <Badge variant="outline" className="text-[10px] font-semibold px-2 py-0.5 bg-slate-800/60 text-slate-400 border-slate-700/50">Expired</Badge>
+                      <Badge variant="outline" className="text-[10px] font-semibold px-2 py-0.5 bg-slate-800/60 text-(--text-faint) border-(--svf-border)">Expired</Badge>
                     )}
                   </TableCell>
                 )}
                 {!expired && (
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-400 hover:text-amber-400 hover:bg-amber-500/10" asChild>
+                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-(--text-faint) hover:text-amber-400 hover:bg-amber-500/10" asChild>
                         <Link href={`/rights/${right.id}/edit`}><Edit className="h-3.5 w-3.5" /></Link>
                       </Button>
                       {canRequestDelete && (
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-400 hover:text-red-400 hover:bg-red-500/10" onClick={() => setRequestDeletingRight(right)}>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-(--text-faint) hover:text-red-400 hover:bg-red-500/10" onClick={() => setRequestDeletingRight(right)}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       )}
@@ -421,7 +361,7 @@ export default function MovieDetailPage() {
     const [sub, setSub] = useState<"satellite" | "internet" | "other">("satellite");
     return (
       <div>
-        <div className="flex gap-0 border-b border-slate-800/60 mb-0">
+        <div className="flex gap-0 border-b border-(--svf-border) mb-0">
           {[
             { id: "satellite" as const, label: "Satellite", icon: Tv, count: sat.length },
             { id: "internet" as const, label: "Internet", icon: Wifi, count: inet.length },
@@ -433,12 +373,12 @@ export default function MovieDetailPage() {
               className={cn(
                 "flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold border-b-2 transition-all",
                 sub === id
-                  ? expired ? "border-slate-500 text-slate-300" : "border-red-500 text-red-400"
-                  : "border-transparent text-slate-500 hover:text-slate-400"
+                  ? expired ? "border-slate-500 text-(--text)" : "border-red-500 text-red-400"
+                  : "border-transparent text-(--text-faint) hover:text-(--text-faint)"
               )}
             >
               <Icon className="h-3.5 w-3.5" />{label}
-              {count > 0 && <span className={cn("text-[10px] ml-0.5", sub === id ? (expired ? "text-slate-400" : "text-red-400/70") : "text-slate-600")}>({count})</span>}
+              {count > 0 && <span className={cn("text-[10px] ml-0.5", sub === id ? (expired ? "text-(--text-faint)" : "text-red-400/70") : "text-(--text-faint)")}>({count})</span>}
             </button>
           ))}
         </div>
@@ -450,37 +390,35 @@ export default function MovieDetailPage() {
   return (
     <div className="space-y-0 min-h-screen">
       {loading && movie && (
-        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="flex items-center gap-3 bg-slate-900/90 border border-slate-700/60 px-6 py-4 rounded-xl shadow-2xl">
+        <div className="fixed inset-0 bg-(--bg-deep)/70 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="flex items-center gap-3 bg-(--panel-solid)/90 border border-slate-700/60 px-6 py-4 rounded-[12px] shadow-2xl">
             <Loader2 className="h-5 w-5 animate-spin text-red-400" />
-            <span className="text-slate-300 text-sm font-medium">Loading version…</span>
+            <span className="text-(--text) text-sm font-medium">Loading version…</span>
           </div>
         </div>
       )}
 
       {/* ── Cinematic Hero ── */}
-      <div className="relative overflow-hidden rounded-xl bg-slate-900/60 border border-slate-800/60 backdrop-blur-xl shadow-2xl mb-4">
-        <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-red-600 via-amber-500 to-transparent" />
+      <div className="relative overflow-hidden rounded-[12px] bg-(--bg-raise)/60 border border-(--svf-border) backdrop-blur-xl shadow-2xl mb-4">
         <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/50 to-transparent pointer-events-none" />
-        <div className="absolute -top-16 right-32 w-72 h-72 bg-red-600/6 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative flex items-start gap-6 p-6">
-          <Button variant="ghost" size="sm" asChild className="absolute top-5 left-5 text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 h-8 w-8 p-0">
+          <Button variant="ghost" size="sm" asChild className="absolute top-5 left-5 text-(--text-faint) hover:text-(--text) hover:bg-slate-800/60 h-8 w-8 p-0">
             <Link href="/movies"><ArrowLeft className="h-4 w-4" /></Link>
           </Button>
 
           {languageVersions.length > 1 && (
             <div className="absolute top-4 right-4">
               <Select value={selectedVersionId} onValueChange={handleVersionChange}>
-                <SelectTrigger className="h-9 w-auto min-w-44 bg-slate-900/80 border border-slate-700/60 text-slate-200 text-sm font-medium backdrop-blur-md gap-2 pr-3">
+                <SelectTrigger className="h-9 w-auto min-w-44 bg-(--panel-solid)/80 border border-slate-700/60 text-(--text) text-sm font-medium backdrop-blur-md gap-2 pr-3">
                   <div className="flex items-center gap-2 flex-1 min-w-0"><SelectValue /></div>
                 </SelectTrigger>
-                <SelectContent className="bg-slate-900/95 border-slate-700/60 backdrop-blur-xl shadow-2xl">
-                  <div className="px-2 py-1.5 border-b border-slate-800/60 mb-1">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Select Version</p>
+                <SelectContent className="bg-(--panel-solid)/95 border-slate-700/60 backdrop-blur-xl shadow-2xl">
+                  <div className="px-2 py-1.5 border-b border-(--svf-border) mb-1">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Select Version</p>
                   </div>
                   {languageVersions.map((version) => (
-                    <SelectItem key={version.id} value={version.id} className="text-slate-300 focus:bg-slate-800/60 focus:text-slate-100 py-2">
+                    <SelectItem key={version.id} value={version.id} className="text-(--text) focus:bg-slate-800/60 focus:text-slate-100 py-2">
                       <div className="flex items-center gap-2.5">
                         <div className={`h-2 w-2 rounded-full shrink-0 ${version.id === selectedVersionId ? "bg-red-500" : "bg-slate-600"}`} />
                         <span className="font-medium">{version.language || "Unknown"}</span>
@@ -499,16 +437,24 @@ export default function MovieDetailPage() {
 
           {/* Poster */}
           <div className="mt-8 ml-2 shrink-0">
-            {movie.poster_url ? (
-              <div className="relative w-28 aspect-[2/3] rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/10">
-                <img src={movie.poster_url} alt={movie.title} className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-              </div>
-            ) : (
-              <div className="w-28 aspect-[2/3] rounded-xl bg-slate-800/60 border border-slate-700/40 flex items-center justify-center shadow-xl">
-                <Film className="h-9 w-9 text-slate-500" />
-              </div>
-            )}
+            <div className="relative w-28 aspect-[2/3] rounded-[12px] overflow-hidden shadow-2xl ring-1 ring-white/10">
+              <img
+                src={`https://fileapi.mni.agency/api/FileFolderManager/PreviewFile?path=%2Fmnt%2Fmni%2FMoviePoster%2F${encodeURIComponent(movie.title)}.jpg&userId=1&platform=WebMicrosoft%20Windows%20NT%2010.0.20348.0`}
+                alt={movie.title}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  const el = e.currentTarget;
+                  el.style.display = "none";
+                  el.parentElement!.innerHTML = `<div class="w-full h-full bg-slate-800/60 border border-[var(--svf-border)] flex items-center justify-center"><svg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' class='text-slate-600'><rect width='18' height='18' x='3' y='3' rx='2'/><path d='m9 8 6 8'/><path d='m15 8-6 8'/></svg></div>`;
+                }}
+                onLoad={(e) => {
+                  const target = e.currentTarget;
+                  target.style.display = "";
+                  target.nextElementSibling?.classList.add("hidden");
+                }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent pointer-events-none" />
+            </div>
           </div>
 
           {/* Title block */}
@@ -525,13 +471,13 @@ export default function MovieDetailPage() {
                 </Badge>
                 {isExpired && <Badge variant="outline" className="text-xs font-semibold px-2.5 py-0.5 bg-red-500/10 text-red-400 border-red-500/25">Agreement Expired</Badge>}
                 {movie.release_year && (
-                  <div className="flex items-center gap-1.5 text-slate-400"><Calendar className="h-3.5 w-3.5" /><span className="text-sm font-medium">{movie.release_year}</span></div>
+                  <div className="flex items-center gap-1.5 text-(--text-faint)"><Calendar className="h-3.5 w-3.5" /><span className="text-sm font-medium">{movie.release_year}</span></div>
                 )}
                 {movie.certification && (
-                  <Badge variant="outline" className="text-xs font-bold px-2.5 py-0.5 bg-slate-800/60 text-slate-300 border-slate-700/50">{movie.certification}</Badge>
+                  <Badge variant="outline" className="text-xs font-bold px-2.5 py-0.5 bg-slate-800/60 text-(--text) border-(--svf-border)">{movie.certification}</Badge>
                 )}
                 {movie.language && (
-                  <div className="flex items-center gap-1.5 text-slate-400"><Languages className="h-3.5 w-3.5" /><span className="text-sm">{movie.language}</span></div>
+                  <div className="flex items-center gap-1.5 text-(--text-faint)"><Languages className="h-3.5 w-3.5" /><span className="text-sm">{movie.language}</span></div>
                 )}
                 {rights.length > 0 && (
                   <Badge variant="outline" className="text-xs font-semibold px-2.5 py-0.5 bg-emerald-500/10 text-emerald-400 border-emerald-500/25">
@@ -544,14 +490,14 @@ export default function MovieDetailPage() {
             <div className="space-y-0.5">
               {movie.director_names && (
                 <div className="flex items-start gap-2 text-sm">
-                  <span className="text-slate-500 w-16 text-xs pt-0.5 shrink-0">Director</span>
-                  <span className="text-slate-300 font-medium">{movie.director_names}</span>
+                  <span className="text-(--text-faint) w-16 text-xs pt-0.5 shrink-0">Director</span>
+                  <span className="text-(--text) font-medium">{movie.director_names}</span>
                 </div>
               )}
               {movie.cast_names && (
                 <div className="flex items-start gap-2 text-sm">
-                  <span className="text-slate-500 w-16 text-xs pt-0.5 shrink-0">Cast</span>
-                  <span className="text-slate-400 line-clamp-1">{movie.cast_names}</span>
+                  <span className="text-(--text-faint) w-16 text-xs pt-0.5 shrink-0">Cast</span>
+                  <span className="text-(--text-faint) line-clamp-1">{movie.cast_names}</span>
                 </div>
               )}
             </div>
@@ -562,49 +508,12 @@ export default function MovieDetailPage() {
                 <Link href={`/movies/${selectedVersionId}/edit`}><Edit className="h-3.5 w-3.5" />Edit Movie</Link>
               </Button>
               {movie.trailer_link && movie.trailer_link !== "N/A" && (
-                <Button variant="outline" size="sm" className="h-8 px-4 bg-slate-800/60 border-slate-700/50 text-slate-300 hover:bg-slate-700/60 gap-2" asChild>
+                <Button variant="outline" size="sm" className="h-8 px-4 bg-slate-800/60 border-(--svf-border) text-(--text) hover:bg-(--hover) gap-2" asChild>
                   <a href={movie.trailer_link} target="_blank" rel="noopener noreferrer">
                     <PlayCircle className="h-3.5 w-3.5" />Trailer<ExternalLink className="h-3 w-3 opacity-50" />
                   </a>
                 </Button>
               )}
-
-              {/* Export with dropdown */}
-              <div className="relative">
-                <Button
-                  variant="outline" size="sm"
-                  className="h-8 px-4 bg-slate-800/60 border-slate-700/50 text-slate-300 hover:bg-slate-700/60 gap-2"
-                  onClick={() => setShowExportOptions(v => !v)}
-                  disabled={exportingPlatformRights}
-                >
-                  {exportingPlatformRights ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-                  Export
-                </Button>
-                {showExportOptions && (
-                  <div className="absolute top-10 left-0 z-50 bg-slate-900 border border-slate-700/60 rounded-xl shadow-2xl shadow-black/40 p-1 min-w-52 backdrop-blur-xl">
-                    <button
-                      onClick={() => handleExport(false)}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-slate-300 hover:bg-slate-800/60 hover:text-slate-100 rounded-lg transition-colors text-left"
-                    >
-                      <FileText className="h-4 w-4 text-slate-400 shrink-0" />
-                      <div>
-                        <p className="font-medium">Movie Details Only</p>
-                        <p className="text-[11px] text-slate-500">Metadata & rights summary</p>
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => handleExport(true)}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-slate-300 hover:bg-slate-800/60 hover:text-slate-100 rounded-lg transition-colors text-left"
-                    >
-                      <Download className="h-4 w-4 text-emerald-400 shrink-0" />
-                      <div>
-                        <p className="font-medium">Include Platform Rights</p>
-                        <p className="text-[11px] text-slate-500">Metadata + all platform rights data</p>
-                      </div>
-                    </button>
-                  </div>
-                )}
-              </div>
 
               {canDelete && (
                 <Button variant="outline" size="sm" onClick={() => setShowDeleteDialog(true)}
@@ -618,34 +527,32 @@ export default function MovieDetailPage() {
       </div>
 
       {/* ── Main Layout: Vertical Nav + Content ── */}
-      {showExportOptions && <div className="fixed inset-0 z-40" onClick={() => setShowExportOptions(false)} />}
-
       <div className="flex gap-4 min-h-[600px]">
         {/* Vertical Nav */}
         <aside className="w-52 shrink-0">
-          <nav className="sticky top-4 space-y-1 bg-slate-900/50 border border-slate-800/60 rounded-xl p-2 backdrop-blur-sm">
+          <nav className="sticky top-4 space-y-1 bg-(--panel-solid)/50 border border-(--svf-border) rounded-[12px] p-2 backdrop-blur-sm">
             {navItems.map(({ id, label, icon: Icon, badge, dim }) => (
               <button
                 key={id}
                 onClick={() => setActiveSection(id)}
                 className={cn(
-                  "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all text-left",
+                  "w-full flex items-center gap-3 px-3 py-2.5 rounded-[10px] text-sm font-medium transition-all text-left",
                   activeSection === id
                     ? "bg-slate-800/80 text-slate-100 shadow-sm"
                     : dim
-                      ? "text-slate-500 hover:bg-slate-800/40 hover:text-slate-400"
-                      : "text-slate-400 hover:bg-slate-800/40 hover:text-slate-300"
+                      ? "text-(--text-faint) hover:bg-slate-800/40 hover:text-(--text-faint)"
+                      : "text-(--text-faint) hover:bg-slate-800/40 hover:text-(--text)"
                 )}
               >
-                <div className={cn("p-1 rounded-md shrink-0",
-                  activeSection === id ? "bg-red-500/15 text-red-400" : dim ? "bg-slate-800/60 text-slate-600" : "bg-slate-800/60 text-slate-500"
+                <div className={cn("p-1 rounded-[9px] shrink-0",
+                  activeSection === id ? "bg-red-500/15 text-red-400" : dim ? "bg-slate-800/60 text-(--text-faint)" : "bg-slate-800/60 text-(--text-faint)"
                 )}>
                   <Icon className="h-3.5 w-3.5" />
                 </div>
                 <span className="flex-1 truncate">{label}</span>
                 {badge !== undefined && badge > 0 && (
                   <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-5 text-center",
-                    activeSection === id ? "bg-red-600/30 text-red-300" : dim ? "bg-slate-800 text-slate-500" : "bg-slate-800 text-slate-400"
+                    activeSection === id ? "bg-red-600/30 text-red-300" : dim ? "bg-slate-800 text-(--text-faint)" : "bg-slate-800 text-(--text-faint)"
                   )}>
                     {badge}
                   </span>
@@ -657,7 +564,7 @@ export default function MovieDetailPage() {
 
         {/* Content Panel */}
         <main className="flex-1 min-w-0">
-          <div className="bg-slate-900/50 border border-slate-800/60 rounded-xl backdrop-blur-sm min-h-full">
+          <div className="bg-(--panel-solid)/50 border border-(--svf-border) rounded-[12px] backdrop-blur-sm min-h-full">
 
             {/* ── Basic Info ── */}
             {activeSection === "basic" && (
@@ -669,10 +576,10 @@ export default function MovieDetailPage() {
                   <InfoRow label="Release Date" value={formatDate(currentVersion.release_date)} />
                   <InfoRow label="Release Year" value={currentVersion.release_year?.toString()} />
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Certification</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Certification</span>
                     {currentVersion.certification
-                      ? <Badge variant="outline" className="text-xs w-fit font-bold bg-slate-800/60 text-slate-300 border-slate-700/50 mt-0.5">{currentVersion.certification}</Badge>
-                      : <span className="text-slate-500 text-sm">—</span>}
+                      ? <Badge variant="outline" className="text-xs w-fit font-bold bg-slate-800/60 text-(--text) border-(--svf-border) mt-0.5">{currentVersion.certification}</Badge>
+                      : <span className="text-(--text-faint) text-sm">—</span>}
                   </div>
                   <InfoRow label="Color / B&W" value={currentVersion.color_or_bw} />
                   {movie.source !== "acquired" && <InfoRow label="Production House" value={currentVersion.production_house_name} />}
@@ -687,12 +594,12 @@ export default function MovieDetailPage() {
                 <SectionTitle icon={Users} title="Cast & Crew" accent />
                 <div className="space-y-5">
                   <div>
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-2">Director(s)</span>
-                    <p className="text-sm text-slate-200 font-medium leading-relaxed">{currentVersion.director_names || <span className="text-slate-500">—</span>}</p>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2">Director(s)</span>
+                    <p className="text-sm text-(--text) font-medium leading-relaxed">{currentVersion.director_names || <span className="text-(--text-faint)">—</span>}</p>
                   </div>
-                  <div className="pt-4 border-t border-slate-800/50">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-2">Cast</span>
-                    <p className="text-sm text-slate-300 leading-relaxed">{currentVersion.cast_names || <span className="text-slate-500">—</span>}</p>
+                  <div className="pt-4 border-t border-(--svf-border)">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2">Cast</span>
+                    <p className="text-sm text-(--text) leading-relaxed">{currentVersion.cast_names || <span className="text-(--text-faint)">—</span>}</p>
                   </div>
                 </div>
               </div>
@@ -706,21 +613,21 @@ export default function MovieDetailPage() {
                   <div className="space-y-5">
                     <div className="grid grid-cols-2 gap-8">
                       <div>
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-2">Nature of Rights</span>
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2">Nature of Rights</span>
                         {currentVersion.nature_of_rights
                           ? <Badge variant="outline" className={cn("text-xs font-semibold px-2 py-0.5",
-                              currentVersion.nature_of_rights.toLowerCase().includes("exclusive") ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
+                            currentVersion.nature_of_rights.toLowerCase().includes("exclusive") ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
                               : currentVersion.nature_of_rights.toLowerCase().includes("jointly") ? "bg-amber-500/10 text-amber-400 border-amber-500/25"
-                              : "bg-slate-800/60 text-slate-300 border-slate-700/50")}>{currentVersion.nature_of_rights}</Badge>
-                          : <span className="text-slate-500 text-sm">—</span>}
+                                : "bg-slate-800/60 text-(--text) border-(--svf-border)")}>{currentVersion.nature_of_rights}</Badge>
+                          : <span className="text-(--text-faint) text-sm">—</span>}
                       </div>
                       <div>
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-2">Territory</span>
-                        <div className="flex items-center gap-1.5 text-slate-300 text-sm"><Globe className="h-3.5 w-3.5 text-slate-500" />{currentVersion.territory || "World"}</div>
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2">Territory</span>
+                        <div className="flex items-center gap-1.5 text-(--text) text-sm"><Globe className="h-3.5 w-3.5 text-(--text-faint)" />{currentVersion.territory || "World"}</div>
                       </div>
                     </div>
-                    <div className="pt-4 border-t border-slate-800/50">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-2.5">Rights Owned</span>
+                    <div className="pt-4 border-t border-(--svf-border)">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2.5">Rights Owned</span>
                       <div className="flex flex-wrap gap-2">
                         {["Satellite", "Internet", "Negative", "Other", "Prequel/Sequel", "Character", "Sub-Titling", "Dubbing"].map(r => (
                           <span key={r} className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/8 border border-emerald-500/20 text-emerald-400">
@@ -728,28 +635,28 @@ export default function MovieDetailPage() {
                           </span>
                         ))}
                       </div>
-                      <p className="text-[10px] text-slate-600 mt-2">All rights exclusively owned — Yes by default for home production</p>
+                      <p className="text-[10px] text-(--text-faint) mt-2">All rights exclusively owned — Yes by default for home production</p>
                     </div>
                     {currentVersion.nature_of_rights?.toLowerCase().includes("jointly") && (
-                      <div className="pt-4 border-t border-slate-800/50 grid grid-cols-2 gap-8">
+                      <div className="pt-4 border-t border-(--svf-border) grid grid-cols-2 gap-8">
                         <InfoRow label="Revenue Share" value={currentVersion.revenue_share} />
                         <InfoRow label="Buy-Back Opening Date" value={formatDate(currentVersion.joint_prod_buy_back_date)} />
                         {currentVersion.jointly_exploitation_rights && <div className="col-span-2"><InfoRow label="Exploitation Rights Held By" value={currentVersion.jointly_exploitation_rights} /></div>}
                       </div>
                     )}
                     {currentVersion.holdbacks && (
-                      <div className="pt-4 border-t border-slate-800/50"><InfoRow label="Holdbacks" value={currentVersion.holdbacks} /></div>
+                      <div className="pt-4 border-t border-(--svf-border)"><InfoRow label="Holdbacks" value={currentVersion.holdbacks} /></div>
                     )}
                   </div>
                 ) : (
                   <div className="space-y-5">
                     <div>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-2">Territory</span>
-                      <div className="flex items-center gap-1.5 text-slate-300 text-sm"><Globe className="h-3.5 w-3.5 text-slate-500" />{currentVersion.territory || "World"}</div>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2">Territory</span>
+                      <div className="flex items-center gap-1.5 text-(--text) text-sm"><Globe className="h-3.5 w-3.5 text-(--text-faint)" />{currentVersion.territory || "World"}</div>
                     </div>
                     {(currentVersion.satellite_rights || currentVersion.internet_rights || currentVersion.negative_rights || currentVersion.other_rights) && (
-                      <div className="pt-4 border-t border-slate-800/50">
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-3">Primary Rights</span>
+                      <div className="pt-4 border-t border-(--svf-border)">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-3">Primary Rights</span>
                         <div className="grid grid-cols-2 gap-3">
                           {[
                             { label: "Satellite", flag: currentVersion.satellite_rights, classification: currentVersion.satellite_rights_classification, nature: currentVersion.nature_of_satellite_rights, start: currentVersion.satellite_rights_start_date, end: currentVersion.satellite_rights_end_date },
@@ -757,23 +664,40 @@ export default function MovieDetailPage() {
                             { label: "Negative", flag: currentVersion.negative_rights, classification: undefined, nature: currentVersion.nature_of_negative_rights, start: currentVersion.negative_rights_start_date, end: currentVersion.negative_rights_end_date },
                             { label: "Other", flag: currentVersion.other_rights, classification: undefined, nature: currentVersion.nature_of_other_rights, start: currentVersion.other_rights_start_date, end: currentVersion.other_rights_end_date },
                           ].filter(r => r.flag).map(({ label, flag, classification, nature, start, end }) => (
-                            <div key={label} className="rounded-xl border border-slate-800/60 bg-slate-950/30 p-3 space-y-1.5">
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-xs font-bold text-slate-300">{label}</span>
-                                <Badge variant="outline" className={cn("text-[10px] px-1.5 py-0 h-4",
-                                  flag === "Yes" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25" : "bg-slate-800/60 text-slate-400 border-slate-700/40"
-                                )}>{flag}</Badge>
+                            <div key={label} className="rounded-[12px] border border-(--svf-border) bg-(--bg-deep)/30 p-3 space-y-1.5">
+                              <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <span className="text-xs font-bold text-(--text)">{label}</span>
+                                {(() => {
+                                  const parsed = parseOtherRights(flag || "");
+                                  if (parsed.isYes && parsed.types.length === 0) {
+                                    return (
+                                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/10 text-emerald-400 border-emerald-500/25">Yes</Badge>
+                                    );
+                                  }
+                                  if (parsed.isYes && parsed.types.length > 0) {
+                                    return (
+                                      <div className="flex flex-wrap gap-1">
+                                        {parsed.types.map(s => (
+                                          <span key={s} className="text-[10px] px-1.5 py-0 rounded-full bg-emerald-500/10 text-emerald-400 border-emerald-500/25 font-semibold">{s}</span>
+                                        ))}
+                                      </div>
+                                    );
+                                  }
+                                  return (
+                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 bg-slate-800/60 text-(--text-faint) border-(--svf-border)">{flag || "No"}</Badge>
+                                  );
+                                })()}
                               </div>
-                              {classification && <p className="text-xs text-slate-300">{classification}</p>}
-                              {nature && <p className="text-xs text-slate-500 italic">{nature}</p>}
-                              {(start || end) && <p className="text-[10px] text-slate-500 font-mono">{formatDate(start)} → {formatDate(end)}</p>}
+                              {classification && <p className="text-xs text-(--text)">{classification}</p>}
+                              {nature && <p className="text-xs text-(--text-faint) italic">{nature}</p>}
+                              {(start || end) && <p className="text-[10px] text-(--text-faint) font-mono">{formatDate(start)} → {formatDate(end)}</p>}
                             </div>
                           ))}
                         </div>
                       </div>
                     )}
                     {(currentVersion.clip_rights || currentVersion.clip_rights_duration || currentVersion.holdbacks) && (
-                      <div className="pt-4 border-t border-slate-800/50 grid grid-cols-2 gap-8">
+                      <div className="pt-4 border-t border-(--svf-border) grid grid-cols-2 gap-8">
                         {currentVersion.clip_rights && <InfoRow label="Clip Rights" value={currentVersion.clip_rights} />}
                         {currentVersion.clip_rights_duration && <InfoRow label="Clip Duration" value={currentVersion.clip_rights_duration} />}
                         {currentVersion.holdbacks && <div className="col-span-2"><InfoRow label="Holdbacks" value={currentVersion.holdbacks} /></div>}
@@ -786,7 +710,7 @@ export default function MovieDetailPage() {
                       { label: "Sub-Titling Rights", value: currentVersion.subtitling_rights },
                       { label: "Dubbing Rights", value: currentVersion.dubbing_rights },
                     ].filter(f => f.value).map(({ label, value }) => (
-                      <div key={label} className="pt-4 border-t border-slate-800/50">
+                      <div key={label} className="pt-4 border-t border-(--svf-border)">
                         <InfoRow label={label} value={value ?? undefined} />
                       </div>
                     ))}
@@ -804,24 +728,24 @@ export default function MovieDetailPage() {
                   <InfoRow label="Licensee" value={currentVersion.licensee} />
                   <InfoRow label="Agreement Date" value={formatDate(currentVersion.agreement_date)} />
                   <div className="col-span-2">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1.5">Agreement Period</span>
-                    <span className="text-sm text-slate-300 font-mono tracking-tight">
-                      {formatDate(currentVersion.agreement_start_date)} <span className="text-slate-600 mx-1">→</span> {formatDate(currentVersion.agreement_end_date)}
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-1.5">Agreement Period</span>
+                    <span className="text-sm text-(--text) font-mono tracking-tight">
+                      {formatDate(currentVersion.agreement_start_date)} <span className="text-(--text-faint) mx-1">→</span> {formatDate(currentVersion.agreement_end_date)}
                     </span>
                   </div>
                   {(currentVersion.satellite_rights_start_date || currentVersion.satellite_rights_end_date) && (
                     <div className="col-span-2">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1.5">Satellite Rights Period</span>
-                      <span className="text-sm text-slate-300 font-mono tracking-tight">
-                        {formatDate(currentVersion.satellite_rights_start_date)} <span className="text-slate-600 mx-1">→</span> {formatDate(currentVersion.satellite_rights_end_date)}
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-1.5">Satellite Rights Period</span>
+                      <span className="text-sm text-(--text) font-mono tracking-tight">
+                        {formatDate(currentVersion.satellite_rights_start_date)} <span className="text-(--text-faint) mx-1">→</span> {formatDate(currentVersion.satellite_rights_end_date)}
                       </span>
                     </div>
                   )}
                   {(currentVersion.internet_rights_start_date || currentVersion.internet_rights_end_date) && (
                     <div className="col-span-2">
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-1.5">Internet Rights Period</span>
-                      <span className="text-sm text-slate-300 font-mono tracking-tight">
-                        {formatDate(currentVersion.internet_rights_start_date)} <span className="text-slate-600 mx-1">→</span> {formatDate(currentVersion.internet_rights_end_date)}
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-1.5">Internet Rights Period</span>
+                      <span className="text-sm text-(--text) font-mono tracking-tight">
+                        {formatDate(currentVersion.internet_rights_start_date)} <span className="text-(--text-faint) mx-1">→</span> {formatDate(currentVersion.internet_rights_end_date)}
                       </span>
                     </div>
                   )}
@@ -839,20 +763,20 @@ export default function MovieDetailPage() {
                 <div className="space-y-5">
                   {currentVersion.wtp_library && (
                     <div>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-2">WTP / Library</span>
-                      <p className="text-sm text-slate-300 bg-slate-800/40 border border-slate-700/40 px-4 py-3 rounded-xl">{currentVersion.wtp_library}</p>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2">WTP / Library</span>
+                      <p className="text-sm text-(--text) bg-slate-800/40 border border-(--svf-border) px-4 py-3 rounded-[12px]">{currentVersion.wtp_library}</p>
                     </div>
                   )}
                   {currentVersion.remarks && (
-                    <div className={currentVersion.wtp_library ? "pt-4 border-t border-slate-800/50" : ""}>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-2">Remarks</span>
-                      <p className="text-sm text-slate-300 bg-slate-800/40 border border-slate-700/40 px-4 py-3 rounded-xl leading-relaxed">{currentVersion.remarks}</p>
+                    <div className={currentVersion.wtp_library ? "pt-4 border-t border-(--svf-border)" : ""}>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2">Remarks</span>
+                      <p className="text-sm text-(--text) bg-slate-800/40 border border-(--svf-border) px-4 py-3 rounded-[12px] leading-relaxed">{currentVersion.remarks}</p>
                     </div>
                   )}
                   {currentVersion.actionables && (
-                    <div className={(currentVersion.wtp_library || currentVersion.remarks) ? "pt-4 border-t border-slate-800/50" : ""}>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 block mb-2">Actionables</span>
-                      <p className="text-sm text-slate-300 bg-amber-500/5 border border-amber-500/20 px-4 py-3 rounded-xl leading-relaxed">{currentVersion.actionables}</p>
+                    <div className={(currentVersion.wtp_library || currentVersion.remarks) ? "pt-4 border-t border-(--svf-border)" : ""}>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2">Actionables</span>
+                      <p className="text-sm text-(--text) bg-amber-500/5 border border-amber-500/20 px-4 py-3 rounded-[12px] leading-relaxed">{currentVersion.actionables}</p>
                     </div>
                   )}
                 </div>
@@ -862,14 +786,14 @@ export default function MovieDetailPage() {
             {/* ── Exploitation Rights ── */}
             {activeSection === "exploitation" && (
               <div>
-                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800/50">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-(--svf-border)">
                   <div className="flex items-center gap-2.5">
-                    <div className="p-1.5 rounded-lg bg-red-500/10 border border-red-500/20">
+                    <div className="p-1.5 rounded-[10px] bg-red-500/10 border border-red-500/20">
                       <FileText className="h-4 w-4 text-red-400" />
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-slate-200">Exploitation Rights</h3>
-                      <p className="text-[11px] text-slate-500">Active licenses and distribution rights for this version</p>
+                      <h3 className="text-sm font-bold text-(--text)">Exploitation Rights</h3>
+                      <p className="text-[11px] text-(--text-faint)">Active licenses and distribution rights for this version</p>
                     </div>
                   </div>
                   <Link href={`/rights/new?movieId=${selectedVersionId}&movieTitle=${encodeURIComponent(currentVersion?.title || "")}`}>
@@ -885,13 +809,13 @@ export default function MovieDetailPage() {
             {/* ── Rights History ── */}
             {activeSection === "history" && (
               <div>
-                <div className="flex items-center gap-2.5 px-6 py-4 border-b border-slate-800/50">
-                  <div className="p-1.5 rounded-lg bg-slate-800/60 border border-slate-700/40">
-                    <History className="h-4 w-4 text-slate-400" />
+                <div className="flex items-center gap-2.5 px-6 py-4 border-b border-(--svf-border)">
+                  <div className="p-1.5 rounded-[10px] bg-slate-800/60 border border-(--svf-border)">
+                    <History className="h-4 w-4 text-(--text-faint)" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-slate-300">Rights History</h3>
-                    <p className="text-[11px] text-slate-500">Expired licenses and past distribution rights</p>
+                    <h3 className="text-sm font-bold text-(--text)">Rights History</h3>
+                    <p className="text-[11px] text-(--text-faint)">Expired licenses and past distribution rights</p>
                   </div>
                 </div>
                 <RightsSubTabs sat={expiredSatellite} inet={expiredInternet} other={expiredOther} expired />
@@ -904,21 +828,21 @@ export default function MovieDetailPage() {
 
       {/* ── Dialogs ── */}
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <AlertDialogContent className="bg-slate-900 border-slate-700/60 shadow-2xl">
+        <AlertDialogContent className="bg-(--panel-solid) border-slate-700/60 shadow-2xl">
           <AlertDialogHeader>
             <div className="flex items-center gap-3 mb-1">
-              <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20">
+              <div className="p-2 rounded-[10px] bg-red-500/10 border border-red-500/20">
                 <Trash2 className="h-5 w-5 text-red-400" />
               </div>
               <AlertDialogTitle className="text-slate-100 text-lg">Delete Movie?</AlertDialogTitle>
             </div>
-            <AlertDialogDescription className="text-slate-400 leading-relaxed">
-              <span className="font-semibold text-slate-300">{movie.title}</span> will be permanently deleted. This cannot be undone.
+            <AlertDialogDescription className="text-(--text-faint) leading-relaxed">
+              <span className="font-semibold text-(--text)">{movie.title}</span> will be permanently deleted. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2 mt-2">
             <Button variant="outline" onClick={() => setShowDeleteDialog(false)} disabled={deleting}
-              className="bg-slate-800 border-slate-700/60 text-slate-300 hover:bg-slate-700 hover:text-slate-100">Cancel</Button>
+              className="bg-slate-800 border-slate-700/60 text-(--text) hover:bg-slate-700 hover:text-slate-100">Cancel</Button>
             <Button onClick={handleDelete} disabled={deleting} className="bg-red-600 hover:bg-red-500 text-white border-0 gap-2">
               {deleting ? <><Loader2 className="h-4 w-4 animate-spin" />Deleting…</> : <><Trash2 className="h-4 w-4" />Delete Movie</>}
             </Button>

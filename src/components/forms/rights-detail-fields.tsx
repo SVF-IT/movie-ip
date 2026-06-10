@@ -173,7 +173,7 @@ export function YesNoLangField({ label, value, onChange, selectCls, inputCls, la
             {languages.length > 0 && (
               <div className="flex flex-wrap gap-1">
                 {languages.map(l => (
-                  <Badge key={l} variant="secondary" className="gap-1 pr-1 bg-slate-800 text-slate-200 border-slate-700 text-xs">
+                  <Badge key={l} variant="secondary" className="gap-1 pr-1 bg-slate-800 text-(--text) border-(--svf-border) text-xs">
                     {l}
                     <button type="button" onClick={() => removeLanguage(l)} className="ml-0.5 rounded-full hover:bg-slate-700 p-0.5">
                       <X className="h-2.5 w-2.5" />

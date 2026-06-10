@@ -12,8 +12,8 @@ import { createClient } from "@/lib/supabase/client";
 import { useRequirePermission } from "@/hooks/use-require-permission";
 import { useAppToast } from "@/hooks/use-app-toast";
 
-const inputCls = "bg-slate-950/40 border-slate-700/50 text-slate-200 placeholder:text-slate-500 focus:border-slate-500 h-10";
-const labelCls = "text-xs font-semibold text-slate-400 uppercase tracking-wider";
+const inputCls = "bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) focus:border-(--svf-border-strong) h-10";
+const labelCls = "text-xs font-semibold text-(--text-faint) uppercase tracking-wider";
 
 export default function EditProductionHousePage() {
   const router = useRouter();
@@ -62,40 +62,38 @@ export default function EditProductionHousePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* ── Cinematic Header ── */}
-      <div className="relative overflow-hidden rounded-xl bg-slate-900/60 border border-slate-800/60 backdrop-blur-xl p-6 shadow-2xl">
-        <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-amber-600 via-orange-500 to-transparent" />
-        <div className="absolute -top-20 -right-20 w-56 h-56 bg-orange-600/6 rounded-full blur-3xl pointer-events-none" />
+      <div className="relative overflow-hidden rounded-[12px] bg-(--panel-solid)/60 border border-(--svf-border) backdrop-blur-xl p-3">
 
         <div className="relative flex items-center gap-4">
           <Link href="/production-houses">
-            <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 gap-1.5 h-8">
+            <Button variant="ghost" size="sm" className="text-(--text-faint) hover:text-(--text) hover:bg-(--hover) gap-1.5 h-8">
               <ArrowLeft className="h-3.5 w-3.5" /> Back
             </Button>
           </Link>
-          <div className="h-4 w-px bg-slate-700/60" />
+          <div className="h-4 w-px bg-(--svf-border)" />
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 shadow-lg shadow-amber-500/10">
+            <div className="p-2.5 rounded-[12px] bg-amber-500/15 border border-amber-500/30 shadow-lg shadow-amber-500/10">
               <Factory className="h-5 w-5 text-amber-400" />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
+              <h1 className="text-xl font-bold tracking-tight text-(--text)">
                 Edit Production House
               </h1>
-              <p className="text-xs text-slate-400 mt-0.5">Update details for <span className="text-slate-300">{name}</span></p>
+              <p className="text-xs text-(--text-faint) mt-0.5">Update details for <span className="text-(--text)">{name}</span></p>
             </div>
           </div>
         </div>
       </div>
 
       {/* ── Form ── */}
-      <div className="relative overflow-hidden rounded-xl bg-slate-900/40 border border-slate-800/60 backdrop-blur-xl shadow-xl">
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-800/60">
+      <div className="relative overflow-hidden rounded-[12px] bg-(--panel-solid)/40 border border-(--svf-border) backdrop-blur-xl shadow-xl">
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-(--svf-border)">
           <div className="p-1.5 rounded-lg bg-orange-500/15 border border-orange-500/30">
             <Factory className="h-3.5 w-3.5 text-orange-400" />
           </div>
-          <span className="text-sm font-semibold text-slate-200">Production House Details</span>
+          <span className="text-sm font-semibold text-(--text)">Production House Details</span>
         </div>
         <div className="p-5">
           <div className="space-y-2">
@@ -114,7 +112,7 @@ export default function EditProductionHousePage() {
       {/* ── Actions ── */}
       <div className="flex justify-end gap-3">
         <Link href="/production-houses">
-          <Button variant="outline" className="border-slate-700/50 text-slate-300 hover:bg-slate-800/60">
+          <Button variant="outline" className="border-(--svf-border) text-(--text) hover:bg-(--hover)">
             Cancel
           </Button>
         </Link>

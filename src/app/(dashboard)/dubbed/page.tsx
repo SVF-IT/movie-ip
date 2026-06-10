@@ -218,201 +218,113 @@ export default function DubbedPage() {
   }
 
   return (
-    <div className="space-y-6 min-w-0">
-      {/* ── Cinematic Header ── */}
-      <div className="relative overflow-hidden rounded-xl bg-slate-900/60 border border-slate-800/60 backdrop-blur-xl p-6 shadow-2xl">
-        <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-red-600 via-amber-500 to-transparent" />
-        <div className="absolute -top-24 -right-24 w-64 h-64 bg-violet-600/8 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-16 left-1/3 w-48 h-48 bg-red-500/5 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="relative flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-violet-500/15 border border-violet-500/30 shadow-lg shadow-violet-500/10">
-              <Languages className="h-6 w-6 text-violet-400" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
-                Dubbed Movies
-              </h1>
-              <p className="text-sm text-slate-400 mt-0.5">Track dubbed and non-dubbed versions across all titles</p>
-            </div>
-          </div>
-          <Button
-            onClick={handleExport}
-            disabled={filtered.length === 0}
-            className="bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 border border-slate-700/60 shadow-lg gap-2"
-            size="sm"
-          >
-            <Download className="h-4 w-4" />
-            Export CSV
-          </Button>
+    <div className="space-y-4 min-w-0">
+      {/* ── Compact toolbar ── */}
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Search */}
+        <div className="relative min-w-48 flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5" style={{ color: "var(--text-faint)" }} />
+          <Input placeholder="Search movies…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 h-9" />
+          {searchQuery && (
+            <button className="absolute right-2 top-1/2 -translate-y-1/2" style={{ color: "var(--text-faint)" }} onClick={() => setSearchQuery('')}>
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
 
-        {/* Stat cards */}
-        <div className="relative mt-6 grid grid-cols-3 gap-3">
-          {[
-            { label: "Total Titles", count: groups.length, color: "text-slate-300", bg: "bg-slate-800/60 border-slate-700/40" },
-            { label: "Dubbed", count: dubbedCount, color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20", sub: "Multiple versions" },
-            { label: "Eligible to Dub", count: eligibleNotDubbedCount, color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20", sub: "Single version only" },
-            { label: "Cannot be Dubbed", count: cannotBeDubbedCount, color: "text-red-400", bg: "bg-red-500/10 border-red-500/20", sub: "Acquisition restrictions" },
-          ].map((s) => (
-            <div key={s.label} className={`rounded-lg border px-4 py-3 ${s.bg}`}>
-              <div className={`text-2xl font-bold tabular-nums ${s.color}`}>{s.count}</div>
-              <div className="text-xs text-slate-400 mt-0.5">{s.label}</div>
-              {'sub' in s && s.sub && <div className="text-[11px] text-slate-500 mt-0.5">{s.sub}</div>}
+        {/* Dubbed status multi-select */}
+        <Popover open={dubbedPopoverOpen} onOpenChange={setDubbedPopoverOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="h-9 gap-1.5">
+              <Film className="h-3.5 w-3.5" style={{ color: "var(--text-faint)" }} />
+              {dubbedLabel}
+              <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-52 p-2" align="start" style={{ background: "var(--panel-solid)", border: "1px solid var(--svf-border-strong)", borderRadius: 11 }}>
+            <div className="space-y-0.5">
+              {(['all', 'dubbed', 'not_dubbed', 'cannot_be_dubbed'] as DubbedFilter[]).map((val) => (
+                <label key={val} className="flex items-center gap-2 rounded px-2 py-1.5 cursor-pointer text-sm" style={{ color: "var(--text-dim)" }}>
+                  <Checkbox checked={isDubbedFilterActive(val)} onCheckedChange={() => toggleDubbedFilter(val)} />
+                  {val === 'all' ? 'All Status' : val === 'dubbed' ? 'Dubbed' : val === 'not_dubbed' ? 'Eligible to Dub' : 'Cannot be Dubbed'}
+                </label>
+              ))}
             </div>
+          </PopoverContent>
+        </Popover>
+
+        {/* Source filter pills */}
+        <div className="flex items-center glass-card p-1 rounded-[10px] h-9">
+          {(['all', 'home_production', 'acquired'] as const).map((s) => (
+            <button key={s} onClick={() => setSourceFilter(s)}
+              className={cn('px-3 py-1 rounded-[7px] text-xs font-semibold transition-all',
+                sourceFilter === s ? 'bg-(--bg-raise) text-(--text) shadow-sm' : 'text-(--text-faint) hover:text-(--text)'
+              )}>
+              {s === 'all' ? 'All' : s === 'home_production' ? 'Home' : 'Acquired'}
+            </button>
           ))}
         </div>
-      </div>
 
-      {/* ── Filters ── */}
-      <div className="relative overflow-hidden rounded-xl bg-slate-900/40 border border-slate-800/60 backdrop-blur-xl p-4 shadow-xl">
-        <div className="flex flex-wrap gap-3 items-center">
-          {/* Search */}
-          <div className="relative min-w-[200px] flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-            <Input
-              placeholder="Search movies…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 h-9 bg-slate-950/40 border-slate-700/50 text-slate-200 placeholder:text-slate-500 text-sm"
-            />
-            {searchQuery && (
-              <button
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-                onClick={() => setSearchQuery('')}
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-
-          {/* Dubbed status multi-select */}
-          <Popover open={dubbedPopoverOpen} onOpenChange={setDubbedPopoverOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9 gap-1.5 bg-slate-950/40 border-slate-700/50 text-slate-300 hover:bg-slate-800/60 hover:text-slate-200"
-              >
-                <Film className="h-4 w-4 text-slate-400" />
-                {dubbedLabel}
-                <ChevronDown className="h-3.5 w-3.5 opacity-60" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-52 p-2 bg-slate-900 border-slate-700/60" align="start">
-              <div className="space-y-0.5">
-                {(['all', 'dubbed', 'not_dubbed', 'cannot_be_dubbed'] as DubbedFilter[]).map((val) => (
-                  <label
-                    key={val}
-                    className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-slate-800/60 cursor-pointer text-sm text-slate-300"
-                  >
-                    <Checkbox
-                      checked={isDubbedFilterActive(val)}
-                      onCheckedChange={() => toggleDubbedFilter(val)}
-                      className="border-slate-600"
-                    />
-                    {val === 'all' ? 'All Status' : val === 'dubbed' ? 'Dubbed' : val === 'not_dubbed' ? 'Eligible to Dub' : 'Cannot be Dubbed'}
-                  </label>
-                ))}
-              </div>
-            </PopoverContent>
-          </Popover>
-
-          {/* Source filter pills */}
-          <div className="flex rounded-lg border border-slate-700/50 overflow-hidden h-9 text-sm">
-            {(['all', 'home_production', 'acquired'] as const).map((s) => (
-              <button
-                key={s}
-                onClick={() => setSourceFilter(s)}
-                className={cn(
-                  'px-3 py-1.5 transition-colors text-xs font-semibold',
-                  sourceFilter === s
-                    ? 'bg-red-600/20 text-red-300 border-r border-slate-700/50 last:border-r-0'
-                    : 'bg-slate-950/40 text-slate-400 hover:text-slate-300 hover:bg-slate-800/40 border-r border-slate-700/50 last:border-r-0'
-                )}
-              >
-                {s === 'all' ? 'All' : s === 'home_production' ? 'Home' : 'Acquired'}
-              </button>
-            ))}
-          </div>
-
-          {/* Language multi-select */}
-          <Popover open={langPopoverOpen} onOpenChange={setLangPopoverOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9 gap-1.5 bg-slate-950/40 border-slate-700/50 text-slate-300 hover:bg-slate-800/60 hover:text-slate-200"
-              >
-                <Languages className="h-4 w-4 text-slate-400" />
-                {langLabel}
-                <ChevronDown className="h-3.5 w-3.5 opacity-60" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-56 p-2 max-h-72 overflow-y-auto bg-slate-900 border-slate-700/60" align="start">
-              <div className="space-y-0.5">
-                {ALL_LANGUAGES.map((lang) => (
-                  <label
-                    key={lang}
-                    className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-slate-800/60 cursor-pointer text-sm text-slate-300"
-                  >
-                    <Checkbox
-                      checked={languageFilter.includes(lang)}
-                      onCheckedChange={() => toggleLanguage(lang)}
-                      className="border-slate-600"
-                    />
-                    {lang}
-                  </label>
-                ))}
-              </div>
-            </PopoverContent>
-          </Popover>
-
-          {/* Clear filters */}
-          {hasActiveFilters && (
-            <Button
-              variant="ghost" size="sm"
-              className="h-9 gap-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"
-              onClick={() => { setSearchQuery(''); setDubbedFilter(['dubbed']); setLanguageFilter([]); setSourceFilter('all'); setPage(0) }}
-            >
-              <X className="h-3.5 w-3.5" /> Clear
+        {/* Language multi-select */}
+        <Popover open={langPopoverOpen} onOpenChange={setLangPopoverOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="h-9 gap-1.5">
+              <Languages className="h-3.5 w-3.5" style={{ color: "var(--text-faint)" }} />
+              {langLabel}
+              <ChevronDown className="h-3.5 w-3.5 opacity-60" />
             </Button>
-          )}
+          </PopoverTrigger>
+          <PopoverContent className="w-56 p-2 max-h-72 overflow-y-auto" align="start" style={{ background: "var(--panel-solid)", border: "1px solid var(--svf-border-strong)", borderRadius: 11 }}>
+            <div className="space-y-0.5">
+              {ALL_LANGUAGES.map((lang) => (
+                <label key={lang} className="flex items-center gap-2 rounded px-2 py-1.5 cursor-pointer text-sm" style={{ color: "var(--text-dim)" }}>
+                  <Checkbox checked={languageFilter.includes(lang)} onCheckedChange={() => toggleLanguage(lang)} />
+                  {lang}
+                </label>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
 
-          <span className="ml-auto text-xs text-slate-500">{filtered.length} titles</span>
-        </div>
-
-        {/* Context hint */}
-        {dubbedFilter.includes('not_dubbed') && !dubbedFilter.includes('dubbed') && !dubbedFilter.includes('all') && languageFilter.length > 0 && (
-          <p className="text-xs text-slate-400 mt-3">
-            Showing movies <span className="font-medium text-slate-200">not dubbed</span> in:{' '}
-            {languageFilter.join(', ')}
-          </p>
+        {hasActiveFilters && (
+          <Button variant="ghost" size="sm" className="h-9 gap-1.5" style={{ color: "var(--text-faint)" }}
+            onClick={() => { setSearchQuery(''); setDubbedFilter(['dubbed']); setLanguageFilter([]); setSourceFilter('all'); setPage(0) }}>
+            <X className="h-3.5 w-3.5" /> Clear
+          </Button>
         )}
+
+        <div className="flex-1" />
+        <Button onClick={handleExport} disabled={filtered.length === 0} variant="outline" size="sm" className="h-9 gap-2">
+          <Download className="h-4 w-4" /> Export CSV
+        </Button>
+        <span className="text-xs" style={{ color: "var(--text-faint)" }}>{filtered.length} titles</span>
       </div>
+
+      {dubbedFilter.includes('not_dubbed') && !dubbedFilter.includes('dubbed') && !dubbedFilter.includes('all') && languageFilter.length > 0 && (
+        <p className="text-xs" style={{ color: "var(--text-faint)" }}>
+          Showing movies <span className="font-medium" style={{ color: "var(--text)" }}>not dubbed</span> in: {languageFilter.join(', ')}
+        </p>
+      )}
 
       {/* ── Table ── */}
-      <div className="relative overflow-hidden rounded-xl bg-slate-900/40 border border-slate-800/60 backdrop-blur-xl shadow-xl">
+      <div className="glass-card overflow-hidden">
         <div className="w-full overflow-x-auto">
           <Table className="min-w-max">
-            <TableHeader>
-              <TableRow className="border-slate-800/60 hover:bg-transparent">
-                <TableHead className="w-65 text-[10px] font-bold uppercase tracking-widest text-slate-500">Title</TableHead>
-                <TableHead className="w-20 text-[10px] font-bold uppercase tracking-widest text-slate-500">Source</TableHead>
-                <TableHead className="w-16 text-[10px] font-bold uppercase tracking-widest text-slate-500">Year</TableHead>
-                <TableHead className="w-36 text-[10px] font-bold uppercase tracking-widest text-slate-500">Status</TableHead>
+            <TableHeader style={{ background: "var(--bg-deep)" }}>
+              <TableRow className="border-(--svf-border) hover:bg-transparent">
+                <TableHead className="w-65 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Title</TableHead>
+                <TableHead className="w-20 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Source</TableHead>
+                <TableHead className="w-16 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Year</TableHead>
+                <TableHead className="w-36 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Status</TableHead>
                 {langColumns.map((lc) => (
-                  <TableHead key={lc} className="text-center w-24 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-                    {lc}
-                  </TableHead>
+                  <TableHead key={lc} className="text-center w-24 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">{lc}</TableHead>
                 ))}
               </TableRow>
             </TableHeader>
             <TableBody>
               {paginated.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4 + langColumns.length} className="text-center py-16 text-slate-500">
+                  <TableCell colSpan={4 + langColumns.length} className="text-center py-16" style={{ color: "var(--text-faint)" }}>
                     No movies found
                   </TableCell>
                 </TableRow>
@@ -424,18 +336,12 @@ export default function DubbedPage() {
                     ? getDubbingRightsLanguages(group.primary_version?.dubbing_rights)
                     : null
                   return (
-                    <TableRow
-                      key={group.production_no}
-                      className={cn(
-                        "border-slate-800/40 hover:bg-slate-800/30 transition-colors",
-                        isDubbed && "bg-emerald-500/5"
-                      )}
+                    <TableRow key={group.production_no}
+                      className={cn("transition-colors", isDubbed && "bg-emerald-500/5")}
                     >
                       <TableCell className="font-medium">
-                        <Link
-                          href={`/movies/${group.primary_version?.id ?? ''}`}
-                          className="text-slate-200 hover:text-red-400 transition-colors"
-                        >
+                        <Link href={`/movies/${group.primary_version?.id ?? ''}`}
+                          className="hover:text-red-400 transition-colors" style={{ color: "var(--text)" }}>
                           {group.title}
                         </Link>
                       </TableCell>
@@ -449,8 +355,8 @@ export default function DubbedPage() {
                           {group.source === 'home_production' ? 'Home' : 'Acquired'}
                         </span>
                       </TableCell>
-                      <TableCell className="text-slate-400 text-sm">
-                        {group.release_year ?? <span className="text-slate-600">—</span>}
+                      <TableCell className="text-sm" style={{ color: "var(--text-faint)" }}>
+                        {group.release_year ?? <span style={{ color: "var(--text-faint)" }}>—</span>}
                       </TableCell>
                       <TableCell>
                         {isDubbed ? (
@@ -494,27 +400,13 @@ export default function DubbedPage() {
         </div>
 
         {filtered.length > pageSize && (
-          <div className="flex items-center justify-between px-5 py-3 border-t border-slate-800/60">
-            <p className="text-xs text-slate-500">
+          <div className="flex items-center justify-between px-5 py-3" style={{ borderTop: "1px solid var(--svf-border)" }}>
+            <p className="text-xs" style={{ color: "var(--text-faint)" }}>
               Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, filtered.length)} of {filtered.length}
             </p>
             <div className="flex gap-2">
-              <Button
-                variant="outline" size="sm"
-                className="h-8 bg-slate-800/40 border-slate-700/50 text-slate-300 hover:bg-slate-700/50"
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={page === 0}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="outline" size="sm"
-                className="h-8 bg-slate-800/40 border-slate-700/50 text-slate-300 hover:bg-slate-700/50"
-                onClick={() => setPage((p) => p + 1)}
-                disabled={(page + 1) * pageSize >= filtered.length}
-              >
-                Next
-              </Button>
+              <Button variant="outline" size="sm" className="h-8" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}>Previous</Button>
+              <Button variant="outline" size="sm" className="h-8" onClick={() => setPage((p) => p + 1)} disabled={(page + 1) * pageSize >= filtered.length}>Next</Button>
             </div>
           </div>
         )}

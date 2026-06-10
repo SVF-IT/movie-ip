@@ -325,21 +325,21 @@ export function SatelliteDashboardTable({
   const colSpan = flatExpiryRows ? 9 : showWtpCol ? 8 : 7
 
   // ── row / cell sizing based on mode ──
-  const rowCls = fullPage ? 'border-slate-800/30 hover:bg-slate-800/30' : 'border-slate-800/30 hover:bg-slate-800/25'
+  const rowCls = fullPage ? 'border-(--svf-border)/30 hover:bg-slate-800/30' : 'border-(--svf-border)/30 hover:bg-slate-800/25'
   const cellCls = fullPage ? 'py-1 px-3 text-xs' : ''
   const headCls = fullPage ? 'py-1.5 px-3 text-xs' : 'text-xs font-medium'
 
-  const inputCls = "h-9 bg-slate-800/40 border-slate-700/50 text-slate-200 hover:border-slate-600/70 focus-visible:border-slate-500/70 focus-visible:ring-slate-500/20 transition-colors"
-  const selectTriggerCls = "h-9 bg-slate-800/40 border-slate-700/50 text-slate-300 hover:border-slate-600/70 hover:bg-slate-800/60 transition-colors text-xs"
+  const inputCls = "h-9 bg-slate-800/40 border-(--svf-border) text-(--text) hover:border-slate-600/70 focus-visible:border-slate-500/70 focus-visible:ring-slate-500/20 transition-colors"
+  const selectTriggerCls = "h-9 bg-slate-800/40 border-(--svf-border) text-(--text) hover:border-slate-600/70 hover:bg-slate-800/60 transition-colors text-xs"
 
   const filtersBar = (
-    <div className={fullPage ? 'px-4 py-3 border-b border-slate-800/40 bg-slate-900/30' : 'rounded-lg border border-slate-800/40 bg-slate-900/30 p-3'}>
+    <div className={fullPage ? 'px-4 py-3 border-b border-(--svf-border)/40 bg-(--panel-solid)/30' : 'rounded-lg border border-(--svf-border)/40 bg-(--panel-solid)/30 p-3'}>
       <div className="flex flex-wrap gap-2 items-center">
         {/* Search */}
         <div className="relative flex-1 min-w-45 max-w-65">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-(--text-faint)" />
           <Input placeholder="Search movies…" value={search} onChange={(e) => setSearch(e.target.value)}
-            className={`pl-9 text-xs placeholder:text-slate-400 ${inputCls}`} />
+            className={`pl-9 text-xs placeholder:text-(--text-faint) ${inputCls}`} />
         </div>
 
         {/* Source filter */}
@@ -358,7 +358,7 @@ export function SatelliteDashboardTable({
         <Popover open={certOpen} onOpenChange={setCertOpen}>
           <PopoverTrigger asChild>
             <Button variant="outline" size="sm"
-              className={`h-9 gap-1.5 text-xs font-normal bg-slate-800/40 border-slate-700/50 hover:bg-slate-800/60 hover:border-slate-600/70 transition-colors ${certFilter.length > 0 ? 'border-purple-500/60 text-purple-400 bg-purple-500/5' : 'text-slate-300'}`}>
+              className={`h-9 gap-1.5 text-xs font-normal bg-slate-800/40 border-(--svf-border) hover:bg-slate-800/60 hover:border-slate-600/70 transition-colors ${certFilter.length > 0 ? 'border-purple-500/60 text-purple-400 bg-purple-500/5' : 'text-(--text)'}`}>
               <Filter className="h-3 w-3 shrink-0" />
               {certFilter.length === 0
                 ? 'Certification'
@@ -375,13 +375,13 @@ export function SatelliteDashboardTable({
               )}
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-44 p-2 bg-slate-900 border-slate-700/60 shadow-xl" align="start">
-            <p className="text-xs font-semibold text-slate-400 px-1 pb-1.5 uppercase tracking-wide">Certification</p>
-            <div className="border-b border-slate-800/60 mb-1.5 pb-1.5 space-y-0.5">
+          <PopoverContent className="w-44 p-2 bg-(--panel-solid) border-(--svf-border)/60 shadow-xl" align="start">
+            <p className="text-xs font-semibold text-(--text-faint) px-1 pb-1.5 uppercase tracking-wide">Certification</p>
+            <div className="border-b border-(--svf-border) mb-1.5 pb-1.5 space-y-0.5">
               <div className="flex items-center gap-2 px-1 py-1.5 rounded hover:bg-slate-800/60 cursor-pointer transition-colors"
                 onClick={() => { setCertFilter([]); setCurrentPage(1) }}>
                 <Checkbox checked={certFilter.length === 0} className="h-3.5 w-3.5" />
-                <span className="text-xs text-slate-300">All</span>
+                <span className="text-xs text-(--text)">All</span>
               </div>
               <div className="flex items-center gap-2 px-1 py-1.5 rounded hover:bg-slate-800/60 cursor-pointer transition-colors"
                 onClick={() => { setCertFilter(CERT_OPTIONS.filter(c => c !== 'A')); setCurrentPage(1) }}>
@@ -389,14 +389,14 @@ export function SatelliteDashboardTable({
                   checked={certFilter.length > 0 && !certFilter.includes('A') && CERT_OPTIONS.filter(c => c !== 'A').every(c => certFilter.includes(c))}
                   className="h-3.5 w-3.5"
                 />
-                <span className="text-xs text-slate-300">Except A</span>
+                <span className="text-xs text-(--text)">Except A</span>
               </div>
             </div>
             {CERT_OPTIONS.map((cert) => (
               <div key={cert} className="flex items-center gap-2 px-1 py-1.5 rounded hover:bg-slate-800/60 cursor-pointer transition-colors"
                 onClick={() => toggleCert(cert)}>
                 <Checkbox checked={certFilter.includes(cert)} className="h-3.5 w-3.5" />
-                <span className="text-xs text-slate-300">{cert}</span>
+                <span className="text-xs text-(--text)">{cert}</span>
               </div>
             ))}
           </PopoverContent>
@@ -422,7 +422,7 @@ export function SatelliteDashboardTable({
           <>
             <Select value={expiryYear} onValueChange={onExpiryYearChange}>
               <SelectTrigger className={`w-[140px] ${selectTriggerCls}`}>
-                <CalendarRange className="h-3 w-3 mr-1 text-slate-400 shrink-0" />
+                <CalendarRange className="h-3 w-3 mr-1 text-(--text-faint) shrink-0" />
                 <SelectValue placeholder="Expiry Year" />
               </SelectTrigger>
               <SelectContent>
@@ -434,16 +434,16 @@ export function SatelliteDashboardTable({
               </SelectContent>
             </Select>
 
-            <div className="flex items-center gap-1 bg-slate-800/40 border border-slate-700/50 rounded-md px-2 h-9 hover:border-slate-600/70 transition-colors">
-              <span className="text-[10px] font-medium text-slate-400 uppercase px-1">From</span>
+            <div className="flex items-center gap-1 bg-slate-800/40 border border-(--svf-border) rounded-md px-2 h-9 hover:border-slate-600/70 transition-colors">
+              <span className="text-[10px] font-medium text-(--text-faint) uppercase px-1">From</span>
               <DateInput value={expiryFrom} onChange={onExpiryFromChange} />
               <span className="text-slate-700 px-1">|</span>
-              <span className="text-[10px] font-medium text-slate-400 uppercase px-1">To</span>
+              <span className="text-[10px] font-medium text-(--text-faint) uppercase px-1">To</span>
               <DateInput value={expiryTo} onChange={onExpiryToChange} />
               {(expiryFrom || expiryTo) && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onExpiryFromChange(''); onExpiryToChange(''); onExpiryYearChange('all') }}
-                  className="ml-1 p-0.5 text-slate-400 hover:text-red-400 transition-colors"
+                  className="ml-1 p-0.5 text-(--text-faint) hover:text-red-400 transition-colors"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -455,14 +455,14 @@ export function SatelliteDashboardTable({
         {/* Open titles filters: open date range + WTP */}
         {activeCard === 'open_titles' && (
           <>
-            <div className="flex items-center gap-1 bg-slate-800/40 border border-slate-700/50 rounded-md px-2 h-9 hover:border-slate-600/70 transition-colors">
-              <span className="text-[10px] font-medium text-slate-400 uppercase px-1">Open</span>
+            <div className="flex items-center gap-1 bg-slate-800/40 border border-(--svf-border) rounded-md px-2 h-9 hover:border-slate-600/70 transition-colors">
+              <span className="text-[10px] font-medium text-(--text-faint) uppercase px-1">Open</span>
               <DateInput value={openFrom} onChange={(v) => { setOpenFrom(v); setCurrentPage(1) }} placeholder="From" />
               <span className="text-slate-700 px-1">|</span>
               <DateInput value={openTo} onChange={(v) => { setOpenTo(v); setCurrentPage(1) }} placeholder="To" />
               {(openFrom || openTo) && (
                 <button onClick={() => { setOpenFrom(''); setOpenTo('') }}
-                  className="ml-1 p-0.5 text-slate-400 hover:text-red-400 transition-colors">
+                  className="ml-1 p-0.5 text-(--text-faint) hover:text-red-400 transition-colors">
                   <X className="h-3 w-3" />
                 </button>
               )}
@@ -496,7 +496,7 @@ export function SatelliteDashboardTable({
 
         <div className="ml-auto flex gap-2">
           {fullPage && (
-            <Button variant="outline" size="sm" className="gap-1.5 h-9 px-3 text-xs bg-slate-800/40 border-slate-700/50 text-slate-300 hover:bg-slate-700/60 hover:border-slate-600/70 hover:text-slate-100 transition-colors" onClick={handleExportClick} disabled={exportLoading}>
+            <Button variant="outline" size="sm" className="gap-1.5 h-9 px-3 text-xs bg-slate-800/40 border-(--svf-border) text-(--text) hover:bg-slate-700/60 hover:border-slate-600/70 hover:text-(--text) transition-colors" onClick={handleExportClick} disabled={exportLoading}>
               {exportLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
               Export
             </Button>
@@ -527,7 +527,7 @@ export function SatelliteDashboardTable({
       </span>
     )
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-700/50 text-slate-400 border border-slate-600/30">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-700/50 text-(--text-faint) border border-slate-600/30">
         {days}d
       </span>
     )
@@ -542,10 +542,10 @@ export function SatelliteDashboardTable({
   }
 
   const tableEl = (
-    <div className={fullPage ? 'flex-1 overflow-auto' : 'rounded-lg border border-slate-800/50 overflow-hidden'}>
+    <div className={fullPage ? 'flex-1 overflow-auto' : 'rounded-lg border border-(--svf-border) overflow-hidden'}>
       <Table className={fullPage ? 'border-collapse' : ''}>
         <TableHeader className={fullPage ? 'sticky top-0 z-10' : ''}>
-          <TableRow className={`border-slate-800/40 ${fullPage ? 'bg-slate-800/60 backdrop-blur-sm' : 'bg-slate-800/40'}`}>
+          <TableRow className={`border-(--svf-border)/40 ${fullPage ? 'bg-slate-800/60 backdrop-blur-sm' : 'bg-slate-800/40'}`}>
             {flatExpiryRows ? (
               <>
                 <TableHead className={headCls}>Movie</TableHead>
@@ -592,7 +592,7 @@ export function SatelliteDashboardTable({
               flatRightRows.map(({ movie, right }) => (
                 <TableRow
                   key={right.id}
-                  className={cn('border-slate-800/30 hover:bg-slate-800/25 transition-colors', getUrgencyRowCls(right.end_date))}
+                  className={cn('border-(--svf-border)/30 hover:bg-slate-800/25 transition-colors', getUrgencyRowCls(right.end_date))}
                 >
                   <TableCell className={cn('font-medium max-w-48', cellCls)}>
                     <Link href={`/movies/${movie.id}`} className="hover:text-primary transition-colors line-clamp-2">
@@ -605,7 +605,7 @@ export function SatelliteDashboardTable({
                   </TableCell>
                   <TableCell className={cellCls}>
                     {right.rights_type_name ? (
-                      <Badge variant="outline" className="bg-purple-500/10 text-purple-400 border-purple-500/30 text-xs whitespace-nowrap">
+                      <Badge variant="outline" className="bg-(--bg-raise)/60 text-(--text-faint) border-(--svf-border) text-xs whitespace-nowrap">
                         {right.rights_type_name}
                       </Badge>
                     ) : <span className="text-muted-foreground text-xs">—</span>}
@@ -615,7 +615,7 @@ export function SatelliteDashboardTable({
                       <Badge variant="outline" className={cn('text-xs whitespace-nowrap',
                         right.nature === 'exclusive'
                           ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25'
-                          : 'bg-slate-700/40 text-slate-400 border-slate-600/30'
+                          : 'bg-slate-700/40 text-(--text-faint) border-slate-600/30'
                       )}>
                         {right.nature === 'exclusive' ? 'Exclusive' : right.nature === 'non_exclusive' ? 'Non-Exclusive' : right.nature}
                       </Badge>
@@ -647,7 +647,7 @@ export function SatelliteDashboardTable({
             </TableRow>
           ) : (
             sortedData.map((movie: any, idx: number) => (
-              <TableRow key={movie.id} className={cn(rowCls, fullPage && idx % 2 === 0 ? 'bg-slate-900/30' : '')}>
+              <TableRow key={movie.id} className={cn(rowCls, fullPage && idx % 2 === 0 ? 'bg-(--panel-solid)/30' : '')}>
                 <TableCell className={cn('font-medium max-w-55', cellCls)}>
                   <Link href={`/movies/${movie.id}`} className="hover:text-primary transition-colors line-clamp-1">
                     {movie.title}
@@ -680,12 +680,12 @@ export function SatelliteDashboardTable({
   )
 
   const paginationEl = totalCount > pageSize ? (
-    <div className={`flex items-center justify-between ${fullPage ? 'px-4 py-2 border-t border-slate-800/40 bg-slate-950/30 shrink-0' : 'pt-1'}`}>
+    <div className={`flex items-center justify-between ${fullPage ? 'px-4 py-2 border-t border-(--svf-border)/40 bg-(--bg-deep)/30 shrink-0' : 'pt-1'}`}>
       <p className="text-xs text-muted-foreground">
         {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalCount)} of {totalCount}
       </p>
       <div className="flex gap-1 items-center">
-        <Button variant="outline" size="sm" className="h-7 px-2 border-slate-800/60 bg-slate-950/50 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>
+        <Button variant="outline" size="sm" className="h-7 px-2 border-(--svf-border) bg-(--bg-deep)/50 text-(--text-faint) hover:bg-slate-800/60 hover:text-(--text)" onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}>
           <ChevronLeft className="h-3.5 w-3.5" />
         </Button>
         {(() => {
@@ -703,21 +703,21 @@ export function SatelliteDashboardTable({
           }
           return pages.map((p, idx) =>
             p === 'ellipsis' ? (
-              <span key={`e${idx}`} className="w-7 h-7 flex items-center justify-center text-xs text-slate-400">…</span>
+              <span key={`e${idx}`} className="w-7 h-7 flex items-center justify-center text-xs text-(--text-faint)">…</span>
             ) : (
               <Button key={p} variant="outline" size="sm"
                 onClick={() => setCurrentPage(p)}
-                className={cn('w-7 h-7 text-xs border-slate-800/60 transition-colors',
+                className={cn('w-7 h-7 text-xs border-(--svf-border) transition-colors',
                   currentPage === p
-                    ? 'bg-slate-700 text-slate-100 border-slate-600 shadow-sm'
-                    : 'bg-slate-950/50 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
+                    ? 'bg-slate-700 text-(--text) border-slate-600 shadow-sm'
+                    : 'bg-(--bg-deep)/50 text-(--text-faint) hover:bg-slate-800/60 hover:text-(--text)'
                 )}>
                 {p}
               </Button>
             )
           )
         })()}
-        <Button variant="outline" size="sm" className="h-7 px-2 border-slate-800/60 bg-slate-950/50 text-slate-400 hover:bg-slate-800/60 hover:text-slate-200" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
+        <Button variant="outline" size="sm" className="h-7 px-2 border-(--svf-border) bg-(--bg-deep)/50 text-(--text-faint) hover:bg-slate-800/60 hover:text-(--text)" onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
           <ChevronRight className="h-3.5 w-3.5" />
         </Button>
       </div>
@@ -743,20 +743,20 @@ export function SatelliteDashboardTable({
         {/* Header */}
         <div className="px-1 flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold tracking-tight text-slate-100">{cardLabels[activeCard]}</h2>
-            <p className="text-sm text-slate-400 mt-0.5">
+            <h2 className="text-xl font-bold tracking-tight text-(--text)">{cardLabels[activeCard]}</h2>
+            <p className="text-sm text-(--text-faint) mt-0.5">
               {activeCard === 'open_titles' && 'Movies without active satellite rights — available to exploit'}
               {activeCard === 'expiring' && 'Movies whose satellite rights are expiring in the selected period (stat shows current year)'}
               {activeCard === 'wtp' && 'World Television Premiere titles'}
             </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="gap-1.5 h-8 px-3 text-xs bg-slate-800/40 border-slate-700/50 text-slate-300 hover:bg-slate-700/60 hover:border-slate-600/70 hover:text-slate-100 transition-colors" onClick={handleExportClick} disabled={exportLoading}>
+            <Button variant="outline" size="sm" className="gap-1.5 h-8 px-3 text-xs bg-slate-800/40 border-(--svf-border) text-(--text) hover:bg-slate-700/60 hover:border-slate-600/70 hover:text-(--text) transition-colors" onClick={handleExportClick} disabled={exportLoading}>
               {exportLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
               Export
             </Button>
             {!fullPage && (
-              <Button variant="outline" size="sm" className="gap-1.5 h-8 px-3 text-xs bg-slate-800/40 border-slate-700/50 text-slate-300 hover:bg-slate-700/60 hover:border-slate-600/70 hover:text-slate-100 transition-colors" asChild>
+              <Button variant="outline" size="sm" className="gap-1.5 h-8 px-3 text-xs bg-slate-800/40 border-(--svf-border) text-(--text) hover:bg-slate-700/60 hover:border-slate-600/70 hover:text-(--text) transition-colors" asChild>
                 <Link href="/movies">Full Catalog <ChevronRight className="h-3 w-3" /></Link>
               </Button>
             )}

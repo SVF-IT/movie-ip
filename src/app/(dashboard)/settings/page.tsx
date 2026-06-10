@@ -148,20 +148,20 @@ export default function SettingsPage() {
 
       <div className="relative z-10">
         <h1 className="text-3xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">Platform Settings</h1>
-        <p className="text-slate-400 mt-1">
+        <p className="text-(--text-faint) mt-1">
           Manage your SVF Film IP Manager account preferences and security
         </p>
       </div>
 
       <div className="grid gap-8 relative z-10">
         {/* Profile Settings */}
-        <Card className="border-slate-800/60 bg-slate-900/40 backdrop-blur-xl shadow-2xl">
-          <CardHeader className="border-b border-slate-800/60 pb-4">
-            <CardTitle className="flex items-center gap-2 text-slate-200">
+        <Card className="border-(--svf-border) bg-(--panel-solid)/40 backdrop-blur-xl shadow-2xl">
+          <CardHeader className="border-b border-(--svf-border) pb-4">
+            <CardTitle className="flex items-center gap-2 text-(--text)">
               <Settings className="h-5 w-5 text-red-400" />
               Profile Settings
             </CardTitle>
-            <CardDescription className="text-slate-400">
+            <CardDescription className="text-(--text-faint)">
               Update your personal information
             </CardDescription>
           </CardHeader>
@@ -184,42 +184,42 @@ export default function SettingsPage() {
 
             <div className="grid gap-6 md:grid-cols-2">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">Full Name</label>
+                <label className="text-sm font-medium text-(--text)">Full Name</label>
                 <Input
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="Your full name"
-                  className="bg-slate-950/50 border-slate-800 text-slate-200 focus-visible:ring-red-500/30 focus-visible:border-red-500/50 placeholder:text-slate-400 transition-colors"
+                  className="bg-(--bg-deep)/50 border-(--svf-border) text-(--text) focus-visible:ring-red-500/30 focus-visible:border-red-500/50 placeholder:text-(--text-faint) transition-colors"
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">Email</label>
+                <label className="text-sm font-medium text-(--text)">Email</label>
                 <Input
                   type="email"
                   value={profile?.email || ""}
                   disabled
-                  className="bg-slate-900/60 border-slate-800/80 text-slate-400 opacity-90 cursor-not-allowed"
+                  className="bg-(--panel-solid)/60 border-(--svf-border)/80 text-(--text-faint) opacity-90 cursor-not-allowed"
                 />
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-(--text-faint)">
                   Email cannot be changed
                 </p>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">Department</label>
+                <label className="text-sm font-medium text-(--text)">Department</label>
                 <Input
                   value={department}
                   onChange={(e) => setDepartment(e.target.value)}
                   placeholder="e.g., Legal & Rights"
-                  className="bg-slate-950/50 border-slate-800 text-slate-200 focus-visible:ring-red-500/30 focus-visible:border-red-500/50 placeholder:text-slate-400 transition-colors"
+                  className="bg-(--bg-deep)/50 border-(--svf-border) text-(--text) focus-visible:ring-red-500/30 focus-visible:border-red-500/50 placeholder:text-(--text-faint) transition-colors"
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">System Role</label>
+                <label className="text-sm font-medium text-(--text)">System Role</label>
                 <div className="flex items-center gap-3 h-10 px-1">
-                  <Badge variant="secondary" className="bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700 capitalize shadow-sm transition-colors cursor-default">
+                  <Badge variant="secondary" className="bg-slate-800 hover:bg-slate-700 text-(--text) border-(--svf-border) capitalize shadow-sm transition-colors cursor-default">
                     {profile?.role || "viewer"}
                   </Badge>
-                  <span className="text-xs text-slate-400 italic">
+                  <span className="text-xs text-(--text-faint) italic">
                     Contact admin to elevate permissions
                   </span>
                 </div>
@@ -246,27 +246,27 @@ export default function SettingsPage() {
         </Card>
 
         {/* Notification Settings */}
-        <Card className="border-slate-800/60 bg-slate-900/40 backdrop-blur-xl shadow-2xl">
-          <CardHeader className="border-b border-slate-800/60 pb-4">
-            <CardTitle className="flex items-center gap-2 text-slate-200">
+        <Card className="border-(--svf-border) bg-(--panel-solid)/40 backdrop-blur-xl shadow-2xl">
+          <CardHeader className="border-b border-(--svf-border) pb-4">
+            <CardTitle className="flex items-center gap-2 text-(--text)">
               <Bell className="h-5 w-5 text-amber-400" />
               Email Notifications
             </CardTitle>
-            <CardDescription className="text-slate-400">
+            <CardDescription className="text-(--text-faint)">
               Configure which email notifications you receive
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-6">
             <Link href="/settings/notifications">
-              <div className="group flex items-center justify-between p-5 rounded-xl border border-slate-800 bg-slate-950/30 hover:bg-slate-800/50 hover:border-slate-700 transition-all cursor-pointer">
+              <div className="group flex items-center justify-between p-5 rounded-[12px] border border-(--svf-border) bg-(--bg-deep)/30 hover:bg-slate-800/50 hover:border-(--svf-border) transition-all cursor-pointer">
                 <div className="space-y-1.5">
-                  <p className="font-medium text-slate-200 group-hover:text-white transition-colors">Notification Preferences</p>
-                  <p className="text-sm text-slate-400">
+                  <p className="font-medium text-(--text) group-hover:text-white transition-colors">Notification Preferences</p>
+                  <p className="text-sm text-(--text-faint)">
                     Choose which alerts and updates you want to receive via email
                   </p>
                 </div>
                 <div className="h-10 w-10 flex items-center justify-center rounded-full bg-slate-800/50 group-hover:bg-amber-500/20 transition-colors">
-                  <ChevronRight className="h-5 w-5 text-slate-400 group-hover:text-amber-400 transition-colors" />
+                  <ChevronRight className="h-5 w-5 text-(--text-faint) group-hover:text-amber-400 transition-colors" />
                 </div>
               </div>
             </Link>
@@ -274,13 +274,13 @@ export default function SettingsPage() {
         </Card>
 
         {/* Security Settings */}
-        <Card className="border-slate-800/60 bg-slate-900/40 backdrop-blur-xl shadow-2xl">
-          <CardHeader className="border-b border-slate-800/60 pb-4">
-            <CardTitle className="flex items-center gap-2 text-slate-200">
+        <Card className="border-(--svf-border) bg-(--panel-solid)/40 backdrop-blur-xl shadow-2xl">
+          <CardHeader className="border-b border-(--svf-border) pb-4">
+            <CardTitle className="flex items-center gap-2 text-(--text)">
               <Shield className="h-5 w-5 text-blue-400" />
               Security Settings
             </CardTitle>
-            <CardDescription className="text-slate-400">
+            <CardDescription className="text-(--text-faint)">
               Secure your account by updating your password
             </CardDescription>
           </CardHeader>
@@ -303,30 +303,30 @@ export default function SettingsPage() {
 
             <div className="grid gap-6 md:grid-cols-2">
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">New Password</label>
+                <label className="text-sm font-medium text-(--text)">New Password</label>
                 <Input
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder="Enter new password"
-                  className="bg-slate-950/50 border-slate-800 text-slate-200 focus-visible:ring-blue-500/30 focus-visible:border-blue-500/50 placeholder:text-slate-400 transition-colors"
+                  className="bg-(--bg-deep)/50 border-(--svf-border) text-(--text) focus-visible:ring-blue-500/30 focus-visible:border-blue-500/50 placeholder:text-(--text-faint) transition-colors"
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-300">Confirm Password</label>
+                <label className="text-sm font-medium text-(--text)">Confirm Password</label>
                 <Input
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="Confirm new password"
-                  className="bg-slate-950/50 border-slate-800 text-slate-200 focus-visible:ring-blue-500/30 focus-visible:border-blue-500/50 placeholder:text-slate-400 transition-colors"
+                  className="bg-(--bg-deep)/50 border-(--svf-border) text-(--text) focus-visible:ring-blue-500/30 focus-visible:border-blue-500/50 placeholder:text-(--text-faint) transition-colors"
                 />
               </div>
             </div>
 
-            <div className="rounded-lg bg-slate-950/40 border border-slate-800/50 p-4">
-              <p className="text-sm font-medium text-slate-300 mb-2">Password requirements:</p>
-              <ul className="text-sm text-slate-400 space-y-1.5 list-disc list-inside ml-1">
+            <div className="rounded-lg bg-(--bg-raise)/40 border border-(--svf-border) p-4">
+              <p className="text-sm font-medium text-(--text) mb-2">Password requirements:</p>
+              <ul className="text-sm text-(--text-faint) space-y-1.5 list-disc list-inside ml-1">
                 <li className={newPassword.length >= 8 ? "text-green-400/80" : ""}>At least 8 characters long</li>
                 <li className={/[A-Z]/.test(newPassword) ? "text-green-400/80" : ""}>At least one uppercase letter</li>
                 <li className={/[a-z]/.test(newPassword) ? "text-green-400/80" : ""}>At least one lowercase letter</li>
@@ -338,11 +338,11 @@ export default function SettingsPage() {
               <Button
                 onClick={handlePasswordChange}
                 disabled={passwordSaving || !newPassword || !confirmPassword}
-                className="bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 hover:border-slate-600 shadow-lg shadow-slate-900/20 transition-all font-medium tracking-wide"
+                className="bg-slate-800 hover:bg-slate-700 text-(--text) border border-(--svf-border) hover:border-slate-600 shadow-lg shadow-slate-900/20 transition-all font-medium tracking-wide"
               >
                 {passwordSaving ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin text-slate-400" />
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin text-(--text-faint)" />
                     Updating security...
                   </>
                 ) : (

@@ -31,8 +31,8 @@ export function EnhancedStatsCard({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-xl border border-slate-800/60 bg-slate-900/40 backdrop-blur-xl p-5 shadow-xl",
-        "transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-700/60",
+        "relative overflow-hidden rounded-[12px] border border-(--svf-border) bg-(--panel-solid)/40 backdrop-blur-xl p-5 shadow-xl",
+        "transition-all duration-200 hover:-translate-y-0.5 hover:border-(--svf-border)/60",
         "animate-in fade-in slide-in-from-bottom-2"
       )}
       style={{
@@ -50,9 +50,9 @@ export function EnhancedStatsCard({
 
       <div className="relative flex items-start justify-between">
         <div className="space-y-1.5 min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{title}</p>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">{title}</p>
           <div className="flex items-baseline gap-2 flex-wrap">
-            <h3 className="text-3xl font-extrabold tracking-tight text-slate-100">
+            <h3 className="text-3xl font-extrabold tracking-tight text-(--text)">
               {typeof value === "number" ? <AnimatedCounter value={value} /> : value}
             </h3>
             {trend && (
@@ -65,11 +65,11 @@ export function EnhancedStatsCard({
               </span>
             )}
           </div>
-          {description && <p className="text-xs text-slate-500">{description}</p>}
+          {description && <p className="text-xs text-(--text-faint)">{description}</p>}
         </div>
 
         <div
-          className="shrink-0 rounded-xl p-2.5 border"
+          className="shrink-0 rounded-[12px] p-2.5 border"
           style={{
             backgroundColor: `${accentColor}18`,
             borderColor: `${accentColor}30`,

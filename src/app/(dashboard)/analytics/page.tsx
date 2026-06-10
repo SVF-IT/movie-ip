@@ -5,9 +5,8 @@ import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LabelList,
 } from "recharts";
-import { Loader2, Film, FileText, TrendingDown, Globe, X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { createClient } from "@/lib/supabase/client";
 
 const supabase = createClient();
@@ -44,28 +43,43 @@ const grid = { stroke: "rgba(148,163,184,0.08)" };
 // ── Small helpers ─────────────────────────────────────────────────────────────
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`rounded-xl bg-slate-900/40 border border-slate-800/60 backdrop-blur-sm ${className}`}>
+    <div className={`rounded-[12px] bg-(--panel-solid)/40 border border-(--svf-border) backdrop-blur-sm ${className}`}>
       {children}
     </div>
   );
 }
 
-function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color: string }) {
+function StatCard({ label, value, sub, color, icon }: { label: string; value: string | number; sub?: string; color: string; icon?: React.ReactNode }) {
   return (
-    <Card className="p-4 flex flex-col gap-1">
-      <span className="text-xs text-slate-500 uppercase tracking-wider">{label}</span>
-      <span className="text-2xl font-bold tabular-nums" style={{ color }}>{value}</span>
-      {sub && <span className="text-xs text-slate-500">{sub}</span>}
+    <Card className="p-5 flex items-center gap-4">
+      {icon && (
+        <div
+          className="shrink-0 flex items-center justify-center rounded-[10px]"
+          style={{
+            width: 38,
+            height: 38,
+            background: `color-mix(in oklch, ${color} 14%, transparent)`,
+            border: `1px solid color-mix(in oklch, ${color} 28%, transparent)`,
+          }}
+        >
+          <span style={{ color }}>{icon}</span>
+        </div>
+      )}
+      <div className="min-w-0">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block">{label}</span>
+        <span className="text-3xl font-bold tabular-nums leading-tight block" style={{ color, fontFamily: "var(--font-serif)" }}>{value}</span>
+        {sub && <span className="text-[11px] text-(--text-faint)">{sub}</span>}
+      </div>
     </Card>
   );
 }
 
-function Section({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
+function Section({ title, sub, children, className = "" }: { title: string; sub?: string; children: React.ReactNode; className?: string }) {
   return (
-    <Card>
+    <Card className={className}>
       <div className="px-5 pt-4 pb-2">
-        <p className="text-sm font-semibold text-slate-200">{title}</p>
-        {sub && <p className="text-xs text-slate-500 mt-0.5">{sub}</p>}
+        <p className="text-sm font-semibold text-(--text)">{title}</p>
+        {sub && <p className="text-xs text-(--text-faint) mt-0.5">{sub}</p>}
       </div>
       <div className="px-4 pb-4">{children}</div>
     </Card>
@@ -193,7 +207,7 @@ export default function AnalyticsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+        <Loader2 className="h-8 w-8 animate-spin text-(--text-faint)" />
       </div>
     );
   }
@@ -203,10 +217,10 @@ export default function AnalyticsPage() {
       {/* ── Filter bar ── */}
       <Card className="px-4 py-3">
         <div className="flex flex-wrap items-center gap-3">
-          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider shrink-0">Filters</span>
+          <span className="text-xs font-semibold text-(--text-faint) uppercase tracking-wider shrink-0">Filters</span>
 
           <Select value={rightsStatus} onValueChange={setRightsStatus}>
-            <SelectTrigger className="h-8 w-32 text-xs bg-slate-800/60 border-slate-700/60">
+            <SelectTrigger className="h-8 w-32 text-xs bg-slate-800/60 border-(--svf-border)/60">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -216,7 +230,7 @@ export default function AnalyticsPage() {
           </Select>
 
           <Select value={language} onValueChange={setLanguage}>
-            <SelectTrigger className="h-8 w-36 text-xs bg-slate-800/60 border-slate-700/60">
+            <SelectTrigger className="h-8 w-36 text-xs bg-slate-800/60 border-(--svf-border)/60">
               <SelectValue placeholder="Language" />
             </SelectTrigger>
             <SelectContent>
@@ -226,7 +240,7 @@ export default function AnalyticsPage() {
           </Select>
 
           <Select value={source} onValueChange={setSource}>
-            <SelectTrigger className="h-8 w-36 text-xs bg-slate-800/60 border-slate-700/60">
+            <SelectTrigger className="h-8 w-36 text-xs bg-slate-800/60 border-(--svf-border)/60">
               <SelectValue placeholder="Source" />
             </SelectTrigger>
             <SelectContent>
@@ -237,7 +251,7 @@ export default function AnalyticsPage() {
           </Select>
 
           <Select value={platformType} onValueChange={setPlatformType}>
-            <SelectTrigger className="h-8 w-36 text-xs bg-slate-800/60 border-slate-700/60">
+            <SelectTrigger className="h-8 w-36 text-xs bg-slate-800/60 border-(--svf-border)/60">
               <SelectValue placeholder="Platform type" />
             </SelectTrigger>
             <SelectContent>
@@ -249,45 +263,51 @@ export default function AnalyticsPage() {
           {hasFilters && (
             <button
               onClick={() => { setLanguage("all"); setSource("all"); setPlatformType("all"); setRightsStatus("active"); }}
-              className="flex items-center gap-1 text-xs text-slate-400 hover:text-red-400 transition-colors"
+              className="flex items-center gap-1 text-xs text-(--text-faint) hover:text-red-400 transition-colors"
             >
               <X className="h-3 w-3" /> Clear
             </button>
           )}
 
-          <div className="ml-auto text-xs text-slate-500">
-            <span className="font-semibold text-slate-300">{filtered.length}</span> rights · <span className="font-semibold text-slate-300">{uniqueMovies}</span> titles
+          <div className="ml-auto text-xs text-(--text-faint)">
+            <span className="font-semibold text-(--text)">{filtered.length}</span> rights · <span className="font-semibold text-(--text)">{uniqueMovies}</span> titles
           </div>
         </div>
       </Card>
 
       {/* ── KPI row ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Matched Rights" value={filtered.length} color="#3b82f6" sub="matching current filters" />
-        <StatCard label="Titles" value={uniqueMovies} color="#10b981" sub="unique movies" />
-        <StatCard label="Active Rights" value={activeRights.length} color="#8b5cf6" sub="currently active (all)" />
-        <StatCard label="Expiring in 30d" value={expiring30.length} color="#ef4444" sub="needs attention" />
+        <StatCard label="Total Catalogue" value={uniqueMovies} color="var(--st-open)" sub="unique titles"
+          icon={<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M15 22v-4a3 3 0 0 0-6 0v4"/><path d="M2 7h20"/><path d="M22 7v3a2 2 0 0 1-2 2a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12a2 2 0 0 1-2-2V7"/></svg>} />
+        <StatCard label="Active Rights" value={activeRights.length} color="var(--st-active)" sub="currently live"
+          icon={<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>} />
+        <StatCard label="Open for Licensing" value={filtered.length} color="var(--st-open)" sub="matched rights"
+          icon={<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>} />
+        <StatCard label="Expiring ≤30d" value={expiring30.length} color="var(--st-expired)" sub="needs attention"
+          icon={<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>} />
       </div>
 
       {/* ── Expiry timeline + Platform type donut ── */}
       <div className="grid gap-4 md:grid-cols-3">
-        <Section title="Expiry Timeline" sub="Rights expiring per month (next 12m)" className="md:col-span-2">
-          <ResponsiveContainer width="100%" height={240}>
-            <AreaChart data={expiryTimeline} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="gExp" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#ef4444" stopOpacity={0.3} />
-                  <stop offset="100%" stopColor="#ef4444" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={grid.stroke} vertical={false} />
-              <XAxis dataKey="month" tick={tickStyle} tickLine={false} axisLine={false} />
-              <YAxis tick={tickStyle} tickLine={false} axisLine={false} width={28} allowDecimals={false} />
-              <Tooltip contentStyle={tooltipStyle} cursor={{ stroke: "rgba(148,163,184,0.1)" }} />
-              <Area type="monotone" dataKey="expiring" name="Expiring" stroke="#ef4444" fill="url(#gExp)" strokeWidth={2} dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </Section>
+        <div className="md:col-span-2">
+          <Section title="Expiry Timeline" sub="Rights expiring per month (next 12m)">
+            <ResponsiveContainer width="100%" height={240}>
+              <AreaChart data={expiryTimeline} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="gExp" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#ef4444" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="#ef4444" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke={grid.stroke} vertical={false} />
+                <XAxis dataKey="month" tick={tickStyle} tickLine={false} axisLine={false} />
+                <YAxis tick={tickStyle} tickLine={false} axisLine={false} width={28} allowDecimals={false} />
+                <Tooltip contentStyle={tooltipStyle} cursor={{ stroke: "rgba(148,163,184,0.1)" }} />
+                <Area type="monotone" dataKey="expiring" name="Expiring" stroke="#ef4444" fill="url(#gExp)" strokeWidth={2} dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </Section>
+        </div>
 
         <Section title="Rights by Type" sub="Platform type breakdown">
           <ResponsiveContainer width="100%" height={240}>
@@ -352,8 +372,8 @@ export default function AnalyticsPage() {
                 <span className="text-xs tabular-nums text-slate-600 w-4 shrink-0">{i + 1}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-slate-300 truncate">{m.title}</span>
-                    <span className="text-xs font-semibold text-slate-300 tabular-nums shrink-0">{m.count}</span>
+                    <span className="text-xs text-(--text) truncate">{m.title}</span>
+                    <span className="text-xs font-semibold text-(--text) tabular-nums shrink-0">{m.count}</span>
                   </div>
                   <div className="mt-0.5 h-1 rounded-full bg-slate-800">
                     <div
@@ -370,7 +390,7 @@ export default function AnalyticsPage() {
                 </span>
               </div>
             ))}
-            {topMovies.length === 0 && <p className="text-xs text-slate-500 text-center py-8">No data for current filters</p>}
+            {topMovies.length === 0 && <p className="text-xs text-(--text-faint) text-center py-8">No data for current filters</p>}
           </div>
         </Section>
       </div>

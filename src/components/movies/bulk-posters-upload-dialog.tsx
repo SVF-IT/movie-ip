@@ -219,7 +219,7 @@ export function BulkPostersUploadDialog({
 
                 <div className="flex-1 overflow-hidden flex flex-col p-6 pt-2">
                     {matches.length === 0 ? (
-                        <div className="flex-1 border-2 border-dashed border-muted-foreground/20 rounded-xl flex flex-col items-center justify-center p-12 bg-muted/5">
+                        <div className="flex-1 border-2 border-dashed border-muted-foreground/20 rounded-[12px] flex flex-col items-center justify-center p-12 bg-muted/5">
                             <div className="p-4 rounded-full bg-primary/10 mb-4 text-primary">
                                 <Upload className="h-10 w-10" />
                             </div>
@@ -277,7 +277,7 @@ export function BulkPostersUploadDialog({
                                 </Button>
                             </div>
 
-                            <div className="border border-border/60 rounded-xl overflow-hidden flex-1 bg-background/50">
+                            <div className="border border-border/60 rounded-[12px] overflow-hidden flex-1 bg-background/50">
                                 <ScrollArea className="h-full">
                                     <Table>
                                         <TableHeader className="bg-muted/50 sticky top-0 z-10">
