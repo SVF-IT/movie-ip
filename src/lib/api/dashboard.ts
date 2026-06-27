@@ -487,7 +487,7 @@ export async function getOpenTitlesForMode(
     offset?: number
     search?: string
     language?: string
-    sourceFilter?: 'all' | 'home' | 'acquired'
+    sourceFilter?: 'all' | 'home' | 'acquired' | 'bangladeshi'
     certification?: string[]
     sortBy?: 'title_asc' | 'title_desc' | 'created_at_desc' | 'release_date_desc' | 'release_date_asc'
     openFrom?: string
@@ -578,6 +578,7 @@ export async function getOpenTitlesForMode(
       const sf = options?.sourceFilter || 'all'
       if (sf === 'home') openTitles = openHomeMovies
       else if (sf === 'acquired') openTitles = openAcquiredMovies
+      else if (sf === 'bangladeshi') openTitles = [...openHomeMovies, ...openAcquiredMovies].filter((m: any) => m.is_bangladeshi === true)
       else openTitles = [...openHomeMovies, ...openAcquiredMovies]
     } else {
       // Internet mode
@@ -623,6 +624,7 @@ export async function getOpenTitlesForMode(
       const sf2 = options?.sourceFilter || 'all'
       if (sf2 === 'home') openTitles = openHomeMovies
       else if (sf2 === 'acquired') openTitles = openAcquiredMovies
+      else if (sf2 === 'bangladeshi') openTitles = [...openHomeMovies, ...openAcquiredMovies].filter((m: any) => m.is_bangladeshi === true)
       else openTitles = [...openHomeMovies, ...openAcquiredMovies]
     }
 
@@ -695,7 +697,7 @@ export async function getExpiringSatelliteTitles(options?: {
   fromDate?: string
   toDate?: string
   language?: string
-  sourceFilter?: 'all' | 'home' | 'acquired'
+  sourceFilter?: 'all' | 'home' | 'acquired' | 'bangladeshi'
   search?: string
   certification?: string[]
   sortBy?: 'title_asc' | 'title_desc' | 'release_date_desc' | 'release_date_asc' | 'expiry_asc' | 'expiry_desc'
@@ -809,6 +811,7 @@ export async function getExpiringSatelliteTitles(options?: {
     const sfExpire = options?.sourceFilter || 'all'
     if (sfExpire === 'home') deduped = deduped.filter((m) => m.source === 'home_production')
     else if (sfExpire === 'acquired') deduped = deduped.filter((m) => m.source === 'acquired')
+    else if (sfExpire === 'bangladeshi') deduped = deduped.filter((m: any) => m.is_bangladeshi === true)
 
     // Sort
     if (sortBy === 'expiry_asc') deduped.sort((a, b) => (a.satellite_expiry_date || '').localeCompare(b.satellite_expiry_date || ''))
@@ -850,7 +853,7 @@ export async function getExpiringInternetTitles(options?: {
   fromDate?: string
   toDate?: string
   language?: string
-  sourceFilter?: 'all' | 'home' | 'acquired'
+  sourceFilter?: 'all' | 'home' | 'acquired' | 'bangladeshi'
   search?: string
   certification?: string[]
   sortBy?: 'title_asc' | 'title_desc' | 'release_date_desc' | 'release_date_asc' | 'expiry_asc' | 'expiry_desc'
@@ -896,6 +899,7 @@ export async function getExpiringInternetTitles(options?: {
     const sf = options?.sourceFilter || 'all'
     if (sf === 'home') filteredMovies = validMovies.filter((m: any) => m.source === 'home_production')
     else if (sf === 'acquired') filteredMovies = validMovies.filter((m: any) => m.source === 'acquired')
+    else if (sf === 'bangladeshi') filteredMovies = validMovies.filter((m: any) => m.is_bangladeshi === true)
 
     const movieIds = filteredMovies.map((m: any) => m.id)
     if (movieIds.length === 0) return { data: [], count: 0 }
@@ -964,7 +968,7 @@ export async function getExpiringInternetTitles(options?: {
 // Movies with at least one active internet/SVOD platform right (with sub-rights details)
 export async function getActiveInternetTitles(options?: {
   language?: string
-  sourceFilter?: 'all' | 'home' | 'acquired'
+  sourceFilter?: 'all' | 'home' | 'acquired' | 'bangladeshi'
   search?: string
   certification?: string[]
   sortBy?: 'title_asc' | 'title_desc' | 'release_date_desc' | 'release_date_asc'
@@ -1001,6 +1005,7 @@ export async function getActiveInternetTitles(options?: {
     const sf = options?.sourceFilter || 'all'
     if (sf === 'home') filteredMovies = validMovies.filter((m: any) => m.source === 'home_production')
     else if (sf === 'acquired') filteredMovies = validMovies.filter((m: any) => m.source === 'acquired')
+    else if (sf === 'bangladeshi') filteredMovies = validMovies.filter((m: any) => m.is_bangladeshi === true)
 
     const movieIds = filteredMovies.map((m: any) => m.id)
     if (movieIds.length === 0) return { data: [], count: 0 }
@@ -1131,7 +1136,7 @@ export async function getMoviesForDashboard(options?: {
   versionFilter?: string
   search?: string
   language?: string
-  sourceFilter?: 'all' | 'home' | 'acquired'
+  sourceFilter?: 'all' | 'home' | 'acquired' | 'bangladeshi'
   sortBy?: 'title_asc' | 'title_desc' | 'created_at_desc' | 'release_date_desc' | 'release_date_asc'
   limit?: number
   offset?: number
@@ -1287,6 +1292,7 @@ export async function getMoviesForDashboard(options?: {
       const sf = options?.sourceFilter || 'all'
       if (sf === 'home') filteredMovies = filteredMovies.filter((m: any) => m.source === 'home_production')
       else if (sf === 'acquired') filteredMovies = filteredMovies.filter((m: any) => m.source === 'acquired')
+      else if (sf === 'bangladeshi') filteredMovies = filteredMovies.filter((m: any) => m.is_bangladeshi === true)
 
       const limit = options?.limit || 10
       const offset = options?.offset || 0

@@ -242,8 +242,8 @@ export default function PersonDetailPage() {
         </Link>
         <div className="flex items-center gap-2">
           {movies.length > 0 && (
-            <Button variant="outline" size="sm" className="gap-1.5 h-8 border-(--svf-border) text-(--text) hover:bg-(--hover)" onClick={handleExportCSV}>
-              <Download className="h-3.5 w-3.5" /> Export
+            <Button variant="outline" size="sm" className="h-9 gap-2 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover) shadow-sm shadow-red-500/20" onClick={handleExportCSV}>
+              <Download className="h-4 w-4" /> Export
             </Button>
           )}
           {canEdit && (

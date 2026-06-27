@@ -31,6 +31,7 @@ import {
   ArrowUpDown,
   ChevronRight,
   Clapperboard,
+  Download,
   Loader2,
   Plus,
   Search,
@@ -66,8 +67,6 @@ export default function PeoplePage() {
   const [sortBy, setSortBy] = useState<SortOption>("name_asc");
   const [loading, setLoading] = useState(true);
   const toast = useAppToast();
-  const [page, setPage] = useState(0);
-  const pageSize = 24;
   const [viewMode, setViewMode] = useState<"highlights" | "directory">("highlights");
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -164,11 +163,6 @@ export default function PeoplePage() {
     return result;
   }, [people, sortBy, searchQuery]);
 
-  const paginatedPeople = useMemo(
-    () => processedPeople.slice(page * pageSize, (page + 1) * pageSize),
-    [processedPeople, page, pageSize]
-  );
-
   const keyDirectors = useMemo(
     () => [...people].filter((p) => (p.movies_as_director || 0) > 0).sort((a, b) => (b.movies_as_director || 0) - (a.movies_as_director || 0)).slice(0, 8),
     [people]
@@ -178,10 +172,6 @@ export default function PeoplePage() {
     [people]
   );
 
-  useEffect(() => {
-    const t = setTimeout(() => setPage(0), 300);
-    return () => clearTimeout(t);
-  }, [searchQuery]);
 
   const hasFilters = searchQuery || roleFilter !== "all";
 
@@ -205,7 +195,7 @@ export default function PeoplePage() {
                 </button>
               )}
             </div>
-            <Select value={roleFilter} onValueChange={(v) => { setRoleFilter(v as typeof roleFilter); setPage(0); }}>
+            <Select value={roleFilter} onValueChange={(v) => { setRoleFilter(v as typeof roleFilter); }}>
               <SelectTrigger className="h-9 w-36 text-sm">
                 <UserCheck className="h-3.5 w-3.5 text-(--text-faint)" />
                 <SelectValue placeholder="All Roles" />
@@ -231,7 +221,7 @@ export default function PeoplePage() {
             </Select>
             {hasFilters && (
               <Button variant="ghost" size="sm" className="h-9 gap-1.5 text-(--text-faint) hover:text-(--text)"
-                onClick={() => { setSearchQuery(""); setRoleFilter("all"); setPage(0); }}>
+                onClick={() => { setSearchQuery(""); setRoleFilter("all"); }}>
                 <X className="h-3.5 w-3.5" /> Clear
               </Button>
             )}
@@ -241,10 +231,11 @@ export default function PeoplePage() {
         <div className="flex items-center gap-2 shrink-0 ml-auto">
             <Button
               onClick={handleOpenExport}
+              variant="outline"
               size="sm"
-              className="h-9 gap-2 bg-(--bg-raise) hover:bg-(--hover) text-(--text) border border-(--svf-border)"
+              className="h-9 gap-2 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover) shadow-sm shadow-red-500/20"
             >
-              Export
+              <Download className="h-4 w-4" /> Export
             </Button>
             {canEdit && (
               <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
@@ -369,7 +360,7 @@ export default function PeoplePage() {
             </button>
           </div>
         </div>
-      ) : paginatedPeople.length === 0 ? (
+      ) : processedPeople.length === 0 ? (
         /* ── Empty State ── */
         <div className="flex flex-col items-center justify-center py-20 rounded-[14px] border border-dashed border-(--svf-border) bg-(--panel)/30">
           <div className="p-4 rounded-full bg-(--bg-raise) border border-(--svf-border) mb-4">
@@ -405,27 +396,8 @@ export default function PeoplePage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {paginatedPeople.map((person) => <PersonCard key={person.id} person={person} />)}
+            {processedPeople.map((person) => <PersonCard key={person.id} person={person} />)}
           </div>
-
-          {processedPeople.length > pageSize && (
-            <div className="flex items-center justify-between pt-4 border-t border-(--svf-border)">
-              <p className="text-xs text-(--text-faint)">
-                <span className="font-medium text-(--text)">{page * pageSize + 1}–{Math.min((page + 1) * pageSize, processedPeople.length)}</span>
-                {" "}of {processedPeople.length}
-              </p>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="h-8 bg-(--bg-raise) border-(--svf-border) text-(--text) hover:bg-(--hover)"
-                  onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}>
-                  Previous
-                </Button>
-                <Button variant="outline" size="sm" className="h-8 bg-(--bg-raise) border-(--svf-border) text-(--text) hover:bg-(--hover)"
-                  onClick={() => setPage((p) => p + 1)} disabled={(page + 1) * pageSize >= processedPeople.length}>
-                  Next
-                </Button>
-              </div>
-            </div>
-          )}
         </>
       )}
 

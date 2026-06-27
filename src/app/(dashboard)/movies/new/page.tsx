@@ -2,6 +2,7 @@
 
 import { LanguageSelector } from "@/components/forms/language-selector";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -562,7 +563,7 @@ function MultiChipsWithCustom({
         <div className="flex flex-wrap gap-1.5">
           {selected.map(item => (
             <span key={item}
-              className="flex items-center gap-1 pl-2.5 pr-1 py-0.5 rounded-full bg-slate-700/30 border border-slate-600/40 text-xs font-semibold text-(--text)">
+              className="flex items-center gap-1 pl-2.5 pr-1 py-0.5 rounded-full bg-(--bg-deep) border border-(--svf-border-strong) text-xs font-semibold text-(--text)">
               {item}
               <button type="button" onClick={() => removeItem(item)}
                 className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-slate-600/40 transition-all">
@@ -670,6 +671,7 @@ export default function NewMoviePage() {
   const [jointProdBuyBackDate, setJointProdBuyBackDate] = useState("");
   const [jointlyExploitationRights, setJointlyExploitationRights] = useState("");
   const [colorOrBw, setColorOrBw] = useState("Color");
+  const [isBangladeshi, setIsBangladeshi] = useState(false);
   const [trailerLink, setTrailerLink] = useState("");
   const [assignorLicensor, setAssignorLicensor] = useState("");
   const [licensee, setLicensee] = useState("");
@@ -797,6 +799,7 @@ export default function NewMoviePage() {
         language: language.replace(/\s*[Dd]ubbed\s*/g, "").trim() || undefined,
         production_house_name: finalProductionHouseName,
         color_or_bw: colorOrBw || undefined,
+        is_bangladeshi: isBangladeshi || undefined,
         trailer_link: trailerLink || undefined,
         assignor_licensor: assignorLicensor || undefined,
         licensee: licensee || undefined,
@@ -868,7 +871,7 @@ export default function NewMoviePage() {
       {/* Header */}
       <div className="relative overflow-hidden rounded-[12px] bg-(--bg-raise)/60 border border-(--svf-border) backdrop-blur-xl p-3">
         <div className="relative flex items-center gap-4">
-          <Button variant="ghost" size="sm" asChild className="text-(--text-faint) hover:text-(--text) hover:bg-slate-800/60 h-8 w-8 p-0 shrink-0">
+          <Button variant="ghost" size="sm" asChild className="text-(--text-faint) hover:text-(--text) hover:bg-(--hover) h-8 w-8 p-0 shrink-0">
             <Link href="/movies"><ArrowLeft className="h-4 w-4" /></Link>
           </Button>
           <div className="p-2 rounded-[9px] bg-red-500/10 border border-red-500/20">
@@ -895,14 +898,14 @@ export default function NewMoviePage() {
             <button key={step.id} type="button" disabled={isDisabled}
               onClick={() => !isDisabled && setActiveTab(step.id)}
               className={["flex items-center gap-2 px-3 py-2 rounded-[10px] text-[12.5px] font-semibold whitespace-nowrap transition-all duration-150 shrink-0 border",
-                isActive   ? "bg-slate-800 text-slate-100 border-slate-700/60" :
+                isActive   ? "bg-(--bg-raise) text-(--text) border-(--svf-border-strong) shadow-sm" :
                 isDisabled ? "opacity-30 cursor-not-allowed text-(--text-faint) border-transparent" :
-                             "text-(--text-faint) hover:text-(--text) hover:bg-slate-800/40 border-transparent",
+                             "text-(--text-faint) hover:text-(--text) hover:bg-(--hover) border-transparent",
               ].join(" ")}>
               <span className={["w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black flex-shrink-0 transition-all duration-200",
                 isActive ? "bg-gradient-to-br from-red-500 to-red-700 text-white" :
                 isDone   ? "bg-emerald-500/20 border border-emerald-500/40 text-emerald-400" :
-                           "bg-slate-800 border border-slate-700/60 text-(--text-faint)",
+                           "bg-(--bg-deep) border border-(--svf-border) text-(--text-faint)",
               ].join(" ")}>
                 {isDone ? <CheckCircle className="h-3 w-3" /> : i + 1}
               </span>
@@ -1012,6 +1015,17 @@ export default function NewMoviePage() {
                 </div>
               </FormField>
 
+              {/* Bangladeshi Movie */}
+              <FormField label="Bangladeshi Movie">
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <Checkbox
+                    checked={isBangladeshi}
+                    onCheckedChange={(v) => setIsBangladeshi(!!v)}
+                  />
+                  <span className="text-sm text-(--text)">This is a Bangladeshi movie</span>
+                </label>
+              </FormField>
+
               <FormField label="Trailer Link">
                 <Input value={trailerLink} onChange={e => setTrailerLink(e.target.value)}
                   placeholder="YouTube URL" className={inputCls} />
@@ -1108,7 +1122,7 @@ export default function NewMoviePage() {
               {isHomeProd && isJointly && (
                 <div className="md:col-span-2 pt-1">
                   <Button variant="outline" size="sm" onClick={() => setSelectedHouseIds(ids => [...ids, ""])}
-                    className="w-full border-dashed border-(--svf-border) bg-transparent text-(--text-faint) hover:text-(--text) hover:bg-slate-800/40 hover:border-slate-600">
+                    className="w-full border-dashed border-(--svf-border) bg-transparent text-(--text-faint) hover:text-(--text) hover:bg-(--hover) hover:border-slate-600">
                     + Add Production House
                   </Button>
                 </div>
@@ -1338,12 +1352,12 @@ export default function NewMoviePage() {
         <SectionCard icon={Users} title="Cast & Crew">
           {!createdMovieId ? (
             <div className="flex flex-col items-center justify-center py-10 gap-3 text-center">
-              <div className="p-2 rounded-[9px] bg-slate-800/60 border border-(--svf-border)">
+              <div className="p-2 rounded-[9px] bg-(--bg-deep) border border-(--svf-border)">
                 <Users className="h-5 w-5 text-(--text-faint)" />
               </div>
               <p className="text-(--text) font-medium">Save the movie first</p>
               <p className="text-(--text-faint) text-sm max-w-xs">Create the movie using the button below, then you can link cast and crew here.</p>
-              <Button variant="outline" size="sm" className="mt-2 border-(--svf-border) text-(--text) hover:text-slate-100 hover:bg-slate-800/60"
+              <Button variant="outline" size="sm" className="mt-2 border-(--svf-border) text-(--text) hover:text-(--text) hover:bg-(--hover)"
                 onClick={() => setActiveTab("basic")}>Go to Basic Info</Button>
             </div>
           ) : (
@@ -1354,14 +1368,14 @@ export default function NewMoviePage() {
               </div>
               <p className="text-xs text-(--text-faint)">
                 Search existing people and link them as actors or directors. To add a new person first go to the{" "}
-                <Link href="/people" className="underline underline-offset-2 text-(--text) hover:text-white">People directory</Link>.
+                <Link href="/people" className="underline underline-offset-2 text-(--text) hover:text-(--text)">People directory</Link>.
               </p>
 
               {/* Cast */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-semibold text-(--text)">Cast (Actors)</span>
-                  <Button variant="outline" size="sm" className="h-7 text-xs border-(--svf-border) text-(--text) hover:text-slate-100 hover:bg-slate-800/60"
+                  <Button variant="outline" size="sm" className="h-7 text-xs border-(--svf-border) text-(--text) hover:text-(--text) hover:bg-(--hover)"
                     onClick={() => { setAddingRole(addingRole === "cast" ? null : "cast"); setPersonSearch(""); setPersonResults([]); }}>
                     <Plus className="h-3 w-3 mr-1" />{addingRole === "cast" ? "Cancel" : "Add Actor"}
                   </Button>
@@ -1376,7 +1390,7 @@ export default function NewMoviePage() {
                     {personResults.length > 0 && (
                       <div className="border border-(--svf-border) rounded-[9px] max-h-40 overflow-y-auto bg-(--panel-solid)">
                         {personResults.map(p => (
-                          <button key={p.id} className="w-full px-3 py-1.5 text-left text-sm text-(--text) hover:bg-slate-800 flex items-center justify-between" onClick={() => handleAddCast(p)}>
+                          <button key={p.id} className="w-full px-3 py-1.5 text-left text-sm text-(--text) hover:bg-(--hover) flex items-center justify-between" onClick={() => handleAddCast(p)}>
                             <span>{p.name}</span>
                             {p.role && <span className="text-xs text-(--text-faint) capitalize">{p.role}</span>}
                           </button>
@@ -1390,7 +1404,7 @@ export default function NewMoviePage() {
                 )}
                 <div className="flex flex-wrap gap-2">
                   {cast.map(m => (
-                    <span key={m.id} className="flex items-center gap-1.5 pl-3 pr-1 py-1 rounded-full bg-slate-800 border border-slate-700/60 text-sm text-(--text)">
+                    <span key={m.id} className="flex items-center gap-1.5 pl-3 pr-1 py-1 rounded-full bg-(--bg-deep) border border-(--svf-border) text-sm text-(--text)">
                       {m.person?.name || "Unknown"}
                       <button onClick={() => handleRemoveCast(m)} className="w-5 h-5 flex items-center justify-center rounded-full text-(--text-faint) hover:text-red-400 hover:bg-red-500/15 transition-all"><X className="h-3 w-3" /></button>
                     </span>
@@ -1403,7 +1417,7 @@ export default function NewMoviePage() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-semibold text-(--text)">Directors</span>
-                  <Button variant="outline" size="sm" className="h-7 text-xs border-(--svf-border) text-(--text) hover:text-slate-100 hover:bg-slate-800/60"
+                  <Button variant="outline" size="sm" className="h-7 text-xs border-(--svf-border) text-(--text) hover:text-(--text) hover:bg-(--hover)"
                     onClick={() => { setAddingRole(addingRole === "director" ? null : "director"); setPersonSearch(""); setPersonResults([]); }}>
                     <Plus className="h-3 w-3 mr-1" />{addingRole === "director" ? "Cancel" : "Add Director"}
                   </Button>
@@ -1418,7 +1432,7 @@ export default function NewMoviePage() {
                     {personResults.length > 0 && (
                       <div className="border border-(--svf-border) rounded-[9px] max-h-40 overflow-y-auto bg-(--panel-solid)">
                         {personResults.map(p => (
-                          <button key={p.id} className="w-full px-3 py-1.5 text-left text-sm text-(--text) hover:bg-slate-800 flex items-center justify-between" onClick={() => handleAddDirector(p)}>
+                          <button key={p.id} className="w-full px-3 py-1.5 text-left text-sm text-(--text) hover:bg-(--hover) flex items-center justify-between" onClick={() => handleAddDirector(p)}>
                             <span>{p.name}</span>
                             {p.role && <span className="text-xs text-(--text-faint) capitalize">{p.role}</span>}
                           </button>
@@ -1432,7 +1446,7 @@ export default function NewMoviePage() {
                 )}
                 <div className="flex flex-wrap gap-2">
                   {directors.map(d => (
-                    <span key={d.id} className="flex items-center gap-1.5 pl-3 pr-1 py-1 rounded-full bg-slate-800 border border-slate-700/60 text-sm text-(--text)">
+                    <span key={d.id} className="flex items-center gap-1.5 pl-3 pr-1 py-1 rounded-full bg-(--bg-deep) border border-(--svf-border) text-sm text-(--text)">
                       {d.person?.name || "Unknown"}
                       <button onClick={() => handleRemoveDirector(d)} className="w-5 h-5 flex items-center justify-center rounded-full text-(--text-faint) hover:text-red-400 hover:bg-red-500/15 transition-all"><X className="h-3 w-3" /></button>
                     </span>
@@ -1459,7 +1473,7 @@ export default function NewMoviePage() {
         </span>
         <div className="flex items-center gap-3">
           <Link href="/movies">
-            <Button variant="ghost" className="h-10 px-6 text-(--text-faint) hover:text-(--text) hover:bg-slate-800/60">
+            <Button variant="ghost" className="h-10 px-6 text-(--text-faint) hover:text-(--text) hover:bg-(--hover)">
               {createdMovieId ? "Back to Movies" : "Cancel"}
             </Button>
           </Link>

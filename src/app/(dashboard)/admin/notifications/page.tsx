@@ -34,7 +34,7 @@ const categoryLabels: Record<string, { label: string; icon: React.ElementType; d
   account: { label: "Account", icon: User, desc: "User account related notifications", color: "text-violet-400", bg: "bg-violet-500/15", border: "border-violet-500/30" },
 };
 
-const notificationDescriptions: Record<NotificationType, string> = {
+const notificationDescriptions: Record<string, string> = {
   rights_expiring_critical: "Rights expiring within 7 days (critical)",
   rights_expiring_urgent: "Rights expiring within 30 days (urgent)",
   rights_expiring_upcoming: "Rights expiring within 60 days (upcoming)",
@@ -43,6 +43,7 @@ const notificationDescriptions: Record<NotificationType, string> = {
   recensor_reminder: "Monthly reminder for A-certified movies with censor flag",
   user_created: "Welcome email to new users (includes credentials)",
   password_reset: "Password reset notifications (always enabled)",
+  anniversary_notification: "Special Events banner showing upcoming anniversaries and jubilees",
 };
 
 export default function AdminNotificationsPage() {
@@ -171,15 +172,15 @@ export default function AdminNotificationsPage() {
 
         {/* Stat cards */}
         <div className="relative mt-5 flex gap-3">
-          <div className="flex-1 rounded-lg bg-slate-800/30 border border-slate-700/30 px-4 py-3">
+          <div className="flex-1 rounded-lg bg-(--bg-raise) border border-(--svf-border) px-4 py-3">
             <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-0.5">Total Types</div>
             <div className="text-xl font-bold text-slate-100 tabular-nums">{settings.length}</div>
           </div>
-          <div className="flex-1 rounded-lg bg-slate-800/30 border border-slate-700/30 px-4 py-3">
+          <div className="flex-1 rounded-lg bg-(--bg-raise) border border-(--svf-border) px-4 py-3">
             <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-0.5">Enabled</div>
             <div className="text-xl font-bold text-emerald-400 tabular-nums">{enabledCount}</div>
           </div>
-          <div className="flex-1 rounded-lg bg-slate-800/30 border border-slate-700/30 px-4 py-3">
+          <div className="flex-1 rounded-lg bg-(--bg-raise) border border-(--svf-border) px-4 py-3">
             <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-0.5">Email Service</div>
             <div className={`text-sm font-bold ${isConfigured ? "text-emerald-400" : "text-red-400"}`}>
               {isConfigured ? "Configured" : "Not Configured"}
@@ -197,13 +198,13 @@ export default function AdminNotificationsPage() {
           <span className="text-sm font-semibold text-slate-200">Email Configuration</span>
           <span className={`ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${isConfigured
               ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
-              : "bg-slate-700/40 text-slate-400 border-slate-600/30"
+              : "bg-(--bg-deep) text-(--text-faint) border-(--svf-border-strong)"
             }`}>
             {isConfigured ? "Configured" : "Not Configured"}
           </span>
         </div>
         <div className="px-5 py-4 text-sm text-slate-400">
-          Emails are sent via Resend.com. Set <code className="text-slate-300 bg-slate-800/60 px-1.5 py-0.5 rounded text-xs">RESEND_API_KEY</code> in environment variables.
+          Emails are sent via Resend.com. Set <code className="text-(--text-dim) bg-(--bg-deep) px-1.5 py-0.5 rounded text-xs">RESEND_API_KEY</code> in environment variables.
         </div>
       </div>
 
@@ -214,7 +215,7 @@ export default function AdminNotificationsPage() {
         </div>
       ) : settings.length === 0 ? (
         <div className="rounded-xl bg-slate-900/40 border border-slate-800/60 backdrop-blur-xl p-12 text-center">
-          <div className="p-4 rounded-full bg-slate-800/60 border border-slate-700/40 w-fit mx-auto mb-4">
+          <div className="p-4 rounded-full bg-(--bg-deep) border border-(--svf-border) w-fit mx-auto mb-4">
             <AlertTriangle className="h-8 w-8 text-slate-500" />
           </div>
           <p className="font-semibold text-slate-300">No notification settings found</p>
@@ -224,7 +225,7 @@ export default function AdminNotificationsPage() {
         </div>
       ) : (
         Object.entries(settingsByCategory).map(([category, categorySettings]) => {
-          const cfg = categoryLabels[category] ?? { label: category, icon: Bell, desc: "", color: "text-slate-400", bg: "bg-slate-700/40", border: "border-slate-600/30" };
+          const cfg = categoryLabels[category] ?? { label: category, icon: Bell, desc: "", color: "text-slate-400", bg: "bg-(--bg-deep)", border: "border-(--svf-border-strong)" };
           const CategoryIcon = cfg.icon;
           return (
             <div key={category} className="relative overflow-hidden rounded-xl bg-slate-900/40 border border-slate-800/60 backdrop-blur-xl shadow-xl">
@@ -262,7 +263,7 @@ export default function AdminNotificationsPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           {setting.notification_type === "password_reset" ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-700/40 text-slate-400 border border-slate-600/30">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-(--bg-deep) text-(--text-faint) border border-(--svf-border-strong)">
                               Always On
                             </span>
                           ) : (
@@ -291,7 +292,7 @@ export default function AdminNotificationsPage() {
       {/* ── Setup Instructions ── */}
       <div className="relative overflow-hidden rounded-xl bg-slate-900/40 border border-slate-800/60 backdrop-blur-xl shadow-xl">
         <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-800/60">
-          <div className="p-1.5 rounded-lg bg-slate-700/40 border border-slate-600/40">
+          <div className="p-1.5 rounded-lg bg-(--bg-deep) border border-(--svf-border)">
             <Settings2 className="h-3.5 w-3.5 text-slate-400" />
           </div>
           <span className="text-sm font-semibold text-slate-200">Setup Instructions</span>
@@ -320,7 +321,7 @@ NEXT_PUBLIC_APP_URL=https://yourdomain.com`}
           </div>
           <div className="space-y-1">
             <p className="font-semibold text-slate-300">3. Database Tables</p>
-            <p>See <code className="text-slate-300 bg-slate-800/60 px-1.5 py-0.5 rounded text-xs">sql-migration.md</code> for the notification_settings and user_notification_preferences table schemas.</p>
+            <p>See <code className="text-(--text-dim) bg-(--bg-deep) px-1.5 py-0.5 rounded text-xs">sql-migration.md</code> for the notification_settings and user_notification_preferences table schemas.</p>
           </div>
         </div>
       </div>

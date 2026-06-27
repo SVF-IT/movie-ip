@@ -94,7 +94,7 @@ function SubmissionCard({ movie, onResubmit }: { movie: PendingMovieForApproval;
   };
 
   return (
-    <Card className="bg-slate-900/60 border-slate-800/60">
+    <Card className="bg-(--panel-solid) border-(--svf-border)">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="flex-1 min-w-0">
@@ -113,7 +113,7 @@ function SubmissionCard({ movie, onResubmit }: { movie: PendingMovieForApproval;
                 {movie.source === "home_production" ? "Home Production" : "Acquired"}
               </span>
               {movie.created_at && (
-                <span className="text-[10px] text-slate-500">
+                <span className="text-[10px] text-(--text-faint)">
                   Added{" "}
                   {new Date(movie.created_at).toLocaleDateString("en-GB", {
                     day: "2-digit",
@@ -130,7 +130,7 @@ function SubmissionCard({ movie, onResubmit }: { movie: PendingMovieForApproval;
               <Button
                 size="sm"
                 variant="outline"
-                className="h-8 px-3 bg-slate-800/40 border-slate-700/40 text-slate-300 hover:bg-slate-700/60"
+                className="h-8 px-3 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover)"
               >
                 <Edit className="h-3.5 w-3.5 mr-1.5" /> Edit
               </Button>
@@ -161,8 +161,8 @@ function SubmissionCard({ movie, onResubmit }: { movie: PendingMovieForApproval;
             </div>
             {lastRejection?.reason || !expanded ? (
               lastRejection?.reason
-                ? <p className="text-sm text-slate-300 italic">"{lastRejection.reason}"</p>
-                : <p className="text-xs text-slate-500">Load history to see reason.</p>
+                ? <p className="text-sm text-(--text-dim) italic">"{lastRejection.reason}"</p>
+                : <p className="text-xs text-(--text-faint)">Load history to see reason.</p>
             ) : null}
             {!expanded && (
               <button
@@ -178,16 +178,16 @@ function SubmissionCard({ movie, onResubmit }: { movie: PendingMovieForApproval;
         {/* Details grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
           {movie.language && (
-            <div><span className="text-slate-500">Language: </span><span className="text-slate-300">{movie.language}</span></div>
+            <div><span className="text-(--text-faint)">Language: </span><span className="text-(--text)">{movie.language}</span></div>
           )}
           {movie.release_year && (
-            <div><span className="text-slate-500">Year: </span><span className="text-slate-300">{movie.release_year}</span></div>
+            <div><span className="text-(--text-faint)">Year: </span><span className="text-(--text)">{movie.release_year}</span></div>
           )}
           {movie.certification && (
-            <div><span className="text-slate-500">Cert: </span><span className="text-slate-300">{movie.certification}</span></div>
+            <div><span className="text-(--text-faint)">Cert: </span><span className="text-(--text)">{movie.certification}</span></div>
           )}
           {movie.director_names && (
-            <div className="col-span-2"><span className="text-slate-500">Director: </span><span className="text-slate-300">{movie.director_names}</span></div>
+            <div className="col-span-2"><span className="text-(--text-faint)">Director: </span><span className="text-(--text)">{movie.director_names}</span></div>
           )}
         </div>
 
@@ -207,7 +207,7 @@ function SubmissionCard({ movie, onResubmit }: { movie: PendingMovieForApproval;
                 <Loader2 className="h-4 w-4 animate-spin" /> Loading…
               </div>
             ) : history.length === 0 ? (
-              <p className="text-slate-500 text-sm flex items-center gap-2">
+              <p className="text-(--text-faint) text-sm flex items-center gap-2">
                 <Info className="h-4 w-4" /> No activity yet — awaiting first review.
               </p>
             ) : (
@@ -224,7 +224,7 @@ function SubmissionCard({ movie, onResubmit }: { movie: PendingMovieForApproval;
                     <p className="text-slate-300 font-medium capitalize">{h.status}</p>
                     {h.reviewer_name && <p className="text-slate-400 text-xs">by {h.reviewer_name}</p>}
                     {h.reason && <p className="text-slate-400 text-xs mt-0.5 italic">"{h.reason}"</p>}
-                    <p className="text-slate-500 text-xs mt-0.5">
+                    <p className="text-(--text-faint) text-xs mt-0.5">
                       {h.created_at
                         ? new Date(h.created_at).toLocaleString("en-GB", {
                             day: "2-digit", month: "short", year: "numeric",
@@ -260,8 +260,6 @@ export default function MySubmissionsPage() {
   const toast = useAppToast();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<ApprovalStatus | "all">("all");
-  const [page, setPage] = useState(0);
-  const pageSize = 20;
 
   const fetchMovies = useCallback(async () => {
     setLoading(true);
@@ -271,8 +269,8 @@ export default function MySubmissionsPage() {
       const { data, count } = await getPendingMovies({
         status: status ?? "all",
         search: search || undefined,
-        limit: pageSize,
-        offset: page * pageSize,
+        limit: 10000,
+        offset: 0,
       });
       // For editors, filter out approved so the page stays focused on actionable items
       const isEditorOnly = profile?.role === "editor";
@@ -286,10 +284,9 @@ export default function MySubmissionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, statusFilter, page, profile?.role]);
+  }, [search, statusFilter, profile?.role]);
 
   useEffect(() => { fetchMovies(); }, [fetchMovies]);
-  useEffect(() => { setPage(0); }, [search, statusFilter]);
 
   const handleResubmit = (movieId: string) => {
     setMovies(prev =>
@@ -349,11 +346,11 @@ export default function MySubmissionsPage() {
             placeholder="Search by title…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-10 h-9 bg-slate-950/40 border-slate-700/50 text-slate-300"
+            className="pl-10 h-9 bg-slate-950/40 border-slate-700/50 text-(--text)"
           />
         </div>
         <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as ApprovalStatus | "all")}>
-          <SelectTrigger className="h-9 w-44 bg-slate-950/40 border-slate-700/50 text-slate-300">
+          <SelectTrigger className="h-9 w-44 bg-slate-950/40 border-slate-700/50 text-(--text)">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -379,10 +376,10 @@ export default function MySubmissionsPage() {
       ) : movies.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 rounded-2xl border border-dashed border-slate-700/60">
           <CheckCircle className="h-12 w-12 text-green-400/40 mb-4" />
-          <h3 className="font-bold text-xl text-slate-300">
+          <h3 className="font-bold text-xl text-(--text)">
             {statusFilter === "rejected" ? "No rejected movies" : "Nothing pending"}
           </h3>
-          <p className="text-slate-500 text-sm mt-2">
+          <p className="text-(--text-faint) text-sm mt-2">
             {statusFilter === "rejected"
               ? "Great — no movies were rejected."
               : "All your submissions have been approved, or you haven't added any yet."}
@@ -399,26 +396,6 @@ export default function MySubmissionsPage() {
             <SubmissionCard key={movie.id} movie={movie} onResubmit={handleResubmit} />
           ))}
 
-          {totalCount > pageSize && (
-            <div className="flex items-center justify-between pt-4 border-t border-slate-800/40">
-              <span className="text-sm text-slate-400">
-                {page * pageSize + 1}–{Math.min((page + 1) * pageSize, totalCount)} of {totalCount}
-              </span>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={(page + 1) * pageSize >= totalCount}
-                  onClick={() => setPage(p => p + 1)}
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>

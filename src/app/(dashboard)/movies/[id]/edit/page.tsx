@@ -531,6 +531,7 @@ export default function EditMoviePage() {
   const [wtpLibrary, setWtpLibrary] = useState("");
   const [revenueShare, setRevenueShare] = useState("");
   const [colorOrBw, setColorOrBw] = useState("");
+  const [isBangladeshi, setIsBangladeshi] = useState(false);
   const [trailerLink, setTrailerLink] = useState("");
   const [assignorLicensor, setAssignorLicensor] = useState("");
   const [licensee, setLicensee] = useState("");
@@ -629,6 +630,7 @@ export default function EditMoviePage() {
           setSelectedHouseIds([""]);
         }
         setColorOrBw(movie.color_or_bw || "");
+        setIsBangladeshi(movie.is_bangladeshi ?? false);
         setTrailerLink(movie.trailer_link || "");
         setAssignorLicensor(movie.assignor_licensor || "");
         setLicensee(movie.licensee || "");
@@ -699,6 +701,7 @@ export default function EditMoviePage() {
           language: movie.language || "",
           production_house_name: movie.production_house_name || "",
           color_or_bw: movie.color_or_bw || "",
+          is_bangladeshi: movie.is_bangladeshi ?? false,
           trailer_link: movie.trailer_link || "",
           assignor_licensor: movie.assignor_licensor || "",
           licensee: movie.licensee || "",
@@ -871,6 +874,7 @@ export default function EditMoviePage() {
         language: language.replace(/\s*[Dd]ubbed\s*/g, "").trim() || "",
         production_house_name: finalProductionHouseName || "",
         color_or_bw: colorOrBw || "",
+        is_bangladeshi: isBangladeshi,
         trailer_link: trailerLink || "",
         assignor_licensor: assignorLicensor || "",
         licensee: licensee || "",
@@ -937,7 +941,7 @@ export default function EditMoviePage() {
         certification: (certification as CertificationType) || undefined,
         language: language.replace(/\s*[Dd]ubbed\s*/g, "").trim() || undefined,
         production_house_name: finalProductionHouseName,
-        color_or_bw: colorOrBw || undefined, trailer_link: trailerLink || undefined,
+        color_or_bw: colorOrBw || undefined, is_bangladeshi: isBangladeshi, trailer_link: trailerLink || undefined,
         assignor_licensor: assignorLicensor || undefined,
         licensee: licensee || undefined, agreement_date: agreementDate || undefined,
         agreement_start_date: agreementStartDate || undefined, agreement_end_date: agreementEndDate || undefined,
@@ -998,7 +1002,7 @@ export default function EditMoviePage() {
 
         <div className="relative flex items-center gap-4">
           <Link href="/movies">
-            <Button variant="ghost" size="sm" className="text-(--text-faint) hover:text-(--text) hover:bg-slate-800/60 gap-1.5 h-8">
+            <Button variant="ghost" size="sm" className="text-(--text-faint) hover:text-(--text) hover:bg-(--hover) gap-1.5 h-8">
               <ArrowLeft className="h-3.5 w-3.5" /> Back
             </Button>
           </Link>
@@ -1081,6 +1085,17 @@ export default function EditMoviePage() {
                       </button>
                     ))}
                   </div>
+                </FormField>
+
+                {/* Bangladeshi Movie */}
+                <FormField label="Bangladeshi Movie">
+                  <label className="flex items-center gap-2.5 cursor-pointer">
+                    <Checkbox
+                      checked={isBangladeshi}
+                      onCheckedChange={(v) => setIsBangladeshi(!!v)}
+                    />
+                    <span className="text-sm text-(--text)">This is a Bangladeshi movie</span>
+                  </label>
                 </FormField>
 
                 <FormField label="WTP / Library">
@@ -1203,7 +1218,7 @@ export default function EditMoviePage() {
                 {isJointlyOwned && isHomeProd && (
                   <div className="md:col-span-2 pt-1">
                     <Button variant="outline" size="sm" onClick={() => setSelectedHouseIds(ids => [...ids, ""])}
-                      className="w-full border-dashed border-(--svf-border) text-(--text-faint) hover:text-(--text) hover:bg-slate-800/60">
+                      className="w-full border-dashed border-(--svf-border) text-(--text-faint) hover:text-(--text) hover:bg-(--hover)">
                       <Plus className="h-3 w-3 mr-1" /> Add Production House
                     </Button>
                   </div>
@@ -1458,7 +1473,7 @@ export default function EditMoviePage() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <Label className="text-sm font-semibold text-(--text)">Cast (Actors)</Label>
-                  <Button variant="ghost" size="sm" onClick={() => { setAddingRole(addingRole === "cast" ? null : "cast"); setPersonSearch(""); setPersonResults([]); }} className="text-(--text-faint) hover:text-(--text) hover:bg-slate-800/60 h-8 px-3">
+                  <Button variant="ghost" size="sm" onClick={() => { setAddingRole(addingRole === "cast" ? null : "cast"); setPersonSearch(""); setPersonResults([]); }} className="text-(--text-faint) hover:text-(--text) hover:bg-(--hover) h-8 px-3">
                     <Plus className="h-3 w-3 mr-1" />{addingRole === "cast" ? "Cancel" : "Add Actor"}
                   </Button>
                 </div>
@@ -1472,7 +1487,7 @@ export default function EditMoviePage() {
                     {personResults.length > 0 && (
                       <div className="border border-(--svf-border) rounded-[10px] max-h-40 overflow-y-auto bg-(--bg-deep)/20">
                         {personResults.map((p) => (
-                          <button key={p.id} className="w-full px-3 py-1.5 text-left text-sm text-(--text) hover:bg-slate-800/40 flex items-center justify-between border-b border-slate-800/40 last:border-0" onClick={() => handleAddCast(p)}>
+                          <button key={p.id} className="w-full px-3 py-1.5 text-left text-sm text-(--text) hover:bg-(--hover) flex items-center justify-between border-b border-slate-800/40 last:border-0" onClick={() => handleAddCast(p)}>
                             <span>{p.name}</span>
                             {p.role && <span className="text-xs text-(--text-faint) capitalize">{p.role}</span>}
                           </button>
@@ -1499,7 +1514,7 @@ export default function EditMoviePage() {
               <div className="space-y-4 pt-4 border-t border-(--svf-border)">
                 <div className="flex items-center justify-between">
                   <Label className="text-sm font-semibold text-(--text)">Directors</Label>
-                  <Button variant="ghost" size="sm" onClick={() => { setAddingRole(addingRole === "director" ? null : "director"); setPersonSearch(""); setPersonResults([]); }} className="text-(--text-faint) hover:text-(--text) hover:bg-slate-800/60 h-8 px-3">
+                  <Button variant="ghost" size="sm" onClick={() => { setAddingRole(addingRole === "director" ? null : "director"); setPersonSearch(""); setPersonResults([]); }} className="text-(--text-faint) hover:text-(--text) hover:bg-(--hover) h-8 px-3">
                     <Plus className="h-3 w-3 mr-1" />{addingRole === "director" ? "Cancel" : "Add Director"}
                   </Button>
                 </div>
@@ -1513,7 +1528,7 @@ export default function EditMoviePage() {
                     {personResults.length > 0 && (
                       <div className="border border-(--svf-border) rounded-[10px] max-h-40 overflow-y-auto bg-(--bg-deep)/20">
                         {personResults.map((p) => (
-                          <button key={p.id} className="w-full px-3 py-1.5 text-left text-sm text-(--text) hover:bg-slate-800/40 flex items-center justify-between border-b border-slate-800/40 last:border-0" onClick={() => handleAddDirector(p)}>
+                          <button key={p.id} className="w-full px-3 py-1.5 text-left text-sm text-(--text) hover:bg-(--hover) flex items-center justify-between border-b border-slate-800/40 last:border-0" onClick={() => handleAddDirector(p)}>
                             <span>{p.name}</span>
                             {p.role && <span className="text-xs text-(--text-faint) capitalize">{p.role}</span>}
                           </button>
@@ -1720,7 +1735,7 @@ export default function EditMoviePage() {
       {/* ── Actions ── */}
       <div className="flex justify-end gap-3">
         <Link href="/movies">
-          <Button variant="outline" className="border-(--svf-border) text-(--text) hover:bg-slate-800/60">
+          <Button variant="outline" className="border-(--svf-border) text-(--text) hover:bg-(--hover)">
             Cancel
           </Button>
         </Link>

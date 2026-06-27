@@ -1,6 +1,7 @@
 "use client";
 
 import { NotificationBell } from "@/components/layout/notification-bell";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -76,6 +77,9 @@ export function Header({ title = "Bengali IP Management Dashboard", subtitle }: 
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Theme toggle */}
+          <ThemeToggle />
+
           {/* Notifications */}
           <NotificationBell />
 

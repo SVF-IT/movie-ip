@@ -1,7 +1,7 @@
 'use client'
 
 import { Card } from '@/components/ui/card'
-import { TrendingUp, Film, Satellite, Calendar, Clapperboard } from 'lucide-react'
+import { Calendar, Clapperboard, Film, Satellite, TrendingUp } from 'lucide-react'
 import { AnimatedCounter } from './animated-counter'
 
 interface RightsStatsCardsProps {
@@ -34,7 +34,7 @@ export function RightsStatsCards({
     },
     {
       id: 'wtp',
-      title: 'WTP',
+      title: 'World Television Premieres',
       value: wtpCount,
       description: 'World Television Premiere',
       icon: Satellite,

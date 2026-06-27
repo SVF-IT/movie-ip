@@ -42,8 +42,6 @@ export default function ProductionHousesPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(0);
-  const pageSize = 50;
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingHouse, setDeletingHouse] = useState<ProductionHouseWithStats | null>(null);
@@ -58,8 +56,7 @@ export default function ProductionHousesPage() {
       setLoading(true);
       const { data, count } = await getProductionHousesWithStats({
         search: searchQuery || undefined,
-        limit: pageSize,
-        offset: page * pageSize,
+        limit: 10000,
       });
       setHouses(data);
       setTotalCount(count);
@@ -68,10 +65,9 @@ export default function ProductionHousesPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, page]);
+  }, [searchQuery]);
 
   useEffect(() => { fetchHouses(); }, [fetchHouses]);
-  useEffect(() => { setPage(0); }, [searchQuery]);
 
   const handleDelete = async () => {
     if (!deletingHouse) return;
@@ -101,8 +97,6 @@ export default function ProductionHousesPage() {
 
   const { sortedData: sortedHouses, sortConfig, requestSort } = useSortableTable(houses);
 
-  const totalPages = Math.ceil(totalCount / pageSize);
-
   return (
     <div className="space-y-4 min-w-0">
       {/* ── Compact toolbar ── */}
@@ -112,7 +106,7 @@ export default function ProductionHousesPage() {
             onClick={handleExportClick}
             disabled={exportLoading}
             size="sm"
-            className="h-9 gap-2 bg-(--bg-raise) hover:bg-(--hover) text-(--text) border border-(--svf-border)/60"
+            className="h-9 gap-2 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover) shadow-sm shadow-red-500/20"
           >
             {exportLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             Export
@@ -220,26 +214,6 @@ export default function ProductionHousesPage() {
               </Table>
             </div>
 
-            {totalCount > pageSize && (
-              <div className="flex items-center justify-between px-5 py-3 border-t border-(--svf-border)">
-                <p className="text-xs text-(--text-faint)">
-                  Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, totalCount)} of {totalCount}
-                </p>
-                <div className="flex gap-2">
-                  <Button variant="ghost" size="sm" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
-                    className="h-7 text-xs text-(--text-faint) hover:text-(--text) hover:bg-(--hover) disabled:opacity-30">
-                    Previous
-                  </Button>
-                  <span className="flex items-center text-xs text-(--text-faint)">
-                    {page + 1} / {totalPages}
-                  </span>
-                  <Button variant="ghost" size="sm" onClick={() => setPage(p => p + 1)} disabled={(page + 1) * pageSize >= totalCount}
-                    className="h-7 text-xs text-(--text-faint) hover:text-(--text) hover:bg-(--hover) disabled:opacity-30">
-                    Next
-                  </Button>
-                </div>
-              </div>
-            )}
           </>
         )}
       </div>

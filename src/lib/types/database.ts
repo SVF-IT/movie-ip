@@ -62,6 +62,7 @@ export interface Movie {
   joint_prod_buy_back_date?: string
   revenue_share?: string
   jointly_exploitation_rights?: string
+  is_bangladeshi?: boolean
   recensor_flag?: boolean
   approval_status?: ApprovalStatus
   created_at?: string

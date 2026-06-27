@@ -94,12 +94,12 @@ export function MultiSelectChips({
       {selected.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {selected.map(item => (
-            <Badge key={item} variant="secondary" className="gap-1 pr-1 bg-slate-800 text-(--text) border-(--svf-border) text-xs">
+            <Badge key={item} variant="secondary" className="gap-1 pr-1 bg-(--bg-deep) text-(--text) border-(--svf-border) text-xs">
               {item}
               <button
                 type="button"
                 onClick={() => remove(item)}
-                className="ml-0.5 rounded-full hover:bg-slate-700 p-0.5"
+                className="ml-0.5 rounded-full hover:bg-(--hover) p-0.5"
               >
                 <X className="h-2.5 w-2.5" />
               </button>
@@ -119,7 +119,7 @@ export function MultiSelectChips({
               key={opt}
               type="button"
               onClick={() => { toggle(opt); }}
-              className="w-full text-left px-3 py-1.5 text-sm text-(--text) hover:bg-slate-800 hover:text-(--text) transition-colors"
+              className="w-full text-left px-3 py-1.5 text-sm text-(--text) hover:bg-(--hover) hover:text-(--text) transition-colors"
             >
               {opt}
             </button>
@@ -128,7 +128,7 @@ export function MultiSelectChips({
             <button
               type="button"
               onClick={() => setShowCustomInput(true)}
-              className="w-full text-left px-3 py-1.5 text-sm text-(--text-faint) hover:bg-slate-800 hover:text-(--text) border-t border-(--svf-border) transition-colors"
+              className="w-full text-left px-3 py-1.5 text-sm text-(--text-faint) hover:bg-(--hover) hover:text-(--text) border-t border-(--svf-border) transition-colors"
             >
               + Custom…
             </button>

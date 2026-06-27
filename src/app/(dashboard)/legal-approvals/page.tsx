@@ -1,9 +1,8 @@
 "use client";
 
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -33,27 +32,25 @@ import {
   type PendingMovieForApproval,
 } from "@/lib/api/approvals";
 import {
-  getPendingChanges,
   approvePendingChange,
+  getPendingChanges,
   rejectPendingChange,
   type PendingChange,
 } from "@/lib/api/pending-changes";
 import type { ApprovalStatus, MovieApproval } from "@/lib/types/database";
 import {
-  AlertTriangle,
   Check,
   CheckCircle,
   ChevronDown,
   ChevronUp,
   Clock,
   Film,
-  Gavel,
   GitPullRequest,
   Info,
   Loader2,
   Search,
   X,
-  XCircle,
+  XCircle
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -101,12 +98,12 @@ function HistoryEntry({ entry }: { entry: MovieApproval }) {
         <p className="text-(--text-faint) text-xs mt-0.5">
           {entry.created_at
             ? new Date(entry.created_at).toLocaleString("en-GB", {
-                day: "2-digit",
-                month: "short",
-                year: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              })
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })
             : "—"}
         </p>
       </div>
@@ -176,7 +173,7 @@ function MovieCard({ movie, onApprove, onReject, isLegalOrAdmin }: MovieCardProp
               <ApprovalStatusBadge status={movie.approval_status} />
             </div>
             <div className="flex flex-wrap gap-2 mt-1">
-{movie.production_no && (
+              {movie.production_no && (
                 <span className="text-[10px] text-(--text-faint) font-mono">{movie.production_no}</span>
               )}
               <span className="text-[10px] text-(--text-faint)">
@@ -200,7 +197,7 @@ function MovieCard({ movie, onApprove, onReject, isLegalOrAdmin }: MovieCardProp
               <Link href={`/movies/${movie.id}/edit?tab=approval`}>
                 <Button
                   size="sm"
-                  className="bg-slate-700/40 hover:bg-slate-700/60 text-(--text) border border-slate-600/30 h-8 px-3"
+                  className="bg-(--bg-raise) hover:bg-(--hover) text-(--text) border border-(--svf-border-strong) h-8 px-3"
                   variant="outline"
                 >
                   Edit &amp; Resubmit
@@ -383,7 +380,7 @@ function PendingChangeCard({
                   <span>Field</span><span className="text-red-400">Before</span><span className="text-emerald-400">After</span>
                 </div>
                 {changedFields.map(k => (
-                  <div key={k} className="grid grid-cols-3 gap-0 text-xs px-3 py-2 border-b border-(--svf-border)/40 last:border-0 hover:bg-slate-800/20">
+                  <div key={k} className="grid grid-cols-3 gap-0 text-xs px-3 py-2 border-b border-(--svf-border)/40 last:border-0 hover:bg-(--hover)">
                     <span className="text-(--text-faint) font-medium">{k.replace(/_/g, " ")}</span>
                     <span className="text-red-400 truncate pr-2">{String(before[k] ?? "—") || "—"}</span>
                     <span className="text-emerald-400 truncate">{String(after[k] ?? "—") || "—"}</span>
@@ -409,12 +406,12 @@ function PendingChangeCard({
                     <div className="grid grid-cols-3 gap-0 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) px-3 py-1.5 bg-(--bg-raise)/40 border-b border-(--svf-border)">
                       <span>Field</span><span className="text-red-400">Before</span><span className="text-emerald-400">After</span>
                     </div>
-                    {(["platform_id","nature","start_date","end_date","territory","remarks"] as const).filter(k => {
+                    {(["platform_id", "nature", "start_date", "end_date", "territory", "remarks"] as const).filter(k => {
                       const bv = (before as any)[k]; const av = (after as any)[k];
                       return bv !== av && (bv || av);
                     }).map(k => (
                       <div key={k} className="grid grid-cols-3 gap-0 text-xs px-3 py-1.5 border-b border-(--svf-border)/40 last:border-0">
-                        <span className="text-(--text-faint)">{k.replace(/_/g," ")}</span>
+                        <span className="text-(--text-faint)">{k.replace(/_/g, " ")}</span>
                         <span className="text-red-400 truncate pr-2">{String((before as any)[k] ?? "—") || "—"}</span>
                         <span className="text-emerald-400 truncate">{String((after as any)[k] ?? "—") || "—"}</span>
                       </div>
@@ -423,9 +420,9 @@ function PendingChangeCard({
                 )}
                 {change.change_type === "right_create" && (
                   <div className="space-y-1">
-                    {(["nature","start_date","end_date","territory","remarks"] as const).filter(k => (after as any)[k]).map(k => (
+                    {(["nature", "start_date", "end_date", "territory", "remarks"] as const).filter(k => (after as any)[k]).map(k => (
                       <div key={k} className="flex gap-2">
-                        <span className="text-(--text-faint) w-24 shrink-0">{k.replace(/_/g," ")}</span>
+                        <span className="text-(--text-faint) w-24 shrink-0">{k.replace(/_/g, " ")}</span>
                         <span className="text-(--text)">{String((after as any)[k])}</span>
                       </div>
                     ))}
@@ -460,8 +457,6 @@ export default function LegalApprovalsPage() {
   const toast = useAppToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<ApprovalStatus | "all">("pending");
-  const [page, setPage] = useState(0);
-  const pageSize = 20;
 
   // Approve dialog (new movies)
   const [approveTarget, setApproveTarget] = useState<PendingMovieForApproval | null>(null);
@@ -478,7 +473,6 @@ export default function LegalApprovalsPage() {
   const [changesLoading, setChangesLoading] = useState(true);
   const [changesSearch, setChangesSearch] = useState("");
   const [changesStatusFilter, setChangesStatusFilter] = useState<"pending" | "approved" | "rejected" | "all">("pending");
-  const [changesPage, setChangesPage] = useState(0);
 
   // Approve dialog (changes)
   const [changeApproveTarget, setChangeApproveTarget] = useState<PendingChange | null>(null);
@@ -495,8 +489,8 @@ export default function LegalApprovalsPage() {
       const { data, count } = await getPendingMovies({
         status: statusFilter,
         search: searchQuery || undefined,
-        limit: pageSize,
-        offset: page * pageSize,
+        limit: 10000,
+        offset: 0,
       });
       setMovies(data);
       setTotalCount(count);
@@ -505,7 +499,7 @@ export default function LegalApprovalsPage() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, searchQuery, page]);
+  }, [statusFilter, searchQuery]);
 
   const fetchChanges = useCallback(async () => {
     setChangesLoading(true);
@@ -513,8 +507,8 @@ export default function LegalApprovalsPage() {
       const { data, count } = await getPendingChanges({
         status: changesStatusFilter,
         search: changesSearch || undefined,
-        limit: pageSize,
-        offset: changesPage * pageSize,
+        limit: 10000,
+        offset: 0,
       });
       setChanges(data);
       setChangesCount(count);
@@ -523,13 +517,11 @@ export default function LegalApprovalsPage() {
     } finally {
       setChangesLoading(false);
     }
-  }, [changesStatusFilter, changesSearch, changesPage]);
+  }, [changesStatusFilter, changesSearch]);
 
   useEffect(() => { fetchMovies(); }, [fetchMovies]);
   useEffect(() => { fetchChanges(); }, [fetchChanges]);
 
-  useEffect(() => { setPage(0); }, [searchQuery, statusFilter]);
-  useEffect(() => { setChangesPage(0); }, [changesSearch, changesStatusFilter]);
 
   const handleApprove = async () => {
     if (!approveTarget) return;
@@ -594,29 +586,6 @@ export default function LegalApprovalsPage() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-[10px]" style={{ background: "color-mix(in oklch, var(--st-active) 14%, transparent)", border: "1px solid color-mix(in oklch, var(--st-active) 28%, transparent)" }}>
-            <Gavel className="h-5 w-5" style={{ color: "var(--st-active)" }} />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-(--text)">Legal Approvals</h1>
-            <p className="text-xs text-(--text-faint) mt-0.5">Review new movies and pending edit requests before changes go live.</p>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border" style={{ color: "var(--st-expiring)", background: "color-mix(in oklch, var(--st-expiring) 12%, transparent)", borderColor: "color-mix(in oklch, var(--st-expiring) 28%, transparent)" }}>
-            <Clock className="h-3.5 w-3.5" />
-            {pendingMovieCount} new movies
-          </span>
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border" style={{ color: "var(--st-open)", background: "color-mix(in oklch, var(--st-open) 12%, transparent)", borderColor: "color-mix(in oklch, var(--st-open) 28%, transparent)" }}>
-            <GitPullRequest className="h-3.5 w-3.5" />
-            {pendingChangesCount} edit requests
-          </span>
-        </div>
-      </div>
-
       <Tabs defaultValue="movies" className="w-full">
         <TabsList className="glass-card p-1 h-auto">
           <TabsTrigger value="movies" className="data-[state=active]:bg-(--bg-raise) data-[state=active]:text-(--text) text-(--text-faint) gap-2 rounded-[8px]">
@@ -678,17 +647,6 @@ export default function LegalApprovalsPage() {
               {movies.map((movie) => (
                 <MovieCard key={movie.id} movie={movie} onApprove={setApproveTarget} onReject={setRejectTarget} isLegalOrAdmin={isLegalOrAdmin} />
               ))}
-              {totalCount > pageSize && (
-                <div className="flex items-center justify-between pt-4 border-t border-(--svf-border)/40">
-                  <span className="text-sm text-(--text-faint)">
-                    {page * pageSize + 1}–{Math.min((page + 1) * pageSize, totalCount)} of {totalCount}
-                  </span>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(p => p - 1)} className="h-9">Previous</Button>
-                    <Button variant="outline" size="sm" disabled={(page + 1) * pageSize >= totalCount} onClick={() => setPage(p => p + 1)} className="h-9">Next</Button>
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </TabsContent>
@@ -737,17 +695,6 @@ export default function LegalApprovalsPage() {
                 <PendingChangeCard key={change.id} change={change} isLegalOrAdmin={isLegalOrAdmin}
                   onApprove={setChangeApproveTarget} onReject={setChangeRejectTarget} />
               ))}
-              {changesCount > pageSize && (
-                <div className="flex items-center justify-between pt-4 border-t border-(--svf-border)/40">
-                  <span className="text-sm text-(--text-faint)">
-                    {changesPage * pageSize + 1}–{Math.min((changesPage + 1) * pageSize, changesCount)} of {changesCount}
-                  </span>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" disabled={changesPage === 0} onClick={() => setChangesPage(p => p - 1)} className="h-9">Previous</Button>
-                    <Button variant="outline" size="sm" disabled={(changesPage + 1) * pageSize >= changesCount} onClick={() => setChangesPage(p => p + 1)} className="h-9">Next</Button>
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </TabsContent>

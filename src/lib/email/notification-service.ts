@@ -31,7 +31,8 @@ export type NotificationType =
   | "daily_digest"
   | "recensor_reminder"         // Monthly, for A-certified movies with recensor_flag=true
   | "user_created"              // Admin only
-  | "password_reset";           // Always sent, cannot be disabled
+  | "password_reset"            // Always sent, cannot be disabled
+  | "anniversary_notification"; // Special events banner on movies page
 
 // Global notification settings (admin configurable)
 export interface GlobalNotificationSettings {

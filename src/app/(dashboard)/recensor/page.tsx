@@ -54,12 +54,10 @@ export default function RecensorPage() {
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [sourceFilter, setSourceFilter] = useState<"all" | "home_production" | "acquired">("all");
   const [togglingId, setTogglingId] = useState<string | null>(null);
-  const [page, setPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
-  const pageSize = 50;
 
   useEffect(() => {
-    const t = setTimeout(() => { setDebouncedSearch(search); setPage(0); }, 300);
+    const t = setTimeout(() => { setDebouncedSearch(search); }, 300);
     return () => clearTimeout(t);
   }, [search]);
 
@@ -91,7 +89,7 @@ export default function RecensorPage() {
       query = query
         .order("recensor_flag", { ascending: false })
         .order("title")
-        .range(page * pageSize, (page + 1) * pageSize - 1);
+        .range(0, 9999);
 
       const { data, error: fetchError, count } = await query;
       if (fetchError) throw fetchError;
@@ -108,7 +106,7 @@ export default function RecensorPage() {
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, statusFilter, sourceFilter, page]);
+  }, [debouncedSearch, statusFilter, sourceFilter]);
 
   useEffect(() => { fetchMovies(); }, [fetchMovies]);
 
@@ -142,21 +140,21 @@ export default function RecensorPage() {
       label: "Pending Censoring",
       icon: Bell,
       active: "bg-rose-500/15 border-rose-500/40 text-rose-300",
-      inactive: "bg-slate-800/50 border-(--svf-border) text-(--text-faint) hover:border-rose-500/30 hover:text-rose-400",
+      inactive: "bg-(--bg-raise) border-(--svf-border) text-(--text-faint) hover:border-rose-500/30 hover:text-rose-400",
     },
     {
       id: "done",
       label: "Censored",
       icon: CheckCircle2,
       active: "bg-emerald-500/15 border-emerald-500/40 text-emerald-300",
-      inactive: "bg-slate-800/50 border-(--svf-border) text-(--text-faint) hover:border-emerald-500/30 hover:text-emerald-400",
+      inactive: "bg-(--bg-raise) border-(--svf-border) text-(--text-faint) hover:border-emerald-500/30 hover:text-emerald-400",
     },
     {
       id: "all",
       label: "All \"A\" Movies",
       icon: Film,
       active: "bg-red-600/15 border-red-500/40 text-red-300",
-      inactive: "bg-slate-800/50 border-(--svf-border) text-(--text-faint) hover:border-red-500/30 hover:text-red-400",
+      inactive: "bg-(--bg-raise) border-(--svf-border) text-(--text-faint) hover:border-red-500/30 hover:text-red-400",
     },
   ];
 
@@ -172,7 +170,7 @@ export default function RecensorPage() {
         {statusPills.map(({ id, label, icon: Icon, active, inactive }) => (
           <button
             key={id}
-            onClick={() => { setStatusFilter(id); setPage(0); }}
+            onClick={() => { setStatusFilter(id); }}
             className={cn(
               "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all duration-200",
               statusFilter === id ? active : inactive
@@ -196,7 +194,7 @@ export default function RecensorPage() {
           />
         </div>
 
-        <Select value={sourceFilter} onValueChange={(v) => { setSourceFilter(v as typeof sourceFilter); setPage(0); }}>
+        <Select value={sourceFilter} onValueChange={(v) => { setSourceFilter(v as typeof sourceFilter); }}>
           <SelectTrigger className="w-40 h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text)">
             <SelectValue />
           </SelectTrigger>
@@ -213,7 +211,7 @@ export default function RecensorPage() {
             size="sm"
             className="h-9 gap-1.5"
             style={{ color: "var(--text-faint)" }}
-            onClick={() => { setSearch(""); setStatusFilter("all"); setSourceFilter("all"); setPage(0); }}
+            onClick={() => { setSearch(""); setStatusFilter("all"); setSourceFilter("all"); }}
           >
             <X className="h-3.5 w-3.5" />Reset
           </Button>
@@ -233,7 +231,7 @@ export default function RecensorPage() {
             </div>
           ) : movies.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3">
-              <div className="p-4 rounded-full bg-slate-800/50 border border-(--svf-border)">
+              <div className="p-4 rounded-full bg-(--bg-raise) border border-(--svf-border)">
                 <CheckCircle2 className="h-8 w-8 text-emerald-500/60" />
               </div>
               <p className="text-(--text-faint) font-medium">
@@ -360,24 +358,6 @@ export default function RecensorPage() {
           )}
       </div>
 
-      {/* Pagination */}
-      {totalCount > pageSize && (
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-(--text-faint) tabular-nums">
-            {page * pageSize + 1}–{Math.min((page + 1) * pageSize, totalCount)} of {totalCount}
-          </p>
-          <div className="flex gap-1.5">
-            <Button variant="outline" size="sm" className="h-8 px-4"
-              onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}>
-              Previous
-            </Button>
-            <Button variant="outline" size="sm" className="h-8 px-4"
-              onClick={() => setPage((p) => p + 1)} disabled={(page + 1) * pageSize >= totalCount}>
-              Next
-            </Button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

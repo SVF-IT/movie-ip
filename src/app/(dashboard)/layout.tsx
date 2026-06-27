@@ -7,6 +7,7 @@ import { MobileNav } from "@/components/layout/mobile-nav";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/auth-context";
+import { ThemeProvider } from "@/contexts/theme-context";
 import { Loader2 } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -132,7 +133,6 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
         <MobileNav />
         <Toaster
           position="top-right"
-          theme="dark"
           richColors
           closeButton
           toastOptions={{ duration: 5000 }}
@@ -148,12 +148,14 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en">
       <body className="antialiased">
         <AuthProvider>
-          <ErrorBoundary>
-            <DashboardContent>{children}</DashboardContent>
-          </ErrorBoundary>
+          <ThemeProvider>
+            <ErrorBoundary>
+              <DashboardContent>{children}</DashboardContent>
+            </ErrorBoundary>
+          </ThemeProvider>
         </AuthProvider>
       </body>
     </html>

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -9,22 +10,21 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useAuth } from "@/contexts/auth-context";
+import { useAppToast } from "@/hooks/use-app-toast";
+import type { EffectivePreference, GlobalNotificationSettings, NotificationType } from "@/lib/email/notification-service";
 import {
-  Bell,
-  Loader2,
   AlertCircle,
   ArrowLeft,
+  Bell,
   Info,
+  Loader2,
 } from "lucide-react";
-import { useAppToast } from "@/hooks/use-app-toast";
 import Link from "next/link";
-import { useAuth } from "@/contexts/auth-context";
-import type { EffectivePreference, NotificationType, GlobalNotificationSettings } from "@/lib/email/notification-service";
+import { useEffect, useState } from "react";
 
-const categoryOrder = ["alerts", "activity", "digest", "account"];
+const categoryOrder = ["alerts", "activity", "digest", "account", "special_events"];
 
 const categoryInfo: Record<string, { title: string; description: string }> = {
   alerts: {
@@ -43,9 +43,13 @@ const categoryInfo: Record<string, { title: string; description: string }> = {
     title: "Account Notifications",
     description: "Important account-related emails",
   },
+  special_events: {
+    title: "Special Events",
+    description: "Movie anniversaries and milestone celebrations shown on the Movies page",
+  },
 };
 
-const notificationLabels: Record<NotificationType, { title: string; description: string }> = {
+const notificationLabels: Record<string, { title: string; description: string }> = {
   rights_expiring_critical: {
     title: "Critical Expiration (7 days)",
     description: "Rights expiring within the next 7 days",
@@ -89,6 +93,10 @@ const notificationLabels: Record<NotificationType, { title: string; description:
   password_reset: {
     title: "Password Reset",
     description: "When your password is reset by an administrator",
+  },
+  anniversary_notification: {
+    title: "Anniversary & Milestone Banner",
+    description: "Show the Special Events banner on the Movies page for upcoming anniversaries and jubilees",
   },
 };
 
@@ -258,7 +266,7 @@ export default function NotificationPreferencesPage() {
       <div className="relative z-10 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link href="/settings">
-            <Button variant="ghost" size="sm" className="text-(--text-faint) hover:text-white hover:bg-slate-800/50 transition-colors">
+            <Button variant="ghost" size="sm" className="text-(--text-faint) hover:text-(--text) hover:bg-(--hover) transition-colors">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Settings
             </Button>
@@ -270,7 +278,7 @@ export default function NotificationPreferencesPage() {
             <Button
               variant={!isAdminView ? "secondary" : "ghost"}
               size="sm"
-              className={!isAdminView ? "bg-slate-800 text-white hover:bg-slate-700 shadow-sm" : "text-(--text-faint) hover:text-(--text) hover:bg-slate-800/50"}
+              className={!isAdminView ? "bg-(--bg-raise) text-(--text) hover:bg-(--hover) shadow-sm border border-(--svf-border-strong)" : "text-(--text-faint) hover:text-(--text) hover:bg-(--hover)"}
               onClick={() => setIsAdminView(false)}
             >
               My Preferences
@@ -278,25 +286,13 @@ export default function NotificationPreferencesPage() {
             <Button
               variant={isAdminView ? "secondary" : "ghost"}
               size="sm"
-              className={isAdminView ? "bg-slate-800 text-white hover:bg-slate-700 shadow-sm" : "text-(--text-faint) hover:text-(--text) hover:bg-slate-800/50"}
+              className={isAdminView ? "bg-(--bg-raise) text-(--text) hover:bg-(--hover) shadow-sm border border-(--svf-border-strong)" : "text-(--text-faint) hover:text-(--text) hover:bg-(--hover)"}
               onClick={() => setIsAdminView(true)}
             >
               Global Settings (Admin)
             </Button>
           </div>
         )}
-      </div>
-
-      <div className="relative z-10">
-        <h1 className="text-3xl font-bold flex items-center gap-3 bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
-          <Bell className="h-5 w-5 text-amber-500" />
-          {isAdminView ? "Global Notification Settings" : "Notification Preferences"}
-        </h1>
-        <p className="text-(--text-faint) mt-2">
-          {isAdminView
-            ? "Configure system-wide notification defaults and recipient roles"
-            : "Choose which notifications you want to receive"}
-        </p>
       </div>
 
       <div className="relative z-10 space-y-8">
@@ -407,7 +403,7 @@ export default function NotificationPreferencesPage() {
                               <Loader2 className="h-4 w-4 animate-spin text-amber-500" />
                             )}
                             {isAlwaysOn && (
-                              <Badge variant="secondary" className="bg-slate-800 text-(--text) border-(--svf-border) hover:bg-slate-800">Always On</Badge>
+                              <Badge variant="secondary" className="bg-(--bg-deep) text-(--text) border-(--svf-border)">Always On</Badge>
                             )}
                             {!isAdminView && isDisabledByAdmin && (
                               <Badge variant="outline" className="text-(--text-faint) border-(--svf-border)">Disabled by Admin</Badge>
@@ -435,7 +431,7 @@ export default function NotificationPreferencesPage() {
                                       px-3.5 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 border
                                       ${isActive
                                         ? "bg-amber-500/20 text-amber-300 border-amber-500/30 shadow-[0_0_15px_-3px_rgba(245,158,11,0.2)]"
-                                        : "bg-(--panel-solid) text-(--text-faint) border-(--svf-border) hover:bg-slate-800 hover:text-(--text)"}
+                                        : "bg-(--panel-solid) text-(--text-faint) border-(--svf-border) hover:bg-(--hover) hover:text-(--text)"}
                                       ${(!item.is_enabled || isChanging) ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
                                     `}
                                   >

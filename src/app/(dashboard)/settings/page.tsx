@@ -146,13 +146,6 @@ export default function SettingsPage() {
       <div className="absolute top-0 left-1/4 w-96 h-96 bg-red-500/5 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-amber-500/5 rounded-full blur-[120px] pointer-events-none" />
 
-      <div className="relative z-10">
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">Platform Settings</h1>
-        <p className="text-(--text-faint) mt-1">
-          Manage your SVF Film IP Manager account preferences and security
-        </p>
-      </div>
-
       <div className="grid gap-8 relative z-10">
         {/* Profile Settings */}
         <Card className="border-(--svf-border) bg-(--panel-solid)/40 backdrop-blur-xl shadow-2xl">
@@ -216,7 +209,7 @@ export default function SettingsPage() {
               <div className="space-y-2">
                 <label className="text-sm font-medium text-(--text)">System Role</label>
                 <div className="flex items-center gap-3 h-10 px-1">
-                  <Badge variant="secondary" className="bg-slate-800 hover:bg-slate-700 text-(--text) border-(--svf-border) capitalize shadow-sm transition-colors cursor-default">
+                  <Badge variant="secondary" className="bg-(--bg-deep) text-(--text) border-(--svf-border-strong) capitalize shadow-sm transition-colors cursor-default">
                     {profile?.role || "viewer"}
                   </Badge>
                   <span className="text-xs text-(--text-faint) italic">
@@ -258,14 +251,14 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent className="pt-6">
             <Link href="/settings/notifications">
-              <div className="group flex items-center justify-between p-5 rounded-[12px] border border-(--svf-border) bg-(--bg-deep)/30 hover:bg-slate-800/50 hover:border-(--svf-border) transition-all cursor-pointer">
+              <div className="group flex items-center justify-between p-5 rounded-[12px] border border-(--svf-border) bg-(--bg-deep)/30 hover:bg-(--hover) hover:border-(--svf-border) transition-all cursor-pointer">
                 <div className="space-y-1.5">
-                  <p className="font-medium text-(--text) group-hover:text-white transition-colors">Notification Preferences</p>
+                  <p className="font-medium text-(--text) group-hover:text-(--text) transition-colors">Notification Preferences</p>
                   <p className="text-sm text-(--text-faint)">
                     Choose which alerts and updates you want to receive via email
                   </p>
                 </div>
-                <div className="h-10 w-10 flex items-center justify-center rounded-full bg-slate-800/50 group-hover:bg-amber-500/20 transition-colors">
+                <div className="h-10 w-10 flex items-center justify-center rounded-full bg-(--bg-raise) group-hover:bg-amber-500/15 transition-colors">
                   <ChevronRight className="h-5 w-5 text-(--text-faint) group-hover:text-amber-400 transition-colors" />
                 </div>
               </div>
@@ -338,7 +331,7 @@ export default function SettingsPage() {
               <Button
                 onClick={handlePasswordChange}
                 disabled={passwordSaving || !newPassword || !confirmPassword}
-                className="bg-slate-800 hover:bg-slate-700 text-(--text) border border-(--svf-border) hover:border-slate-600 shadow-lg shadow-slate-900/20 transition-all font-medium tracking-wide"
+                className="bg-(--bg-raise) hover:bg-(--hover) text-(--text) border border-(--svf-border-strong) transition-all font-medium tracking-wide"
               >
                 {passwordSaving ? (
                   <>

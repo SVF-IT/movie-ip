@@ -56,8 +56,6 @@ export default function ActorsPage() {
   const [sortBy, setSortBy] = useState<SortOption>("name_asc");
   const [loading, setLoading] = useState(true);
   const toast = useAppToast();
-  const [page, setPage] = useState(0);
-  const pageSize = 24;
 
   // Create actor dialog
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -145,17 +143,6 @@ export default function ActorsPage() {
     return result;
   }, [actors, sortBy, searchQuery]);
 
-  const paginatedActors = useMemo(() => {
-    return processedActors.slice(page * pageSize, (page + 1) * pageSize);
-  }, [processedActors, page, pageSize]);
-
-  // Debounce search
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setPage(0);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
 
   return (
     <div className="space-y-4">
@@ -164,10 +151,11 @@ export default function ActorsPage() {
         <div className="flex items-center gap-2 shrink-0 ml-auto">
           <Button
             onClick={() => setShowExportDialog(true)}
+            variant="outline"
             size="sm"
-            className="h-9 gap-2 bg-slate-800/80 hover:bg-slate-700/80 text-(--text) border border-(--svf-border)/60"
+            className="h-9 gap-2 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover) shadow-sm shadow-red-500/20"
           >
-            Export
+            <Download className="h-4 w-4" /> Export
           </Button>
           <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
             <DialogTrigger asChild>
@@ -198,7 +186,7 @@ export default function ActorsPage() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => { setCreateDialogOpen(false); setNewActorName(""); }}
-                  className="border-(--svf-border) text-(--text) hover:bg-slate-800/60">
+                  className="border-(--svf-border) text-(--text) hover:bg-(--hover)">
                   Cancel
                 </Button>
                 <Button onClick={handleCreateActor} disabled={creating || !newActorName.trim()}
@@ -245,7 +233,7 @@ export default function ActorsPage() {
           </Select>
 
           {searchQuery && (
-            <Button variant="ghost" size="sm" className="h-9 gap-1.5 text-(--text-faint) hover:text-(--text) hover:bg-slate-800/50"
+            <Button variant="ghost" size="sm" className="h-9 gap-1.5 text-(--text-faint) hover:text-(--text) hover:bg-(--hover)"
               onClick={() => setSearchQuery("")}>
               <X className="h-3.5 w-3.5" /> Clear
             </Button>
@@ -261,7 +249,7 @@ export default function ActorsPage() {
             <div key={i} className="h-48 rounded-[14px] border border-(--svf-border) bg-(--panel) animate-pulse" />
           ))}
         </div>
-      ) : paginatedActors.length === 0 ? (
+      ) : processedActors.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 rounded-[14px] border border-dashed border-(--svf-border) bg-(--panel)/30">
           <div className="p-4 rounded-full bg-(--bg-raise) border border-(--svf-border) mb-4">
             <Star className="h-9 w-9 text-(--text-faint)" />
@@ -275,32 +263,11 @@ export default function ActorsPage() {
           </Button>
         </div>
       ) : (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {paginatedActors.map((actor) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            {processedActors.map((actor) => (
               <PersonCard key={actor.id} person={actor as any} />
             ))}
           </div>
-
-          {processedActors.length > pageSize && (
-            <div className="flex items-center justify-between pt-4 border-t border-(--svf-border)">
-              <p className="text-xs text-(--text-faint)">
-                <span className="font-medium text-(--text)">{page * pageSize + 1}–{Math.min((page + 1) * pageSize, processedActors.length)}</span>
-                {" "}of {processedActors.length}
-              </p>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
-                  className="h-8 bg-(--bg-raise) border-(--svf-border) text-(--text) hover:bg-(--hover)">
-                  Previous
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={(page + 1) * pageSize >= processedActors.length}
-                  className="h-8 bg-(--bg-raise) border-(--svf-border) text-(--text) hover:bg-(--hover)">
-                  Next
-                </Button>
-              </div>
-            </div>
-          )}
-        </>
       )}
 
       <DataExportDialog

@@ -120,7 +120,7 @@ export default function NewRightPage() {
       {/* Header */}
       <div className="relative overflow-hidden rounded-[12px] bg-(--panel-solid)/60 border border-(--svf-border) backdrop-blur-xl p-3">
         <div className="relative flex items-center gap-4">
-          <Button variant="ghost" size="sm" asChild className="text-(--text-faint) hover:text-(--text) hover:bg-slate-800/60 h-8 w-8 p-0 shrink-0">
+          <Button variant="ghost" size="sm" asChild className="text-(--text-faint) hover:text-(--text) hover:bg-(--hover) h-8 w-8 p-0 shrink-0">
             <Link href="/rights"><ArrowLeft className="h-4 w-4" /></Link>
           </Button>
           <div className="p-2 rounded-[9px] bg-red-500/10 border border-red-500/20">
@@ -146,7 +146,7 @@ export default function NewRightPage() {
         <CardContent className="p-5">
           {!preMovieId ? (
             movieId ? (
-              <div className="flex items-center justify-between rounded-lg bg-slate-800/40 border border-(--svf-border) px-4 py-3">
+              <div className="flex items-center justify-between rounded-lg bg-(--bg-deep) border border-(--svf-border) px-4 py-3">
                 <span className="font-semibold text-(--text)">{movieTitle}</span>
                 <Button variant="ghost" size="sm" className="text-(--text-faint) hover:text-red-400 hover:bg-red-500/10 h-7 text-xs"
                   onClick={() => { setMovieId(""); setMovieTitle(""); }}>
@@ -173,7 +173,7 @@ export default function NewRightPage() {
                   <div className="rounded-lg border border-(--svf-border) bg-(--panel-solid)/80 overflow-hidden max-h-44 overflow-y-auto">
                     {movieResults.map((m) => (
                       <button key={m.id}
-                        className="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-800/60 transition-colors border-b border-(--svf-border)/40 last:border-0"
+                        className="w-full px-4 py-2.5 text-left text-sm hover:bg-(--hover) transition-colors border-b border-(--svf-border)/40 last:border-0"
                         onClick={() => { setMovieId(m.id); setMovieTitle(m.title); setMovieSearch(""); setMovieResults([]); }}>
                         <span className="font-semibold text-(--text)">{m.title}</span>
                         {m.release_year && <span className="text-(--text-faint) ml-2 text-xs">({m.release_year})</span>}
@@ -184,7 +184,7 @@ export default function NewRightPage() {
               </div>
             )
           ) : (
-            <div className="flex items-center gap-3 rounded-lg bg-slate-800/40 border border-(--svf-border) px-4 py-3">
+            <div className="flex items-center gap-3 rounded-lg bg-(--bg-deep) border border-(--svf-border) px-4 py-3">
               <FileText className="h-4 w-4 text-(--text-faint) shrink-0" />
               <span className="font-semibold text-(--text)">{movieTitle}</span>
             </div>
@@ -275,7 +275,7 @@ export default function NewRightPage() {
       {/* Footer Actions */}
       <div className="flex items-center justify-end gap-3 pt-2 pb-6">
         <Link href="/rights">
-          <Button variant="ghost" className="h-10 px-6 text-(--text-faint) hover:text-(--text) hover:bg-slate-800/60">
+          <Button variant="ghost" className="h-10 px-6 text-(--text-faint) hover:text-(--text) hover:bg-(--hover)">
             Cancel
           </Button>
         </Link>

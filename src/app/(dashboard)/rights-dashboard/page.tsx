@@ -151,7 +151,7 @@ export default function RightsDashboardPage() {
         { label: 'Home', value: satStats?.openHomeTitlesCount ?? 0 },
         { label: 'Acquired', value: satStats?.openAcquiredTitlesCount ?? 0 },
       ],
-      description: 'Movies with no satellite rights',
+      description: 'Movies with no active rights',
       icon: Film,
       color: 'text-cyan-400',
       bgGradient: 'from-cyan-500/10 to-cyan-500/5',
@@ -171,9 +171,9 @@ export default function RightsDashboardPage() {
     },
     {
       id: 'wtp' as SatActiveCard,
-      title: 'WTP',
+      title: 'World Television Premieres',
       value: satStats?.wtpCount ?? 0,
-      description: 'World Television Premiere titles',
+      description: 'Movies with no satellite rights',
       icon: Star,
       color: 'text-purple-400',
       bgGradient: 'from-purple-500/10 to-purple-500/5',
@@ -248,20 +248,18 @@ export default function RightsDashboardPage() {
     return (
       <div className="flex flex-col -m-4 md:-m-8" style={{ minHeight: "calc(100vh - 4rem)" }}>
         {/* Full-page top bar */}
-        <div className={`flex items-center gap-3 px-4 py-2.5 border-b border-(--svf-border) backdrop-blur-md ${isSatellite
-          ? 'bg-gradient-to-r from-slate-950 via-slate-900/80 to-purple-950/20'
-          : 'bg-gradient-to-r from-slate-950 via-slate-900/80 to-blue-950/20'
-          }`}>
+        <div className="flex items-center gap-3 px-4 py-2.5 border-b border-(--svf-border) backdrop-blur-md"
+          style={{ background: `color-mix(in oklch, var(--bg-deep) 85%, ${isSatellite ? 'oklch(0.42 0.18 290)' : 'oklch(0.42 0.15 240)'} 6%)` }}>
           <Button
             variant="ghost"
             size="sm"
-            className="gap-1.5 h-8 text-(--text-faint) hover:text-(--text) hover:bg-slate-800/50"
+            className="gap-1.5 h-8 text-(--text-faint) hover:text-(--text) hover:bg-(--hover)"
             onClick={() => setFullPageView(false)}
           >
             <ArrowLeft className="h-4 w-4" />
             Dashboard
           </Button>
-          <span className="text-slate-700">|</span>
+          <span style={{ color: "var(--svf-border-strong)" }}>|</span>
           {activeStatConfig && (
             <div className="flex items-center gap-2">
               <activeStatConfig.icon className={`h-4 w-4 ${activeStatConfig.color}`} />
@@ -298,9 +296,7 @@ export default function RightsDashboardPage() {
           {isSatellite ? (
             <SatelliteDashboardTable
               activeCard={satActiveCard}
-              languages={languages}
               language={language}
-              onLanguageChange={setLanguage}
               expiryYear={satExpiryYear}
               onExpiryYearChange={handleSatYearChange}
               expiryFrom={satExpiryFrom}
@@ -313,9 +309,7 @@ export default function RightsDashboardPage() {
           ) : (
             <InternetDashboardTable
               activeCard={intActiveCard}
-              languages={languages}
               language={language}
-              onLanguageChange={setLanguage}
               expiryYear={intExpiryYear}
               onExpiryYearChange={handleIntYearChange}
               expiryFrom={intExpiryFrom}
@@ -512,9 +506,7 @@ export default function RightsDashboardPage() {
         {isSatellite ? (
           <SatelliteDashboardTable
             activeCard={satActiveCard}
-            languages={languages}
             language={language}
-            onLanguageChange={setLanguage}
             expiryYear={satExpiryYear}
             onExpiryYearChange={handleSatYearChange}
             expiryFrom={satExpiryFrom}
@@ -526,9 +518,7 @@ export default function RightsDashboardPage() {
         ) : (
           <InternetDashboardTable
             activeCard={intActiveCard}
-            languages={languages}
             language={language}
-            onLanguageChange={setLanguage}
             expiryYear={intExpiryYear}
             onExpiryYearChange={handleIntYearChange}
             expiryFrom={intExpiryFrom}

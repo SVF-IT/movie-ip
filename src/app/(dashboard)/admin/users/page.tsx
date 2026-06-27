@@ -57,10 +57,10 @@ const selectCls = "bg-(--bg-raise)/40 border-(--svf-border) text-(--text) h-9";
 const labelCls = "text-xs font-semibold text-(--text-faint) uppercase tracking-wider";
 
 const roleCfg: Record<UserRole, { label: string; cls: string }> = {
-  admin:  { label: "Admin",  cls: "bg-red-500/20 text-red-300 border-red-500/30" },
-  legal:  { label: "Legal",  cls: "bg-violet-500/20 text-violet-300 border-violet-500/30" },
-  editor: { label: "Editor", cls: "bg-blue-500/20 text-blue-300 border-blue-500/30" },
-  viewer: { label: "Viewer", cls: "bg-slate-700/40 text-slate-400 border-slate-600/30" },
+  admin:  { label: "Admin",  cls: "bg-red-500/15 text-red-500 border-red-500/30 dark:text-red-300" },
+  legal:  { label: "Legal",  cls: "bg-violet-500/15 text-violet-600 border-violet-500/30 dark:text-violet-300" },
+  editor: { label: "Editor", cls: "bg-blue-500/15 text-blue-600 border-blue-500/30 dark:text-blue-300" },
+  viewer: { label: "Viewer", cls: "bg-(--bg-deep) text-(--text-faint) border-(--svf-border-strong)" },
 };
 
 const roleDescriptions: Record<UserRole, string> = {
@@ -241,8 +241,8 @@ export default function AdminUsersPage() {
 
         <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
           <DialogTrigger asChild>
-            <Button size="sm" className="ml-auto bg-violet-600 hover:bg-violet-500 text-white border-0 shadow-lg shadow-violet-900/30 h-9">
-              <UserPlus className="h-3.5 w-3.5 mr-1.5" /> Create User
+            <Button size="sm" className="ml-auto bg-red-600 hover:bg-red-500 text-white border-0 shadow-lg shadow-red-900/30 h-9 gap-1.5">
+              <UserPlus className="h-3.5 w-3.5" /> Create User
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-125 bg-(--panel-solid) border-(--svf-border)">
@@ -323,7 +323,7 @@ export default function AdminUsersPage() {
                     Cancel
                   </Button>
                   <Button type="submit" disabled={creating}
-                    className="bg-violet-600 hover:bg-violet-500 text-white border-0">
+                    className="bg-red-600 hover:bg-red-500 text-white border-0">
                     {creating ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating...</> : "Create User"}
                   </Button>
                 </DialogFooter>

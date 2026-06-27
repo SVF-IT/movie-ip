@@ -36,8 +36,6 @@ export default function DubbedPage() {
   const [dubbedPopoverOpen, setDubbedPopoverOpen] = useState(false)
   const [sourceFilter, setSourceFilter] = useState<'all' | 'home_production' | 'acquired'>('all')
 
-  const [page, setPage] = useState(0)
-  const pageSize = 50
 
   useEffect(() => {
     async function load() {
@@ -157,10 +155,6 @@ export default function DubbedPage() {
 
     return data
   }, [groups, searchQuery, dubbedFilter, languageFilter, sourceFilter])
-
-  useEffect(() => { setPage(0) }, [searchQuery, dubbedFilter, languageFilter, sourceFilter])
-
-  const paginated = useMemo(() => filtered.slice(page * pageSize, (page + 1) * pageSize), [filtered, page, pageSize])
 
   const handleExport = () => {
     const headerBase = ['Title', 'Source', 'Year', 'Status']
@@ -288,13 +282,13 @@ export default function DubbedPage() {
 
         {hasActiveFilters && (
           <Button variant="ghost" size="sm" className="h-9 gap-1.5" style={{ color: "var(--text-faint)" }}
-            onClick={() => { setSearchQuery(''); setDubbedFilter(['dubbed']); setLanguageFilter([]); setSourceFilter('all'); setPage(0) }}>
+            onClick={() => { setSearchQuery(''); setDubbedFilter(['dubbed']); setLanguageFilter([]); setSourceFilter('all'); }}>
             <X className="h-3.5 w-3.5" /> Clear
           </Button>
         )}
 
         <div className="flex-1" />
-        <Button onClick={handleExport} disabled={filtered.length === 0} variant="outline" size="sm" className="h-9 gap-2">
+        <Button onClick={handleExport} disabled={filtered.length === 0} variant="outline" size="sm" className="h-9 gap-2 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover) shadow-sm shadow-red-500/20">
           <Download className="h-4 w-4" /> Export CSV
         </Button>
         <span className="text-xs" style={{ color: "var(--text-faint)" }}>{filtered.length} titles</span>
@@ -322,14 +316,14 @@ export default function DubbedPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {paginated.length === 0 ? (
+              {filtered.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={4 + langColumns.length} className="text-center py-16" style={{ color: "var(--text-faint)" }}>
                     No movies found
                   </TableCell>
                 </TableRow>
               ) : (
-                paginated.map((group) => {
+                filtered.map((group) => {
                   const isDubbed = group.total_versions > 1
                   const groupLangs = new Set(group.versions.map((v) => v.language).filter(Boolean))
                   const allowedDubbingLangs = group.source === 'acquired'
@@ -337,7 +331,7 @@ export default function DubbedPage() {
                     : null
                   return (
                     <TableRow key={group.production_no}
-                      className={cn("transition-colors", isDubbed && "bg-emerald-500/5")}
+                      className={cn("transition-colors", isDubbed && "border-l-2 border-l-emerald-500/50")}
                     >
                       <TableCell className="font-medium">
                         <Link href={`/movies/${group.primary_version?.id ?? ''}`}
@@ -399,17 +393,6 @@ export default function DubbedPage() {
           </Table>
         </div>
 
-        {filtered.length > pageSize && (
-          <div className="flex items-center justify-between px-5 py-3" style={{ borderTop: "1px solid var(--svf-border)" }}>
-            <p className="text-xs" style={{ color: "var(--text-faint)" }}>
-              Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, filtered.length)} of {filtered.length}
-            </p>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" className="h-8" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}>Previous</Button>
-              <Button variant="outline" size="sm" className="h-8" onClick={() => setPage((p) => p + 1)} disabled={(page + 1) * pageSize >= filtered.length}>Next</Button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )

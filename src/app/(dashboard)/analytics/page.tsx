@@ -220,7 +220,7 @@ export default function AnalyticsPage() {
           <span className="text-xs font-semibold text-(--text-faint) uppercase tracking-wider shrink-0">Filters</span>
 
           <Select value={rightsStatus} onValueChange={setRightsStatus}>
-            <SelectTrigger className="h-8 w-32 text-xs bg-slate-800/60 border-(--svf-border)/60">
+            <SelectTrigger className="h-8 w-32 text-xs bg-(--bg-raise) border-(--svf-border)">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -230,7 +230,7 @@ export default function AnalyticsPage() {
           </Select>
 
           <Select value={language} onValueChange={setLanguage}>
-            <SelectTrigger className="h-8 w-36 text-xs bg-slate-800/60 border-(--svf-border)/60">
+            <SelectTrigger className="h-8 w-36 text-xs bg-(--bg-raise) border-(--svf-border)">
               <SelectValue placeholder="Language" />
             </SelectTrigger>
             <SelectContent>
@@ -240,7 +240,7 @@ export default function AnalyticsPage() {
           </Select>
 
           <Select value={source} onValueChange={setSource}>
-            <SelectTrigger className="h-8 w-36 text-xs bg-slate-800/60 border-(--svf-border)/60">
+            <SelectTrigger className="h-8 w-36 text-xs bg-(--bg-raise) border-(--svf-border)">
               <SelectValue placeholder="Source" />
             </SelectTrigger>
             <SelectContent>
@@ -251,7 +251,7 @@ export default function AnalyticsPage() {
           </Select>
 
           <Select value={platformType} onValueChange={setPlatformType}>
-            <SelectTrigger className="h-8 w-36 text-xs bg-slate-800/60 border-(--svf-border)/60">
+            <SelectTrigger className="h-8 w-36 text-xs bg-(--bg-raise) border-(--svf-border)">
               <SelectValue placeholder="Platform type" />
             </SelectTrigger>
             <SelectContent>
@@ -375,7 +375,7 @@ export default function AnalyticsPage() {
                     <span className="text-xs text-(--text) truncate">{m.title}</span>
                     <span className="text-xs font-semibold text-(--text) tabular-nums shrink-0">{m.count}</span>
                   </div>
-                  <div className="mt-0.5 h-1 rounded-full bg-slate-800">
+                  <div className="mt-0.5 h-1 rounded-full bg-(--svf-border)">
                     <div
                       className="h-1 rounded-full"
                       style={{

@@ -188,9 +188,7 @@ export default function AuditLogPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo]     = useState("");
   const [loading, setLoading]   = useState(true);
-  const [page, setPage]         = useState(0);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
-  const pageSize = 50;
   const toast = useAppToast();
 
   const fetchLogs = useCallback(async () => {
@@ -201,23 +199,23 @@ export default function AuditLogPage() {
         action:     actionFilter !== "all" ? actionFilter : undefined,
         dateFrom:   dateFrom || undefined,
         dateTo:     dateTo   || undefined,
-        limit:  pageSize,
-        offset: page * pageSize,
+        limit:  10000,
+        offset: 0,
       });
       setLogs(data); setTotalCount(count);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load audit logs");
     } finally { setLoading(false); }
-  }, [tableFilter, actionFilter, dateFrom, dateTo, page]);
+  }, [tableFilter, actionFilter, dateFrom, dateTo]);
 
   useEffect(() => { fetchLogs(); getAuditLogStats().then(setStats).catch(() => {}); }, [fetchLogs]);
 
   const clearFilters = () => {
     setTableFilter("all"); setActionFilter("all");
-    setDateFrom(""); setDateTo(""); setPage(0);
+    setDateFrom(""); setDateTo("");
   };
   const hasFilters = tableFilter !== "all" || actionFilter !== "all" || dateFrom || dateTo;
-  const totalPages = Math.ceil(totalCount / pageSize);
+
 
   return (
     <div className="space-y-4 min-w-0">
@@ -239,7 +237,7 @@ export default function AuditLogPage() {
       {/* ── Directory Filters ── */}
       <div className="relative overflow-hidden rounded-[12px] bg-(--panel-solid)/40 border border-(--svf-border) backdrop-blur-xl p-4 shadow-xl">
         <div className="flex flex-wrap gap-3 items-center">
-          <Select value={tableFilter} onValueChange={(v) => { setTableFilter(v); setPage(0); }}>
+          <Select value={tableFilter} onValueChange={(v) => { setTableFilter(v); }}>
             <SelectTrigger className="h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) text-sm w-[160px]">
               <SelectValue placeholder="All Tables" />
             </SelectTrigger>
@@ -248,7 +246,7 @@ export default function AuditLogPage() {
               {Object.entries(TABLE_NAMES).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Select value={actionFilter} onValueChange={(v) => { setActionFilter(v); setPage(0); }}>
+          <Select value={actionFilter} onValueChange={(v) => { setActionFilter(v); }}>
             <SelectTrigger className="h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) text-sm w-[140px]">
               <SelectValue placeholder="All Actions" />
             </SelectTrigger>
@@ -259,14 +257,14 @@ export default function AuditLogPage() {
               <SelectItem value="DELETE">Delete</SelectItem>
             </SelectContent>
           </Select>
-          <Input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(0); }}
+          <Input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); }}
             className="h-9 w-[150px] bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-sm" />
           <span className="text-(--text-faint) text-xs">to</span>
-          <Input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(0); }}
+          <Input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); }}
             className="h-9 w-[150px] bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-sm" />
           {hasFilters && (
             <Button variant="ghost" size="sm" onClick={clearFilters}
-              className="h-9 gap-1.5 text-(--text-faint) hover:text-(--text) hover:bg-slate-800/50">
+              className="h-9 gap-1.5 text-(--text-faint) hover:text-(--text) hover:bg-(--hover)">
               <X className="h-3.5 w-3.5" /> Clear
             </Button>
           )}
@@ -376,25 +374,6 @@ export default function AuditLogPage() {
           </div>
         )}
 
-        {/* Pagination */}
-        {totalCount > pageSize && (
-          <div className="flex items-center justify-between px-5 py-3 border-t border-(--svf-border)" style={{ background: "var(--bg-deep)" }}>
-            <p className="text-xs text-(--text-faint)">
-              Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, totalCount)} of {totalCount.toLocaleString()}
-            </p>
-            <div className="flex gap-2 items-center">
-              <Button variant="ghost" size="sm" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}
-                className="h-7 text-xs text-(--text-faint) hover:text-(--text) hover:bg-(--hover) disabled:opacity-30">
-                Previous
-              </Button>
-              <span className="text-xs text-(--text-faint)">{page + 1} / {totalPages}</span>
-              <Button variant="ghost" size="sm" onClick={() => setPage((p) => p + 1)} disabled={(page + 1) * pageSize >= totalCount}
-                className="h-7 text-xs text-(--text-faint) hover:text-(--text) hover:bg-(--hover) disabled:opacity-30">
-                Next
-              </Button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

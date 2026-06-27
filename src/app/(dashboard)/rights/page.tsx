@@ -5,8 +5,6 @@ import { MovieSelector } from "@/components/movies/movie-selector";
 import { RoleGate } from "@/components/role-gate";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-
-import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Select,
@@ -104,8 +102,6 @@ export default function RightsPage() {
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "expired">("active");
   const [loading, setLoading] = useState(true);
   const toast = useAppToast();
-  const [page, setPage] = useState(0);
-  const pageSize = 50;
 
   const [deletingRight, setDeletingRight] = useState<RightWithDetails | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -113,7 +109,6 @@ export default function RightsPage() {
   const { profile } = useAuth();
   const canRequestDelete = profile?.role === "admin" || profile?.role === "editor";
 
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [exportData, setExportData] = useState<RightWithDetails[]>([]);
   const [exportLoading, setExportLoading] = useState(false);
@@ -143,25 +138,24 @@ export default function RightsPage() {
         platformTypeCategory: rightsTypeFilter !== "all" ? rightsTypeFilter : undefined,
         movieId: movieIdFilter !== "all" ? movieIdFilter : undefined,
         isExpired: isExpiredValue,
-        limit: rightsTypeFilter !== "all" || platformFilter !== "all" ? 10000 : pageSize,
-        offset: rightsTypeFilter !== "all" || platformFilter !== "all" ? 0 : page * pageSize,
+        limit: 10000,
+        offset: 0,
       });
 
       setRights(data as RightWithDetails[]);
       setTotalCount(count);
-      setSelectedIds(new Set());
     } catch (err) {
       console.error("Error fetching rights:", err);
       toast.error(err instanceof Error ? err.message : "Failed to load rights");
     } finally {
       setLoading(false);
     }
-  }, [platformFilter, movieIdFilter, statusFilter, rightsTypeFilter, page]);
+  }, [platformFilter, movieIdFilter, statusFilter, rightsTypeFilter]);
 
   useEffect(() => { fetchRights(); }, [fetchRights]);
 
   const getExpiryStatus = (endDate?: string) => {
-    if (!endDate) return { label: "No End Date", color: "bg-slate-800/60 text-(--text-faint) border-(--svf-border)" };
+    if (!endDate) return { label: "No End Date", color: "bg-(--bg-raise) text-(--text-faint) border-(--svf-border)" };
     if (endDate.startsWith("3099") || endDate.startsWith("9999")) return { label: "Perpetual", color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/25" };
     const days = differenceInDays(new Date(endDate), new Date());
     if (days < 0) return { label: "Expired", color: "bg-red-500/10 text-red-400 border-red-500/25" };
@@ -173,21 +167,6 @@ export default function RightsPage() {
   const handleFilterChange = (type: "movieId" | "status", value: string) => {
     if (type === "movieId") setMovieIdFilter(value);
     else if (type === "status") setStatusFilter(value as "all" | "active" | "expired");
-    setPage(0);
-  };
-
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleSelectAll = () => {
-    if (selectedIds.size === rights.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(rights.map((r) => r.id)));
   };
 
   const handleExportClick = useCallback(async () => {
@@ -261,7 +240,7 @@ export default function RightsPage() {
         {rightsTypePills.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
-            onClick={() => { setRightsTypeFilter(id); setPage(0); }}
+            onClick={() => { setRightsTypeFilter(id); }}
             className={cn(
               "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all duration-200 h-9",
               rightsTypeFilter === id
@@ -275,7 +254,7 @@ export default function RightsPage() {
 
         {/* Platform — only when type selected */}
         {rightsTypeFilter !== "all" && (
-          <Select value={platformFilter} onValueChange={(v) => { setPlatformFilter(v); setPage(0); }}>
+          <Select value={platformFilter} onValueChange={(v) => { setPlatformFilter(v); }}>
             <SelectTrigger className="h-9 w-40 bg-(--bg-raise)/40 border-(--svf-border) text-(--text)">
               <SelectValue placeholder="All Platforms" />
             </SelectTrigger>
@@ -289,7 +268,7 @@ export default function RightsPage() {
         )}
 
         {hasFilters && (
-          <Button variant="ghost" size="sm" className="h-9 gap-1 text-(--text-faint)" onClick={() => { setRightsTypeFilter("all"); setPlatformFilter("all"); setMovieIdFilter("all"); setStatusFilter("active"); setPage(0); }}>
+          <Button variant="ghost" size="sm" className="h-9 gap-1 text-(--text-faint)" onClick={() => { setRightsTypeFilter("all"); setPlatformFilter("all"); setMovieIdFilter("all"); setStatusFilter("active"); }}>
             <X className="h-3.5 w-3.5" />Reset
           </Button>
         )}
@@ -297,7 +276,7 @@ export default function RightsPage() {
         <div className="flex-1" />
 
         {/* Actions */}
-        <Button variant="outline" size="sm" className="h-9 gap-2 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) hover:bg-(--hover)" onClick={handleExportClick} disabled={exportLoading}>
+        <Button variant="outline" size="sm" className="h-9 gap-2 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover) shadow-sm shadow-red-500/20" onClick={handleExportClick} disabled={exportLoading}>
           {exportLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
           Export
         </Button>
@@ -320,7 +299,7 @@ export default function RightsPage() {
             </div>
           ) : rights.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3">
-              <div className="p-4 rounded-full bg-slate-800/50 border border-(--svf-border)">
+              <div className="p-4 rounded-full bg-(--bg-raise) border border-(--svf-border)">
                 <FileText className="h-8 w-8 text-(--text-faint)" />
               </div>
               <p className="text-(--text-faint) font-medium">No rights found.</p>
@@ -332,14 +311,6 @@ export default function RightsPage() {
                 <Table>
                   <TableHeader style={{ background: "var(--bg-deep)" }}>
                     <TableRow className="border-(--svf-border) hover:bg-transparent">
-                      <TableHead className="w-10 pl-5">
-                        <Checkbox
-                          checked={rights.length > 0 && selectedIds.size === rights.length}
-                          onCheckedChange={toggleSelectAll}
-                          aria-label="Select all"
-                          className="border-slate-600"
-                        />
-                      </TableHead>
                       <SortableHeader column="movies" label="Movie" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)" />
                       <SortableHeader column="platforms" label="Platform" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden md:table-cell" />
                       <SortableHeader column="license_type" label="Type" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden lg:table-cell" />
@@ -354,16 +325,8 @@ export default function RightsPage() {
                     {sortedRights.map((right) => {
                       const status = getExpiryStatus(right.end_date);
                       return (
-                        <TableRow key={right.id} className="border-(--svf-border)/40 hover:bg-slate-800/30 transition-colors group">
+                        <TableRow key={right.id} className="border-(--svf-border)/40 hover:bg-(--hover)/30 transition-colors group">
                           <TableCell className="pl-5 py-3.5">
-                            <Checkbox
-                              checked={selectedIds.has(right.id)}
-                              onCheckedChange={() => toggleSelect(right.id)}
-                              aria-label={`Select ${right.movies?.title || "right"}`}
-                              className="border-slate-600"
-                            />
-                          </TableCell>
-                          <TableCell className="py-3.5">
                             <div className="min-w-0">
                               {right.movies ? (
                                 <Link href={`/movies/${right.movies.id}`} className="font-semibold text-sm text-(--text) hover:text-red-400 transition-colors truncate block max-w-[200px]">
@@ -433,17 +396,6 @@ export default function RightsPage() {
                 </Table>
               </div>
 
-              {totalCount > pageSize && (
-                <div className="flex items-center justify-between px-6 py-4 border-t border-(--svf-border)">
-                  <p className="text-xs text-(--text-faint) tabular-nums">
-                    {page * pageSize + 1}–{Math.min((page + 1) * pageSize, totalCount)} of {totalCount}
-                  </p>
-                  <div className="flex gap-1.5">
-                    <Button variant="outline" size="sm" className="h-8 px-4 bg-slate-800/40 border-(--svf-border) text-(--text-faint) hover:bg-slate-700/60" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>Previous</Button>
-                    <Button variant="outline" size="sm" className="h-8 px-4 bg-slate-800/40 border-(--svf-border) text-(--text-faint) hover:bg-slate-700/60" onClick={() => setPage(p => p + 1)} disabled={(page + 1) * pageSize >= totalCount}>Next</Button>
-                  </div>
-                </div>
-              )}
             </>
           )}
         </div>

@@ -86,7 +86,7 @@ export function NotificationBell() {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative hover:bg-slate-800 hover:text-(--text) transition-colors">
+        <Button variant="ghost" size="icon" className="relative hover:bg-(--hover) hover:text-(--text) transition-colors">
           <Bell className="h-5 w-5 text-(--text-faint)" />
           {count > 0 && (
             <Badge
@@ -105,7 +105,7 @@ export function NotificationBell() {
         <div className="flex items-center justify-between p-4 border-b border-(--svf-border) bg-(--bg-deep)/50">
           <h4 className="font-semibold text-sm text-(--text) tracking-wide">Notifications</h4>
           {count > 0 && (
-            <Button variant="ghost" size="sm" className="text-xs h-7 text-(--text-faint) hover:text-(--text) hover:bg-slate-800" onClick={handleMarkAllRead}>
+            <Button variant="ghost" size="sm" className="text-xs h-7 text-(--text-faint) hover:text-(--text) hover:bg-(--hover)" onClick={handleMarkAllRead}>
               <Check className="mr-1 h-3 w-3" />
               Mark all read
             </Button>
@@ -127,7 +127,7 @@ export function NotificationBell() {
               return (
                 <div
                   key={n.id}
-                  className="flex gap-3 p-4 border-b border-(--svf-border)/40 last:border-0 hover:bg-slate-800/50 transition-colors group relative"
+                  className="flex gap-3 p-4 border-b border-(--svf-border)/40 last:border-0 hover:bg-(--hover) transition-colors group relative"
                 >
                   <div
                     className={`mt-1 h-2 w-2 rounded-full shrink-0 shadow-[0_0_8px_currentColor] ${severityColors[n.severity] || severityColors.info
@@ -159,7 +159,7 @@ export function NotificationBell() {
         </div>
 
         <div className="p-2 border-t border-(--svf-border) bg-(--bg-deep)/20">
-          <Button variant="ghost" size="sm" className="w-full text-xs font-medium text-(--text-faint) hover:text-(--text) hover:bg-slate-800" asChild>
+          <Button variant="ghost" size="sm" className="w-full text-xs font-medium text-(--text-faint) hover:text-(--text) hover:bg-(--hover)" asChild>
             <Link href="/notifications" onClick={() => setOpen(false)}>
               View all notifications
             </Link>

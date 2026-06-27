@@ -69,8 +69,6 @@ export default function ExpiringRightsPage() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [deletingRight, setDeletingRight] = useState<ExpiringRight | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [tabPages, setTabPages] = useState<Record<string, number>>({ all: 0, critical: 0, urgent: 0, upcoming: 0 });
-  const setTabPage = (tab: string, p: number) => setTabPages((prev) => ({ ...prev, [tab]: p }));
 
   const canDelete = profile?.role === "admin" || profile?.role === "editor";
 
@@ -135,12 +133,7 @@ export default function ExpiringRightsPage() {
   useEffect(() => {
     setPlatformFilter("all");
     setSubTypeFilter("all");
-    setTabPages({ all: 0, critical: 0, urgent: 0, upcoming: 0 });
   }, [rightsTypeFilter]);
-
-  useEffect(() => {
-    setTabPages({ all: 0, critical: 0, urgent: 0, upcoming: 0 });
-  }, [activeFilter, platformFilter, subTypeFilter, searchQuery]);
 
   const typeFiltered = useMemo(() => expiringRights.filter((right) => {
     if (rightsTypeFilter === "all") return true;
@@ -178,8 +171,6 @@ export default function ExpiringRightsPage() {
   const urgentRights = sortedFiltered.filter((r) => r.days_until_expiry > 7 && r.days_until_expiry <= 30);
   const upcomingRights = sortedFiltered.filter((r) => r.days_until_expiry > 30);
 
-  const PAGE_SIZE = 50;
-
   const getUrgencyRowClass = (days: number) => {
     if (days <= 7) return "border-l-2 border-l-red-500/70 bg-red-500/5";
     if (days <= 30) return "border-l-2 border-l-amber-500/70 bg-amber-500/5";
@@ -198,7 +189,7 @@ export default function ExpiringRightsPage() {
       </span>
     );
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-700/50 text-(--text-faint) border border-slate-600/30">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-(--bg-deep) text-(--text-faint) border border-(--svf-border-strong)">
         {days}d
       </span>
     );
@@ -443,7 +434,7 @@ export default function ExpiringRightsPage() {
         {hasSecondaryFilters && (
           <Button
             variant="ghost" size="sm"
-            className="h-9 gap-1.5 text-(--text-faint) hover:text-(--text) hover:bg-slate-800/50"
+            className="h-9 gap-1.5 text-(--text-faint) hover:text-(--text) hover:bg-(--hover)"
             onClick={() => { setPlatformFilter("all"); setSubTypeFilter("all"); setSearchQuery(""); }}
           >
             <X className="h-3.5 w-3.5" /> Clear
@@ -454,7 +445,8 @@ export default function ExpiringRightsPage() {
         <Button
           onClick={exportToExcel}
           disabled={filteredRights.length === 0}
-          className="ml-auto bg-slate-800/80 hover:bg-slate-700/80 text-(--text) border border-(--svf-border)/60 shadow-sm gap-2"
+          variant="outline"
+          className="ml-auto h-9 gap-2 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover) shadow-sm shadow-red-500/20"
           size="sm"
         >
           <Download className="h-4 w-4" />
@@ -491,7 +483,7 @@ export default function ExpiringRightsPage() {
               <div />
             </div>
 
-            {sortedFiltered.slice(0, (tabPages["all"] + 1) * PAGE_SIZE).map((right) => {
+            {sortedFiltered.map((right) => {
               const urgencyColor =
                 right.days_until_expiry < 0 ? "var(--st-expired)"
                 : right.days_until_expiry <= 90 ? "var(--st-expired)"
@@ -607,16 +599,6 @@ export default function ExpiringRightsPage() {
               );
             })}
 
-            {sortedFiltered.length > (tabPages["all"] + 1) * PAGE_SIZE && (
-              <div className="flex items-center justify-between px-5 py-3" style={{ borderTop: "1px solid var(--svf-border)" }}>
-                <p className="text-xs" style={{ color: "var(--text-faint)" }}>
-                  Showing {Math.min((tabPages["all"] + 1) * PAGE_SIZE, sortedFiltered.length)} of {sortedFiltered.length} rights
-                </p>
-                <Button variant="outline" size="sm" className="h-8" onClick={() => setTabPage("all", (tabPages["all"] ?? 0) + 1)}>
-                  Load more
-                </Button>
-              </div>
-            )}
           </>
         )}
       </div>

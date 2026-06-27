@@ -56,8 +56,6 @@ export default function DirectorsPage() {
   const [sortBy, setSortBy] = useState<SortOption>("name_asc");
   const [loading, setLoading] = useState(true);
   const toast = useAppToast();
-  const [page, setPage] = useState(0);
-  const pageSize = 24;
 
   // Create director dialog
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -140,17 +138,6 @@ export default function DirectorsPage() {
     return result;
   }, [directors, sortBy, searchQuery]);
 
-  const paginatedDirectors = useMemo(() => {
-    return processedDirectors.slice(page * pageSize, (page + 1) * pageSize);
-  }, [processedDirectors, page, pageSize]);
-
-  // Debounce search
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setPage(0);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
 
   return (
     <div className="space-y-4">
@@ -159,10 +146,11 @@ export default function DirectorsPage() {
         <div className="flex items-center gap-2 shrink-0 ml-auto">
           <Button
             onClick={() => setShowExportDialog(true)}
+            variant="outline"
             size="sm"
-            className="h-9 gap-2 bg-slate-800/80 hover:bg-slate-700/80 text-(--text) border border-(--svf-border)/60"
+            className="h-9 gap-2 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover) shadow-sm shadow-red-500/20"
           >
-            Export
+            <Download className="h-4 w-4" /> Export
           </Button>
           <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
             <DialogTrigger asChild>
@@ -193,7 +181,7 @@ export default function DirectorsPage() {
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => { setCreateDialogOpen(false); setNewDirectorName(""); }}
-                  className="border-(--svf-border) text-(--text) hover:bg-slate-800/60">
+                  className="border-(--svf-border) text-(--text) hover:bg-(--hover)">
                   Cancel
                 </Button>
                 <Button onClick={handleCreateDirector} disabled={creating || !newDirectorName.trim()}
@@ -240,7 +228,7 @@ export default function DirectorsPage() {
           </Select>
 
           {searchQuery && (
-            <Button variant="ghost" size="sm" className="h-9 gap-1.5 text-(--text-faint) hover:text-(--text) hover:bg-slate-800/50"
+            <Button variant="ghost" size="sm" className="h-9 gap-1.5 text-(--text-faint) hover:text-(--text) hover:bg-(--hover)"
               onClick={() => setSearchQuery("")}>
               <X className="h-3.5 w-3.5" /> Clear
             </Button>
@@ -259,7 +247,7 @@ export default function DirectorsPage() {
             <div key={i} className="h-48 rounded-[14px] border border-(--svf-border) bg-(--panel) animate-pulse" />
           ))}
         </div>
-      ) : paginatedDirectors.length === 0 ? (
+      ) : processedDirectors.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 rounded-[14px] border border-dashed border-(--svf-border) bg-(--panel)/30">
           <div className="p-4 rounded-full bg-(--bg-raise) border border-(--svf-border) mb-4">
             <Clapperboard className="h-9 w-9 text-(--text-faint)" />
@@ -273,32 +261,11 @@ export default function DirectorsPage() {
           </Button>
         </div>
       ) : (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {paginatedDirectors.map((director) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            {processedDirectors.map((director) => (
               <PersonCard key={director.id} person={director as any} />
             ))}
           </div>
-
-          {processedDirectors.length > pageSize && (
-            <div className="flex items-center justify-between pt-4 border-t border-(--svf-border)">
-              <p className="text-xs text-(--text-faint)">
-                <span className="font-medium text-(--text)">{page * pageSize + 1}–{Math.min((page + 1) * pageSize, processedDirectors.length)}</span>
-                {" "}of {processedDirectors.length}
-              </p>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
-                  className="h-8 bg-(--bg-raise) border-(--svf-border) text-(--text) hover:bg-(--hover)">
-                  Previous
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={(page + 1) * pageSize >= processedDirectors.length}
-                  className="h-8 bg-(--bg-raise) border-(--svf-border) text-(--text) hover:bg-(--hover)">
-                  Next
-                </Button>
-              </div>
-            </div>
-          )}
-        </>
       )}
 
       <DataExportDialog

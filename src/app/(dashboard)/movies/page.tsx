@@ -29,6 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { SpecialEventsBanner } from "@/components/movies/special-events-banner";
 import { useAuth } from "@/contexts/auth-context";
 import { useAppToast } from "@/hooks/use-app-toast";
 import { getDistinctCertifications, getPlatforms, getRightsNatureTypes } from "@/lib/api/dashboard";
@@ -65,7 +66,7 @@ export default function MoviesPage() {
   const [versionFilter, setVersionFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const toast = useAppToast();
-  const [page, setPage] = useState(0);
+
   const [languages, setLanguages] = useState<string[]>([]);
   const [certificationFilter, setCertificationFilter] = useState<string[]>([]);
   const [certificationOptions, setCertificationOptions] = useState<string[]>([]);
@@ -77,6 +78,9 @@ export default function MoviesPage() {
   const [natureTypes, setNatureTypes] = useState<RightsNatureType[]>([]);
   const [sortBy, setSortBy] = useState<'title_asc' | 'title_desc' | 'created_at_desc' | 'release_date_asc' | 'release_date_desc'>('title_asc');
   const [agreementExpiryYear, setAgreementExpiryYear] = useState<string>("all");
+  const [agreementEndFrom, setAgreementEndFrom] = useState<string>("");
+  const [agreementEndTo, setAgreementEndTo] = useState<string>("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [exportMovieFormat, setExportMovieFormat] = useState<"home" | "acquired">("acquired");
@@ -84,7 +88,7 @@ export default function MoviesPage() {
   const [exportingXlsx, setExportingXlsx] = useState(false);
   const [showBulkPostersDialog, setShowBulkPostersDialog] = useState(false);
   const [view, setView] = useState<"list" | "grid">("list");
-  const pageSize = 50;
+  const [anniversaryEnabled, setAnniversaryEnabled] = useState(false);
 
   const currentYear = new Date().getFullYear();
   const expiryYearOptions = Array.from({ length: 12 }, (_, i) => String(currentYear - 1 + i));
@@ -104,13 +108,23 @@ export default function MoviesPage() {
     }).catch(() => {
       setCertificationOptions(['U', 'UA', 'UA 7+', 'UA 13+', 'UA 16+', 'A', 'S']);
     });
+    // Check anniversary notification preference
+    fetch('/api/notifications/preferences')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data?.preferences) return;
+        const pref = data.preferences.find((p: any) => p.notification_type === 'anniversary_notification');
+        // Show banner if: globally enabled AND user hasn't disabled it (or no preference set = default on)
+        setAnniversaryEnabled(!pref || (pref.globally_enabled && pref.user_enabled));
+      })
+      .catch(() => { });
   }, []);
 
   const fetchMovies = useCallback(async () => {
     try {
       setLoading(true);
 
-      const source = (sourceFilter === "all" || sourceFilter === "jointly_owned") ? undefined : (sourceFilter as "home_production" | "acquired" | "expired");
+      const source = (sourceFilter === "all" || sourceFilter === "jointly_owned" || sourceFilter === "bangladeshi") ? undefined : (sourceFilter as "home_production" | "acquired" | "expired");
 
       const { data: allGroupedData } = await getGroupedMovies({
         source,
@@ -133,6 +147,10 @@ export default function MoviesPage() {
         filteredData = filteredData.filter(m => m.total_versions === 1);
       }
 
+      if (sourceFilter === "bangladeshi") {
+        filteredData = filteredData.filter(m => m.primary_version?.is_bangladeshi === true);
+      }
+
       if (agreementExpiryYear !== "all" && sourceFilter === "acquired") {
         const yearNum = parseInt(agreementExpiryYear);
         filteredData = filteredData.filter(m => {
@@ -142,35 +160,56 @@ export default function MoviesPage() {
         });
       }
 
-      const totalFiltered = filteredData.length;
-      const start = page * pageSize;
-      const paginatedData = filteredData.slice(start, start + pageSize);
+      if (agreementEndFrom || agreementEndTo) {
+        const from = agreementEndFrom ? new Date(agreementEndFrom) : null;
+        const to = agreementEndTo ? new Date(agreementEndTo) : null;
+        filteredData = filteredData.filter(m => {
+          const endDate = m.primary_version?.agreement_end_date;
+          if (!endDate) return false;
+          const d = new Date(endDate);
+          if (from && d < from) return false;
+          if (to && d > to) return false;
+          return true;
+        });
+      }
 
       setAllFilteredMovies(filteredData);
-      setMovies(paginatedData);
-      setTotalCount(totalFiltered);
+      setMovies(filteredData);
+      setTotalCount(filteredData.length);
+      setSelectedIds(new Set());
     } catch (err) {
       console.error("Error fetching movies:", err);
       toast.error(err instanceof Error ? err.message : "Failed to load movies");
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, sourceFilter, versionFilter, languageFilter, certificationFilter, yearFrom, yearTo, territoryFilter, natureFilter, sortBy, agreementExpiryYear, page, approvalFilter, canFilterByApproval]);
+  }, [searchQuery, sourceFilter, versionFilter, languageFilter, certificationFilter, yearFrom, yearTo, territoryFilter, natureFilter, sortBy, agreementExpiryYear, agreementEndFrom, agreementEndTo, approvalFilter, canFilterByApproval]);
 
   useEffect(() => { fetchMovies(); }, [fetchMovies]);
 
-  useEffect(() => {
-    const timer = setTimeout(() => setPage(0), 300);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
   const handleSourceChange = (value: string) => {
     setSourceFilter(value);
-    if (value === "home_production" || value === "expired" || value === "jointly_owned") {
+    if (value === "home_production" || value === "expired" || value === "jointly_owned" || value === "bangladeshi") {
       setAgreementExpiryYear("all");
     }
-    setPage(0);
   };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === movies.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(movies.map(m => m.production_no)));
+  };
+
+  const exportMovies = selectedIds.size > 0
+    ? allFilteredMovies.filter(m => selectedIds.has(m.production_no))
+    : allFilteredMovies;
 
   const handleExportXlsx = async () => {
     setExportingXlsx(true);
@@ -179,7 +218,7 @@ export default function MoviesPage() {
 
       // Collect versions matching the selected format
       const versions: MovieLanguageVersion[] = [];
-      for (const group of allFilteredMovies) {
+      for (const group of exportMovies) {
         const vs: MovieLanguageVersion[] = group.versions?.length
           ? group.versions
           : group.primary_version ? [group.primary_version] : [];
@@ -387,7 +426,7 @@ export default function MoviesPage() {
 
   const hasFilters = searchQuery || sourceFilter !== "all" || versionFilter !== "all" || natureFilter !== "all"
     || languageFilter !== "all" || certificationFilter.length > 0 || yearFrom || yearTo || territoryFilter
-    || agreementExpiryYear !== "all";
+    || agreementExpiryYear !== "all" || agreementEndFrom || agreementEndTo;
 
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return "—";
@@ -411,18 +450,18 @@ export default function MoviesPage() {
       </Badge>
     );
     return (
-      <Badge variant="outline" className="bg-slate-800/60 text-slate-400 border-slate-700/50 text-xs font-mono">
+      <Badge variant="outline" className="bg-(--bg-deep) text-(--text-faint) border-(--svf-border) text-xs font-mono">
         {formatDate(dateStr)}
       </Badge>
     );
   };
 
-  const totalPages = Math.ceil(totalCount / pageSize);
   const showAgreementExpiry = sourceFilter === "acquired";
   const showJointProdCols = sourceFilter === "jointly_owned";
   const showBuyBackCol = sourceFilter === "jointly_owned" || natureFilter === "Jointly Owned";
   const showAgreementEndCol = sourceFilter !== "home_production" && sourceFilter !== "jointly_owned";
   const showMultiVersionCol = versionFilter === "multi";
+  const showLicensorCol = sourceFilter === "acquired";
 
   // Duotone hue per movie for poster
   const movieHue = (movie: GroupedMovie, idx: number) => {
@@ -433,6 +472,8 @@ export default function MoviesPage() {
 
   return (
     <div className="space-y-4">
+
+      <SpecialEventsBanner preferenceEnabled={anniversaryEnabled} />
 
       {/* Filters — all original filters restored */}
       <Card className="glass-card overflow-hidden">
@@ -458,13 +499,14 @@ export default function MoviesPage() {
                   <SelectItem value="home_production">Home Production</SelectItem>
                   <SelectItem value="acquired">Acquired</SelectItem>
                   <SelectItem value="jointly_owned">Joint Production</SelectItem>
+                  <SelectItem value="bangladeshi">Bangladeshi</SelectItem>
                   <SelectItem value="expired">Expired</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Language</label>
-              <Select value={languageFilter} onValueChange={(v) => { setLanguageFilter(v); setPage(0); }}>
+              <Select value={languageFilter} onValueChange={(v) => { setLanguageFilter(v); }}>
                 <SelectTrigger className="h-9 w-full">
                   <div className="flex items-center gap-2"><Languages className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} /><SelectValue placeholder="Language" /></div>
                 </SelectTrigger>
@@ -497,13 +539,13 @@ export default function MoviesPage() {
                 <PopoverContent className="w-52 p-0" align="start" style={{ background: "var(--panel-solid)", border: "1px solid var(--svf-border-strong)", borderRadius: 11 }}>
                   <div className="p-2 space-y-0.5" style={{ borderBottom: "1px solid var(--svf-border)" }}>
                     <label className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-sm" style={{ color: "var(--text-dim)" }}>
-                      <Checkbox checked={certificationFilter.length === 0} onCheckedChange={() => { setCertificationFilter([]); setPage(0); }} />
+                      <Checkbox checked={certificationFilter.length === 0} onCheckedChange={() => { setCertificationFilter([]); }} />
                       <span className="font-medium">All</span>
                     </label>
                     <label className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-sm" style={{ color: "var(--text-dim)" }}>
                       <Checkbox
                         checked={certificationFilter.length > 0 && !certificationFilter.includes("A") && certificationOptions.filter(c => c !== "A").every(c => certificationFilter.includes(c))}
-                        onCheckedChange={() => { setCertificationFilter(certificationOptions.filter(c => c !== "A")); setPage(0); }}
+                        onCheckedChange={() => { setCertificationFilter(certificationOptions.filter(c => c !== "A")); }}
                       />
                       <span className="font-medium">Except A</span>
                     </label>
@@ -514,7 +556,6 @@ export default function MoviesPage() {
                         <Checkbox checked={certificationFilter.includes(cert)}
                           onCheckedChange={(checked) => {
                             setCertificationFilter(prev => checked ? [...prev, cert] : prev.filter(c => c !== cert));
-                            setPage(0);
                           }} />
                         <span className="font-medium">{cert}</span>
                       </label>
@@ -525,7 +566,7 @@ export default function MoviesPage() {
             </div>
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Versions</label>
-              <Select value={versionFilter} onValueChange={(v) => { setVersionFilter(v); setPage(0); }}>
+              <Select value={versionFilter} onValueChange={(v) => { setVersionFilter(v); }}>
                 <SelectTrigger className="h-9 w-full">
                   <div className="flex items-center gap-2"><Languages className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} /><SelectValue placeholder="All Versions" /></div>
                 </SelectTrigger>
@@ -538,7 +579,7 @@ export default function MoviesPage() {
             </div>
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Nature</label>
-              <Select value={natureFilter} onValueChange={(v) => { setNatureFilter(v); setPage(0); }}>
+              <Select value={natureFilter} onValueChange={(v) => { setNatureFilter(v); }}>
                 <SelectTrigger className="h-9 w-full">
                   <div className="flex items-center gap-2"><ShieldCheck className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} /><SelectValue placeholder="Any Nature" /></div>
                 </SelectTrigger>
@@ -551,7 +592,7 @@ export default function MoviesPage() {
             </div>
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Territory</label>
-              <Select value={territoryFilter} onValueChange={(v) => { setTerritoryFilter(v === "all" ? "" : v); setPage(0); }}>
+              <Select value={territoryFilter} onValueChange={(v) => { setTerritoryFilter(v === "all" ? "" : v); }}>
                 <SelectTrigger className="h-9 w-full">
                   <div className="flex items-center gap-2"><LayoutGrid className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} /><SelectValue placeholder="All Territories" /></div>
                 </SelectTrigger>
@@ -565,15 +606,23 @@ export default function MoviesPage() {
             </div>
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Release From</label>
-              <Input type="date" value={yearFrom} onChange={(e) => { setYearFrom(e.target.value); setPage(0); }} className="h-9 w-full" />
+              <Input type="date" value={yearFrom} onChange={(e) => { setYearFrom(e.target.value); }} className="h-9 w-full" />
             </div>
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Release To</label>
-              <Input type="date" value={yearTo} onChange={(e) => { setYearTo(e.target.value); setPage(0); }} className="h-9 w-full" />
+              <Input type="date" value={yearTo} onChange={(e) => { setYearTo(e.target.value); }} className="h-9 w-full" />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Agreement End From</label>
+              <Input type="date" value={agreementEndFrom} onChange={(e) => { setAgreementEndFrom(e.target.value); }} className="h-9 w-full" />
+            </div>
+            <div>
+              <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Agreement End To</label>
+              <Input type="date" value={agreementEndTo} onChange={(e) => { setAgreementEndTo(e.target.value); }} className="h-9 w-full" />
             </div>
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Sort By</label>
-              <Select value={sortBy} onValueChange={(v: any) => { setSortBy(v); setPage(0); }}>
+              <Select value={sortBy} onValueChange={(v: any) => { setSortBy(v); }}>
                 <SelectTrigger className="h-9 w-full">
                   <div className="flex items-center gap-2"><Settings2 className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} /><SelectValue /></div>
                 </SelectTrigger>
@@ -592,7 +641,7 @@ export default function MoviesPage() {
                 <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>
                   {canSeeAllStatuses ? "Approval" : "Show"}
                 </label>
-                <Select value={approvalFilter} onValueChange={(v) => { setApprovalFilter(v as ApprovalStatus | "all"); setPage(0); }}>
+                <Select value={approvalFilter} onValueChange={(v) => { setApprovalFilter(v as ApprovalStatus | "all"); }}>
                   <SelectTrigger className="h-9 w-full">
                     <div className="flex items-center gap-2">
                       <ShieldCheck className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} />
@@ -614,7 +663,8 @@ export default function MoviesPage() {
                   setSearchQuery(""); setSourceFilter("all"); setVersionFilter("all"); setNatureFilter("all");
                   setLanguageFilter(languages.find(l => l.toLowerCase() === "bengali") ?? "all");
                   setCertificationFilter([]); setYearFrom(""); setYearTo(""); setTerritoryFilter("");
-                  setAgreementExpiryYear("all"); setApprovalFilter(canSeeAllStatuses ? "approved" : "all"); setPage(0);
+                  setAgreementExpiryYear("all"); setAgreementEndFrom(""); setAgreementEndTo("");
+                  setApprovalFilter(canSeeAllStatuses ? "approved" : "all");
                 }}>
                   <X className="h-3.5 w-3.5" />Clear Filters
                 </Button>
@@ -626,7 +676,7 @@ export default function MoviesPage() {
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 pt-2" style={{ borderTop: "1px solid var(--svf-border)" }}>
               <div>
                 <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Agreement Expiry</label>
-                <Select value={agreementExpiryYear} onValueChange={(v) => { setAgreementExpiryYear(v); setPage(0); }}>
+                <Select value={agreementExpiryYear} onValueChange={(v) => { setAgreementExpiryYear(v); }}>
                   <SelectTrigger className="h-9 w-full">
                     <div className="flex items-center gap-2"><Calendar className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} /><SelectValue placeholder="Any Year" /></div>
                   </SelectTrigger>
@@ -644,7 +694,7 @@ export default function MoviesPage() {
       {/* Count + actions + view toggle — all in one row */}
       <div className="flex flex-wrap items-center gap-2">
         <RoleGate action="import" resource="movie">
-          <Button variant="outline" size="sm" className="gap-2 h-9 px-4 bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20 hover:border-amber-500/50 hover:text-amber-300" onClick={() => setShowImportDialog(true)}>
+          <Button variant="outline" size="sm" className="gap-2 h-9 px-4 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover)" onClick={() => setShowImportDialog(true)}>
             <Upload className="h-4 w-4" /><span>Upload CSV</span>
           </Button>
         </RoleGate>
@@ -655,7 +705,12 @@ export default function MoviesPage() {
         )}
         <div className="flex-1" />
         <RoleGate action="export" resource="movie">
-          <Button variant="outline" size="sm" className="gap-2 h-9 px-4 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) hover:bg-(--hover)" onClick={() => setShowExportDialog(true)}>
+          {selectedIds.size > 0 && (
+            <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/25 text-red-500">
+              {selectedIds.size} selected
+            </span>
+          )}
+          <Button variant="outline" size="sm" className="gap-2 h-9 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover) shadow-sm shadow-red-500/20" onClick={() => setShowExportDialog(true)}>
             <Download className="h-4 w-4" /><span>Export</span>
           </Button>
         </RoleGate>
@@ -778,7 +833,14 @@ export default function MoviesPage() {
                 <Table>
                   <TableHeader style={{ background: "var(--bg-deep)" }}>
                     <TableRow style={{ borderColor: "var(--svf-border)" }} className="hover:bg-transparent">
-                      <TableHead className="pl-6 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Title</TableHead>
+                      <TableHead className="w-10 pl-4">
+                        <Checkbox
+                          checked={movies.length > 0 && selectedIds.size === movies.length}
+                          onCheckedChange={toggleSelectAll}
+                          aria-label="Select all"
+                        />
+                      </TableHead>
+                      <TableHead className="pl-2 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Title</TableHead>
                       <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Source</TableHead>
                       <TableHead className="hidden sm:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Release</TableHead>
                       <TableHead className="hidden md:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Cert</TableHead>
@@ -790,6 +852,7 @@ export default function MoviesPage() {
                         </>
                       )}
                       <TableHead className="hidden lg:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Rights</TableHead>
+                      {showLicensorCol && <TableHead className="hidden lg:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Licensor</TableHead>}
                       {showAgreementEndCol && <TableHead className="hidden xl:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Agreement End</TableHead>}
                       {showBuyBackCol && <TableHead className="hidden xl:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Buy Back</TableHead>}
                       <TableHead className="hidden xl:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">WTP</TableHead>
@@ -808,8 +871,15 @@ export default function MoviesPage() {
                       const hue2 = (hue + 40) % 360;
 
                       return (
-                        <TableRow key={movie.production_no} style={{ borderColor: "var(--svf-border)" }} className="transition-colors group">
-                          <TableCell className="pl-6 max-w-xs py-3">
+                        <TableRow key={movie.production_no} style={{ borderColor: "var(--svf-border)" }} className={cn("transition-colors group", selectedIds.has(movie.production_no) && "bg-red-500/5")}>
+                          <TableCell className="pl-4 py-3 w-10">
+                            <Checkbox
+                              checked={selectedIds.has(movie.production_no)}
+                              onCheckedChange={() => toggleSelect(movie.production_no)}
+                              aria-label={`Select ${movie.title}`}
+                            />
+                          </TableCell>
+                          <TableCell className="pl-2 max-w-xs py-3">
                             <div className="flex items-center gap-3 min-w-0">
                               {/* Mini poster */}
                               <div style={{
@@ -896,6 +966,12 @@ export default function MoviesPage() {
                             </div>
                           </TableCell>
 
+                          {showLicensorCol && (
+                            <TableCell className="hidden lg:table-cell text-xs py-3 max-w-[140px]" style={{ color: "var(--text-faint)" }}>
+                              <span className="line-clamp-1">{pv?.assignor_licensor || "—"}</span>
+                            </TableCell>
+                          )}
+
                           {showAgreementEndCol && (
                             <TableCell className="hidden xl:table-cell py-3">
                               {isAcquired ? getAgreementEndBadge(pv?.agreement_end_date) : <span className="text-xs" style={{ color: "var(--text-faint)" }}>—</span>}
@@ -936,30 +1012,6 @@ export default function MoviesPage() {
               </div>
             )}
 
-            {/* Pagination */}
-            {totalCount > pageSize && (
-              <div className="flex items-center justify-between px-6 py-4" style={{ borderTop: "1px solid var(--svf-border)" }}>
-                <p className="text-xs" style={{ color: "var(--text-faint)" }}>
-                  {page * pageSize + 1}–{Math.min((page + 1) * pageSize, totalCount)} of {totalCount}
-                </p>
-                <div className="flex items-center gap-1">
-                  <Button variant="outline" size="sm" className="h-7 w-7 p-0" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>
-                    <ChevronLeft className="h-3.5 w-3.5" />
-                  </Button>
-                  {[...Array(Math.min(totalPages, 5))].map((_, i) => (
-                    <Button key={i} variant={page === i ? "default" : "outline"} size="sm" className="h-7 w-7 p-0 text-xs" onClick={() => setPage(i)}>
-                      {i + 1}
-                    </Button>
-                  ))}
-                  {totalPages > 5 && page >= 5 && (
-                    <Button variant="default" size="sm" className="h-7 px-2.5 text-xs">{page + 1}</Button>
-                  )}
-                  <Button variant="outline" size="sm" className="h-7 w-7 p-0" onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}>
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -972,17 +1024,22 @@ export default function MoviesPage() {
       {showExportDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowExportDialog(false)} />
-          <div className="relative z-10 w-full max-w-sm mx-4 rounded-xl bg-slate-900 border border-slate-700/60 shadow-2xl p-6 space-y-5">
+          <div className="relative z-10 w-full max-w-sm mx-4 rounded-xl bg-(--panel-solid) border border-(--svf-border-strong) shadow-2xl p-6 space-y-5">
             <div>
-              <h2 className="text-base font-semibold text-slate-100">Export Movies</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Each language version is exported as a separate row.</p>
+              <h2 className="text-base font-semibold text-(--text)">Export Movies</h2>
+              <p className="text-xs text-(--text-faint) mt-0.5">
+                {selectedIds.size > 0
+                  ? <><span className="text-red-500 font-semibold">{selectedIds.size} selected</span> — only selected movies will be exported.</>
+                  : <>All <span className="font-semibold text-(--text)">{totalCount}</span> filtered movies will be exported. Each language version as a separate row.</>
+                }
+              </p>
             </div>
 
             <div className="space-y-3">
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5 block">Movie Format</label>
+                <label className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1.5 block">Movie Format</label>
                 <Select value={exportMovieFormat} onValueChange={(v) => setExportMovieFormat(v as "home" | "acquired")}>
-                  <SelectTrigger className="h-9 bg-slate-950/40 border-slate-700/50 text-slate-300 text-sm">
+                  <SelectTrigger className="h-9 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) text-sm">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -999,14 +1056,14 @@ export default function MoviesPage() {
                   className="mt-0.5"
                 />
                 <div>
-                  <p className="text-sm font-medium text-slate-200 group-hover:text-white transition-colors">Include Platform Rights</p>
-                  <p className="text-xs text-slate-400 mt-0.5">Exports with SATELLITE RIGHTS / INTERNET RIGHTS sections in the same header format used for import. Dates like 3099-12-31 are written as "Perpetual".</p>
+                  <p className="text-sm font-medium text-(--text) transition-colors">Include Platform Rights</p>
+                  <p className="text-xs text-(--text-faint) mt-0.5">Exports with SATELLITE RIGHTS / INTERNET RIGHTS sections in the same header format used for import. Dates like 3099-12-31 are written as "Perpetual".</p>
                 </div>
               </label>
             </div>
 
             <div className="flex gap-2 pt-1">
-              <Button variant="outline" size="sm" className="flex-1 h-9 bg-slate-800/60 border-slate-700/50 text-slate-300" onClick={() => setShowExportDialog(false)}>
+              <Button variant="outline" size="sm" className="flex-1 h-9 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover)" onClick={() => setShowExportDialog(false)}>
                 Cancel
               </Button>
               <Button size="sm" className="flex-1 h-9 bg-red-600 hover:bg-red-500 text-white gap-2" onClick={handleExportXlsx} disabled={exportingXlsx}>

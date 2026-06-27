@@ -143,7 +143,11 @@ VALUES
 
     ('password_reset',           TRUE,
      'Password reset email — always sent, cannot be disabled by users',
-     'account', NULL)
+     'account', NULL),
+
+    ('anniversary_notification', TRUE,
+     'Special Events banner on Movies page showing upcoming anniversaries and jubilees',
+     'special_events', NULL)
 
 ON CONFLICT (notification_type) DO NOTHING;
 

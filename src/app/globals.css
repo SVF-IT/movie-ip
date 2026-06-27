@@ -12,7 +12,87 @@
   --accent-c: 0.205;
   --accent-l: 0.635;
 
-  /* Dark (default) */
+  /* Light mode (default) */
+  --bg:             oklch(0.975 0.005 265);
+  --bg-deep:        oklch(0.955 0.007 265);
+  --bg-raise:       oklch(1 0 0);
+  --panel:          oklch(1 0 0 / 0.82);
+  --panel-solid:    oklch(0.99 0.003 265);
+  --hover:          oklch(0.94 0.008 265 / 0.7);
+  --text:           oklch(0.18 0.012 265);
+  --text-dim:       oklch(0.38 0.012 265);
+  --text-faint:     oklch(0.58 0.010 265);
+  --svf-border:     oklch(0.20 0.015 265 / 0.10);
+  --svf-border-strong: oklch(0.20 0.015 265 / 0.16);
+  --shadow-col:     265deg 30% 25%;
+
+  --svf-accent:       oklch(var(--accent-l) var(--accent-c) var(--accent-h));
+  --svf-accent-bright:oklch(0.55 var(--accent-c) var(--accent-h));
+  --svf-accent-soft:  oklch(var(--accent-l) var(--accent-c) var(--accent-h) / 0.10);
+  --svf-accent-line:  oklch(var(--accent-l) var(--accent-c) var(--accent-h) / 0.35);
+
+  /* Status colors */
+  --st-active:   oklch(0.52 0.14 162);
+  --st-expiring: oklch(0.60 0.15 78);
+  --st-expired:  oklch(0.55 0.20 18);
+  --st-open:     oklch(0.50 0.14 235);
+  --st-wtp:      oklch(0.52 0.18 305);
+
+  /* Shadcn compat tokens */
+  --background:          oklch(0.975 0.005 265);
+  --foreground:          oklch(0.18 0.012 265);
+  --card:                oklch(1 0 0);
+  --card-foreground:     oklch(0.18 0.012 265);
+  --popover:             oklch(1 0 0);
+  --popover-foreground:  oklch(0.18 0.012 265);
+  --primary:             oklch(var(--accent-l) var(--accent-c) var(--accent-h));
+  --primary-foreground:  oklch(1 0 0);
+  --secondary:           oklch(0.94 0.008 265);
+  --secondary-foreground:oklch(0.18 0.012 265);
+  --muted:               oklch(0.94 0.008 265);
+  --muted-foreground:    oklch(0.52 0.010 265);
+  --accent:              oklch(0.94 0.008 265);
+  --accent-foreground:   oklch(0.18 0.012 265);
+  --destructive:         oklch(0.55 0.20 18);
+  --destructive-foreground: oklch(1 0 0);
+  --border:              oklch(0.20 0.015 265 / 0.12);
+  --input:               oklch(0.20 0.015 265 / 0.10);
+  --ring:                oklch(var(--accent-l) var(--accent-c) var(--accent-h) / 0.4);
+
+  --chart-1: oklch(var(--accent-l) var(--accent-c) var(--accent-h));
+  --chart-2: oklch(0.52 0.14 162);
+  --chart-3: oklch(0.60 0.15 78);
+  --chart-4: oklch(0.50 0.14 235);
+  --chart-5: oklch(0.52 0.18 305);
+
+  --sidebar:                  oklch(0.955 0.007 265);
+  --sidebar-foreground:       oklch(0.18 0.012 265);
+  --sidebar-primary:          oklch(var(--accent-l) var(--accent-c) var(--accent-h));
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent:           oklch(0.94 0.008 265);
+  --sidebar-accent-foreground:oklch(0.18 0.012 265);
+  --sidebar-border:           oklch(0.20 0.015 265 / 0.09);
+  --sidebar-ring:             oklch(var(--accent-l) var(--accent-c) var(--accent-h));
+
+  --font-sans:  "DM Sans", system-ui, sans-serif;
+  --font-serif: "Instrument Serif", Georgia, serif;
+  --font-mono:  "Space Mono", ui-monospace, monospace;
+
+  --radius: 0.625rem;
+
+  /* Soft shadows */
+  --shadow-2xs: 0 2px 8px -4px hsl(var(--shadow-col) / 0.08);
+  --shadow-xs:  0 4px 12px -6px hsl(var(--shadow-col) / 0.10);
+  --shadow-sm:  0 6px 18px -8px hsl(var(--shadow-col) / 0.12);
+  --shadow:     0 8px 24px -12px hsl(var(--shadow-col) / 0.14);
+  --shadow-md:  0 12px 32px -14px hsl(var(--shadow-col) / 0.16);
+  --shadow-lg:  0 16px 40px -16px hsl(var(--shadow-col) / 0.18);
+  --shadow-xl:  0 20px 50px -18px hsl(var(--shadow-col) / 0.20);
+  --shadow-2xl: 0 28px 60px -20px hsl(var(--shadow-col) / 0.22);
+}
+
+/* ─── Dark mode tokens ───────────────────────────────────────────────────────── */
+.dark {
   --bg:             oklch(0.16 0.012 265);
   --bg-deep:        oklch(0.13 0.012 265);
   --bg-raise:       oklch(0.205 0.014 265);
@@ -31,14 +111,12 @@
   --svf-accent-soft:  oklch(var(--accent-l) var(--accent-c) var(--accent-h) / 0.14);
   --svf-accent-line:  oklch(var(--accent-l) var(--accent-c) var(--accent-h) / 0.4);
 
-  /* Status colors */
   --st-active:   oklch(0.74 0.14 162);
   --st-expiring: oklch(0.80 0.15 78);
   --st-expired:  oklch(0.66 0.20 18);
   --st-open:     oklch(0.74 0.12 235);
   --st-wtp:      oklch(0.70 0.16 305);
 
-  /* Shadcn compat tokens */
   --background:          oklch(0.16 0.012 265);
   --foreground:          oklch(0.96 0.005 265);
   --card:                oklch(0.205 0.014 265);
@@ -74,13 +152,6 @@
   --sidebar-border:           oklch(0.85 0.02 265 / 0.1);
   --sidebar-ring:             oklch(var(--accent-l) var(--accent-c) var(--accent-h));
 
-  --font-sans:  "DM Sans", system-ui, sans-serif;
-  --font-serif: "Instrument Serif", Georgia, serif;
-  --font-mono:  "Space Mono", ui-monospace, monospace;
-
-  --radius: 0.625rem;
-
-  /* Soft cinematic shadows (no hard offset) */
   --shadow-2xs: 0 2px 8px -4px hsl(var(--shadow-col) / 0.4);
   --shadow-xs:  0 4px 12px -6px hsl(var(--shadow-col) / 0.45);
   --shadow-sm:  0 6px 18px -8px hsl(var(--shadow-col) / 0.5);
@@ -198,7 +269,7 @@
   border-color: var(--svf-border-strong) !important;
   color: var(--text) !important;
   border-radius: 11px !important;
-  box-shadow: 0 20px 50px -16px hsl(0deg 0% 0% / 0.7) !important;
+  box-shadow: var(--shadow-lg) !important;
   backdrop-filter: blur(14px);
 }
 [data-slot="select-item"][data-highlighted] {
@@ -284,6 +355,148 @@
   }
 }
 
+/* ─── Light mode overrides for hardcoded slate-* component classes ───────────
+   Components use slate-800/xx etc. for dark surfaces. In light mode we remap
+   these to white / light-grey surfaces so nothing looks broken.               */
+:root:not(.dark) {
+  /* Generic slate surface → light surface */
+  [class~="bg-slate-900"],
+  [class~="bg-slate-950"] {
+    background-color: var(--panel-solid) !important;
+  }
+  [class~="bg-slate-800"] {
+    background-color: oklch(0.92 0.008 265) !important;
+  }
+  [class~="bg-slate-700"] {
+    background-color: oklch(0.88 0.010 265) !important;
+  }
+
+  /* Opacity variants */
+  [class*="bg-slate-900\/"],
+  [class*="bg-slate-950\/"] {
+    background-color: color-mix(in oklch, var(--panel-solid) 1, transparent) !important;
+  }
+  [class*="bg-slate-800\/"] {
+    background-color: oklch(0.94 0.007 265 / 0.9) !important;
+  }
+  [class*="bg-slate-700\/"] {
+    background-color: oklch(0.90 0.009 265 / 0.8) !important;
+  }
+
+  /* Hover states */
+  [class*="hover:bg-slate-800"]:hover,
+  [class*="hover:bg-slate-700"]:hover,
+  [class*="hover:bg-slate-900"]:hover {
+    background-color: oklch(0.90 0.010 265) !important;
+  }
+
+  /* Border overrides */
+  [class*="border-slate-700"],
+  [class*="border-slate-800"],
+  [class*="border-slate-600"] {
+    border-color: var(--svf-border-strong) !important;
+  }
+
+  /* Text overrides — slate-100/200/300 are near-white, invisible on light bg */
+  [class~="text-slate-100"],
+  [class~="text-slate-200"],
+  [class~="text-slate-300"] {
+    color: var(--text) !important;
+  }
+  [class~="text-slate-400"],
+  [class~="text-slate-500"] {
+    color: var(--text-faint) !important;
+  }
+  [class~="text-slate-600"],
+  [class~="text-slate-700"] {
+    color: var(--text-dim) !important;
+  }
+
+  /* text-white inside non-hero contexts */
+  [class~="text-white"]:not([class*="bg-red-"]):not([class*="bg-emerald-"]):not([class*="bg-indigo-"]):not([class*="bg-violet-"]):not([class*="bg-amber-"]) {
+    color: var(--text) !important;
+  }
+
+  /* Pagination active page */
+  [class~="bg-slate-700"] {
+    background-color: oklch(0.88 0.010 265) !important;
+    border-color: oklch(0.78 0.015 265) !important;
+  }
+
+  /* Skeleton shimmer */
+  [class~="skeleton-shimmer"] {
+    background: linear-gradient(
+      90deg,
+      oklch(0.90 0.008 265) 25%,
+      oklch(0.85 0.010 265) 37%,
+      oklch(0.90 0.008 265) 63%
+    );
+  }
+
+  /* ── Badge color correction ─────────────────────────────────────────────
+     Badges use *-400 (pale) colors tuned for dark mode. On light we shift
+     to *-600/*-700 for readable contrast.                                 */
+
+  /* Cyan — Home badge */
+  [class*="text-cyan-400"]  { color: oklch(0.44 0.13 222) !important; }
+  [class*="border-cyan-500"] { border-color: oklch(0.44 0.13 222 / 0.45) !important; }
+  [class*="bg-cyan-500"]    { background-color: oklch(0.44 0.13 222 / 0.10) !important; }
+
+  /* Purple — Acquired badge */
+  [class*="text-purple-400"]  { color: oklch(0.42 0.20 300) !important; }
+  [class*="border-purple-500"] { border-color: oklch(0.42 0.20 300 / 0.40) !important; }
+  [class*="bg-purple-500"]    { background-color: oklch(0.42 0.20 300 / 0.08) !important; }
+
+  /* Violet — WTP Library badge */
+  [class*="text-violet-400"]  { color: oklch(0.42 0.22 290) !important; }
+  [class*="border-violet-500"] { border-color: oklch(0.42 0.22 290 / 0.40) !important; }
+  [class*="bg-violet-500"]    { background-color: oklch(0.42 0.22 290 / 0.08) !important; }
+
+  /* Emerald / Green — active, U cert */
+  [class*="text-emerald-400"] { color: oklch(0.44 0.15 162) !important; }
+  [class*="border-emerald-500"] { border-color: oklch(0.44 0.15 162 / 0.40) !important; }
+  [class*="bg-emerald-500"]   { background-color: oklch(0.44 0.15 162 / 0.08) !important; }
+  [class*="text-green-400"]   { color: oklch(0.44 0.15 145) !important; }
+  [class*="border-green-500"] { border-color: oklch(0.44 0.15 145 / 0.40) !important; }
+  [class*="bg-green-500"]     { background-color: oklch(0.44 0.15 145 / 0.08) !important; }
+
+  /* Amber — expiring/approaching */
+  [class*="text-amber-400"]   { color: oklch(0.52 0.16 75) !important; }
+  [class*="border-amber-500"] { border-color: oklch(0.52 0.16 75 / 0.40) !important; }
+  [class*="bg-amber-500"]     { background-color: oklch(0.52 0.16 75 / 0.10) !important; }
+
+  /* Yellow — UA cert */
+  [class*="text-yellow-400"]  { color: oklch(0.52 0.16 90) !important; }
+  [class*="border-yellow-500"] { border-color: oklch(0.52 0.16 90 / 0.40) !important; }
+  [class*="bg-yellow-500"]    { background-color: oklch(0.52 0.16 90 / 0.10) !important; }
+
+  /* Orange — A cert */
+  [class*="text-orange-400"]  { color: oklch(0.52 0.18 45) !important; }
+  [class*="border-orange-500"] { border-color: oklch(0.52 0.18 45 / 0.40) !important; }
+  [class*="bg-orange-500"]    { background-color: oklch(0.52 0.18 45 / 0.10) !important; }
+
+  /* Red — expired, S cert, urgent alerts */
+  [class*="text-red-400"],
+  [class*="text-red-300"]     { color: oklch(0.50 0.20 25) !important; }
+  [class*="border-red-500"]   { border-color: oklch(0.50 0.20 25 / 0.40) !important; }
+  [class*="bg-red-500\/"]     { background-color: oklch(0.50 0.20 25 / 0.08) !important; }
+
+  /* Indigo — home production on movie detail */
+  [class*="text-indigo-400"]  { color: oklch(0.44 0.18 265) !important; }
+  [class*="border-indigo-500"] { border-color: oklch(0.44 0.18 265 / 0.40) !important; }
+  [class*="bg-indigo-500"]    { background-color: oklch(0.44 0.18 265 / 0.08) !important; }
+
+  /* Blue — st-open, internet */
+  [class*="text-blue-400"]    { color: oklch(0.44 0.15 240) !important; }
+  [class*="border-blue-500"]  { border-color: oklch(0.44 0.15 240 / 0.40) !important; }
+  [class*="bg-blue-500"]      { background-color: oklch(0.44 0.15 240 / 0.08) !important; }
+
+  /* Scrollbar */
+  * {
+    scrollbar-color: oklch(0.20 0.015 265 / 0.16) transparent;
+  }
+}
+
 /* ─── Animations ────────────────────────────────────────────────────────────── */
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(10px); }
@@ -305,11 +518,17 @@
 .animate-fade-up { animation: fadeUp 0.35s cubic-bezier(0.16,1,0.3,1) both; }
 .animate-fade-in { animation: fadeIn 0.25s ease both; }
 
-/* Force dark color-scheme on all date inputs so the browser-native calendar icon is visible */
+/* Date input color-scheme follows theme */
 input[type="date"],
 input[type="month"],
 input[type="time"],
 input[type="datetime-local"] {
+  color-scheme: light;
+}
+.dark input[type="date"],
+.dark input[type="month"],
+.dark input[type="time"],
+.dark input[type="datetime-local"] {
   color-scheme: dark;
 }
 

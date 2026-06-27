@@ -95,6 +95,7 @@ territory TEXT,
 remarks TEXT,
 actionables TEXT,
 wtp_library VARCHAR(20) DEFAULT 'WTP', -- 'WTP' | 'WTP/BD' | 'Library'
+is_bangladeshi BOOLEAN NOT NULL DEFAULT FALSE,
 
 -- Jointly produced extras
 joint_prod_buy_back_date DATE,

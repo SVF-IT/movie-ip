@@ -44,7 +44,7 @@ const PLATFORM_EXPORT_FIELDS: ExportFieldDef[] = [
 ];
 
 const typeStyle = (t: string | null | undefined) => {
-  if (!t) return "bg-slate-700/50 text-(--text-faint) border-slate-600/30";
+  if (!t) return "bg-(--bg-deep) text-(--text-faint) border-(--svf-border-strong)";
   const lower = t.toLowerCase();
   if (lower.includes("satellite")) return "bg-cyan-500/15 text-cyan-400 border-cyan-500/30";
   if (lower.includes("dth")) return "bg-sky-500/15 text-sky-400 border-sky-500/30";
@@ -53,7 +53,7 @@ const typeStyle = (t: string | null | undefined) => {
   if (lower === "tvod") return "bg-amber-500/15 text-amber-400 border-amber-500/30";
   if (lower === "avod" || lower === "fvod") return "bg-emerald-500/15 text-emerald-400 border-emerald-500/30";
   if (lower === "theatrical") return "bg-pink-500/15 text-pink-400 border-pink-500/30";
-  return "bg-slate-700/40 text-(--text) border-slate-600/30";
+  return "bg-(--bg-deep) text-(--text-dim) border-(--svf-border-strong)";
 };
 
 export default function PlatformsPage() {
@@ -63,8 +63,6 @@ export default function PlatformsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(0);
-  const pageSize = 50;
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletingPlatform, setDeletingPlatform] = useState<PlatformWithStats | null>(null);
@@ -84,8 +82,7 @@ export default function PlatformsPage() {
       const { data, count } = await getPlatformsWithStats({
         search: searchQuery || undefined,
         platformType: typeFilter !== "all" ? typeFilter : undefined,
-        limit: pageSize,
-        offset: page * pageSize,
+        limit: 10000,
       });
       setPlatforms(data);
       setTotalCount(count);
@@ -94,10 +91,9 @@ export default function PlatformsPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, typeFilter, page]);
+  }, [searchQuery, typeFilter]);
 
   useEffect(() => { fetchPlatforms(); }, [fetchPlatforms]);
-  useEffect(() => { setPage(0); }, [searchQuery, typeFilter]);
 
   const handleDelete = async () => {
     if (!deletingPlatform) return;
@@ -153,7 +149,7 @@ export default function PlatformsPage() {
             onClick={handleExportClick}
             disabled={exportLoading}
             size="sm"
-            className="h-9 gap-2 bg-(--bg-raise) hover:bg-(--hover) text-(--text) border border-(--svf-border)/60"
+            className="h-9 gap-2 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover) shadow-sm shadow-red-500/20"
           >
             {exportLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             Export
@@ -289,23 +285,6 @@ export default function PlatformsPage() {
               </Table>
             </div>
 
-            {totalCount > pageSize && (
-              <div className="flex items-center justify-between px-5 py-3 border-t border-(--svf-border)">
-                <p className="text-xs text-(--text-faint)">
-                  Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, totalCount)} of {totalCount}
-                </p>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" className="h-8 bg-(--bg-raise) border-(--svf-border) text-(--text) hover:bg-(--hover)"
-                    onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0}>
-                    Previous
-                  </Button>
-                  <Button variant="outline" size="sm" className="h-8 bg-(--bg-raise) border-(--svf-border) text-(--text) hover:bg-(--hover)"
-                    onClick={() => setPage((p) => p + 1)} disabled={(page + 1) * pageSize >= totalCount}>
-                    Next
-                  </Button>
-                </div>
-              </div>
-            )}
           </>
         )}
       </div>
