@@ -124,7 +124,7 @@ export default function MoviesPage() {
     try {
       setLoading(true);
 
-      const source = (sourceFilter === "all" || sourceFilter === "jointly_owned" || sourceFilter === "bangladeshi") ? undefined : (sourceFilter as "home_production" | "acquired" | "expired");
+      const source = (sourceFilter === "all" || sourceFilter === "jointly_owned") ? undefined : (sourceFilter as "home_production" | "acquired" | "expired" | "bangladeshi");
 
       const { data: allGroupedData } = await getGroupedMovies({
         source,
@@ -147,10 +147,6 @@ export default function MoviesPage() {
         filteredData = filteredData.filter(m => m.total_versions === 1);
       }
 
-      if (sourceFilter === "bangladeshi") {
-        filteredData = filteredData.filter(m => m.primary_version?.is_bangladeshi === true);
-      }
-
       if (agreementExpiryYear !== "all" && sourceFilter === "acquired") {
         const yearNum = parseInt(agreementExpiryYear);
         filteredData = filteredData.filter(m => {
@@ -165,7 +161,8 @@ export default function MoviesPage() {
         const to = agreementEndTo ? new Date(agreementEndTo) : null;
         filteredData = filteredData.filter(m => {
           const endDate = m.primary_version?.agreement_end_date;
-          if (!endDate) return false;
+          // Movies with no end date (home_production, bangladeshi) are not expired — keep them
+          if (!endDate) return sourceFilter !== "acquired" && sourceFilter !== "expired";
           const d = new Date(endDate);
           if (from && d < from) return false;
           if (to && d > to) return false;
@@ -898,6 +895,7 @@ export default function MoviesPage() {
                               <div className="min-w-0">
                                 <Link href={`/movies/${movieId}`} className="font-semibold text-sm hover:text-red-400 transition-colors line-clamp-1 block" style={{ color: "var(--text)" }}>
                                   {movie.title}
+                                  {movie.release_year && <span style={{ color: "var(--text-faint)", fontWeight: 400, marginLeft: 5 }}>({movie.release_year})</span>}
                                 </Link>
                                 {movie.production_no && movie.source !== "acquired" && (
                                   <span className="text-[10px] font-mono mt-0.5 block" style={{ color: "var(--text-faint)" }}>{movie.production_no}</span>

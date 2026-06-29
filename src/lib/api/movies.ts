@@ -494,7 +494,7 @@ export async function removeMovieDirector(id: string): Promise<void> {
  * Each group contains all language versions of the same movie
  */
 export async function getGroupedMovies(options?: {
-  source?: "home_production" | "acquired" | "expired";
+  source?: "home_production" | "acquired" | "expired" | "bangladeshi";
   search?: string;
   language?: string;
   certification?: string[];
@@ -513,24 +513,22 @@ export async function getGroupedMovies(options?: {
 
   const now = new Date().toISOString().split('T')[0];
 
-  if (options?.source) {
-    if (options.source === 'expired') {
-      // EXPIRED: acquired movies with a past agreement_end_date
-      query = query.eq("source", "acquired").lt("agreement_end_date", now);
-    } else if (options.source === 'home_production') {
-      // HOME: all home_production movies (nature_of_rights only applies to home, but
-      // null nature should still show — only explicitly Sold/Expired are hidden)
-      query = query.eq("source", "home_production")
-        .or(`nature_of_rights.is.null,nature_of_rights.not.ilike.%Sold%`);
-    } else if (options.source === 'acquired') {
-      // ACQUIRED: non-expired acquired movies (no end date, or end date >= today)
-      query = query.eq("source", "acquired")
-        .or(`agreement_end_date.is.null,agreement_end_date.gte.${now}`);
-    }
+  if (options?.source === 'expired') {
+    // EXPIRED: acquired movies with a past agreement_end_date
+    query = query.eq("source", "acquired").lt("agreement_end_date", now);
+  } else if (options?.source === 'home_production') {
+    // HOME: all home_production movies — only explicitly Sold are hidden
+    query = query.eq("source", "home_production")
+      .or(`nature_of_rights.is.null,nature_of_rights.not.ilike.%Sold%`);
+  } else if (options?.source === 'acquired') {
+    // ACQUIRED: non-expired acquired movies (no end date, or end date >= today)
+    query = query.eq("source", "acquired")
+      .or(`agreement_end_date.is.null,agreement_end_date.gte.${now}`);
+  } else if (options?.source === 'bangladeshi') {
+    // BANGLADESHI: all movies flagged as bangladeshi — no agreement date filtering
+    query = query.eq("is_bangladeshi", true);
   } else {
     // ALL: home (not explicitly sold) + acquired (not expired)
-    // home branch: source=home AND (nature null OR not sold)
-    // acquired branch: source=acquired AND (no end date OR end date >= today)
     query = query.or(
       `and(source.eq.home_production,or(nature_of_rights.is.null,nature_of_rights.not.ilike.%Sold%)),` +
       `and(source.eq.acquired,or(agreement_end_date.is.null,agreement_end_date.gte.${now}))`
