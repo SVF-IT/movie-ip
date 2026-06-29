@@ -2,10 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Film, Play, MonitorPlay, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Film, Play, MonitorPlay, Loader2, AlertCircle, CheckCircle2, Lock } from "lucide-react";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 
@@ -20,302 +17,341 @@ function ChangePasswordForm() {
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [focusField, setFocusField] = useState<string | null>(null);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  useEffect(() => { setMounted(true); }, []);
 
   const validatePassword = (password: string): string | null => {
-    if (password.length < 8) {
-      return "Password must be at least 8 characters long";
-    }
-    if (!/[A-Z]/.test(password)) {
-      return "Password must contain at least one uppercase letter";
-    }
-    if (!/[a-z]/.test(password)) {
-      return "Password must contain at least one lowercase letter";
-    }
-    if (!/[0-9]/.test(password)) {
-      return "Password must contain at least one number";
-    }
+    if (password.length < 8) return "Password must be at least 8 characters long";
+    if (!/[A-Z]/.test(password)) return "Password must contain at least one uppercase letter";
+    if (!/[a-z]/.test(password)) return "Password must contain at least one lowercase letter";
+    if (!/[0-9]/.test(password)) return "Password must contain at least one number";
     return null;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-
-    // Basic client-side validation
-    if (!newPassword || !confirmPassword) {
-      setError("Please fill in both password fields.");
-      return;
-    }
-
-    // Validate passwords match
-    if (newPassword !== confirmPassword) {
-      setError("Passwords do not match");
-      return;
-    }
-
-    // Validate password strength
+    if (!newPassword || !confirmPassword) { setError("Please fill in both password fields."); return; }
+    if (newPassword !== confirmPassword) { setError("Passwords do not match"); return; }
     const validationError = validatePassword(newPassword);
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
+    if (validationError) { setError(validationError); return; }
 
     setLoading(true);
-
     try {
       const supabase = createClient();
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateError) { setError(updateError.message); setLoading(false); return; }
 
-      // Update password
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
-
-      if (updateError) {
-        setError(updateError.message);
-        setLoading(false);
-        return;
-      }
-
-      // If first login, mark password as changed
       if (isFirstLogin) {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          await supabase
-            .from("user_profiles")
-            .update({
-              must_change_password: false,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", user.id);
+          await supabase.from("user_profiles").update({ must_change_password: false, updated_at: new Date().toISOString() }).eq("id", user.id);
         }
       }
 
       setSuccess(true);
-
-      // Redirect after success
-      setTimeout(() => {
-        router.push("/");
-        router.refresh();
-      }, 2000);
+      setTimeout(() => { router.push("/"); router.refresh(); }, 2000);
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");
       console.error("Password change error:", err);
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
-    
   };
+
+  const requirements = [
+    { label: "Minimum 8 characters long", met: newPassword.length >= 8 },
+    { label: "At least one uppercase letter (A-Z)", met: /[A-Z]/.test(newPassword) },
+    { label: "At least one lowercase letter (a-z)", met: /[a-z]/.test(newPassword) },
+    { label: "At least one number (0-9)", met: /[0-9]/.test(newPassword) },
+  ];
 
   if (success) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-slate-950 font-sans p-4 relative overflow-hidden">
-        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=2070&auto=format&fit=crop')] bg-cover bg-center opacity-10 mix-blend-luminosity" />
-        <div className="absolute top-[20%] left-[20%] w-96 h-96 bg-red-600/10 rounded-full blur-[100px] animate-pulse duration-[4000ms]" />
-
-        <Card className="w-full max-w-md border-slate-800/60 bg-slate-900/80 backdrop-blur-xl shadow-2xl rounded-2xl relative z-10 animate-in fade-in zoom-in-95 duration-500">
-          <CardContent className="pt-10 pb-8">
-            <div className="text-center space-y-6">
-              <div className="flex justify-center">
-                <div className="w-20 h-20 rounded-full bg-green-500/10 border border-green-500/20 flex items-center justify-center">
-                  <CheckCircle2 className="h-10 w-10 text-green-500" />
-                </div>
-              </div>
-              <div>
-                <h2 className="text-2xl font-bold text-white mb-2">Password Changed!</h2>
-                <p className="text-slate-400">
-                  Your security credentials have been updated. Redirecting you...
-                </p>
-              </div>
-              <div className="flex justify-center pt-2">
-                <Loader2 className="h-6 w-6 text-slate-500 animate-spin" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen w-full flex items-center justify-center p-4"
+        style={{ background: "var(--bg)", fontFamily: "var(--font-sans)" }}>
+        <div style={{
+          width: "100%", maxWidth: 420,
+          background: "var(--panel-solid)", border: "1px solid var(--svf-border)",
+          borderRadius: 20, padding: "48px 40px", textAlign: "center",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.15)",
+        }}>
+          <div style={{
+            width: 80, height: 80, borderRadius: "50%", margin: "0 auto 24px",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            background: "color-mix(in oklch, oklch(0.72 0.17 145) 12%, transparent)",
+            border: "1px solid color-mix(in oklch, oklch(0.72 0.17 145) 25%, transparent)",
+          }}>
+            <CheckCircle2 style={{ width: 40, height: 40, color: "oklch(0.72 0.17 145)" }} />
+          </div>
+          <h2 style={{ fontSize: 22, fontWeight: 700, color: "var(--text)", marginBottom: 10 }}>Password Changed!</h2>
+          <p style={{ fontSize: 14, color: "var(--text-faint)", lineHeight: 1.6 }}>
+            Your security credentials have been updated. Redirecting you…
+          </p>
+          <div style={{ display: "flex", justifyContent: "center", marginTop: 24 }}>
+            <Loader2 style={{ width: 22, height: 22, color: "var(--text-faint)", animation: "spin 1s linear infinite" }} />
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen w-full flex bg-slate-950 overflow-hidden font-sans">
-      {/* Left panel - Branding / Cinematic Hero */}
-      <div className="hidden lg:flex w-1/2 relative overflow-hidden items-center justify-center bg-black">
-        {/* Rich cinematic background */}
-        <div
-          className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=2070&auto=format&fit=crop')] bg-cover bg-center opacity-30 mix-blend-luminosity"
-          style={{
-            transform: mounted ? 'scale(1.05)' : 'scale(1)',
-            transition: 'transform 20s ease-out'
-          }}
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-transparent z-0" />
-        <div className="absolute inset-0 bg-gradient-to-r from-red-950/40 to-slate-950/80 z-0" />
+    <div className="min-h-screen w-full flex overflow-hidden"
+      style={{ background: "var(--bg)", fontFamily: "var(--font-sans)" }}>
 
-        {/* Animated ambient glowing orbs */}
-        <div className="absolute top-[20%] left-[20%] w-96 h-96 bg-red-600/20 rounded-full blur-[100px] mix-blend-screen animate-pulse duration-[4000ms] pointer-events-none" />
-        <div className="absolute bottom-[20%] right-[20%] w-96 h-96 bg-amber-600/10 rounded-full blur-[100px] mix-blend-screen animate-pulse duration-[6000ms] delay-700 pointer-events-none" />
+      {/* ── Left: cinematic branding panel ── */}
+      <div className="hidden lg:flex w-1/2 relative overflow-hidden flex-col justify-between p-12"
+        style={{ background: "var(--bg-deep)", borderRight: "1px solid var(--svf-border)" }}>
 
-        {/* Content container */}
-        <div
-          className="relative z-10 px-12 max-w-2xl flex flex-col items-center text-center transition-all duration-1000 ease-out translate-y-0 opacity-100"
-          style={{
-            opacity: mounted ? 1 : 0,
-            transform: mounted ? 'translateY(0)' : 'translateY(20px)'
-          }}
-        >
-          <div className="bg-white/5 p-8 rounded-full backdrop-blur-sm border border-white/10 mb-8 shadow-2xl">
-            <Image
-              src="/svf-logo.png"
-              alt="SVF Entertainment"
-              width={180}
-              height={100}
-              priority
-              className="object-contain drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]"
-            />
-          </div>
+        {/* Poster wall */}
+        <div style={{
+          position: "absolute", inset: 0,
+          display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gridAutoRows: "1fr",
+          gap: 10, padding: 10, opacity: 0.35,
+          transform: "rotate(-8deg) scale(1.5) translateY(-4%)",
+          pointerEvents: "none",
+        }}>
+          {Array.from({ length: 24 }, (_, i) => {
+            const hue = (i * 37 + 210) % 360;
+            return (
+              <div key={i} style={{
+                borderRadius: 8, minHeight: 110,
+                background: `linear-gradient(150deg, oklch(0.42 0.13 ${hue}) 0%, oklch(0.26 0.10 ${hue}) 42%, oklch(0.17 0.06 ${(hue + 20) % 360}) 100%)`,
+                border: "1px solid rgba(255,255,255,0.08)",
+              }} />
+            );
+          })}
+        </div>
 
-          <h1 className="text-4xl font-extrabold text-white tracking-tight leading-tight mb-4 drop-shadow-lg">
-            Secure Your <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-amber-500">
-              Account Access
-            </span>
+        {/* Overlay */}
+        <div style={{
+          position: "absolute", inset: 0,
+          background: "linear-gradient(180deg, color-mix(in oklch, var(--bg-deep) 60%, transparent), color-mix(in oklch, var(--bg-deep) 92%, transparent))",
+          pointerEvents: "none",
+        }} />
+        <div style={{
+          position: "absolute", inset: 0,
+          background: "radial-gradient(80% 60% at 30% 100%, color-mix(in oklch, var(--svf-accent) 14%, transparent), transparent)",
+          pointerEvents: "none",
+        }} />
+
+        {/* Logo */}
+        <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 12 }}>
+          <Image src="/svf-logo.png" alt="SVF Entertainment" width={40} height={40} priority
+            className="object-contain"
+            style={{ filter: "drop-shadow(0 0 14px color-mix(in oklch, var(--svf-accent) 40%, transparent))" }} />
+          <div style={{ width: 1, height: 26, background: "var(--svf-border-strong)" }} />
+          <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Movie IP Management</span>
+        </div>
+
+        {/* Hero copy */}
+        <div style={{
+          position: "relative", maxWidth: 440,
+          opacity: mounted ? 1 : 0, transform: mounted ? "translateY(0)" : "translateY(16px)",
+          transition: "opacity 0.8s ease, transform 0.8s ease",
+        }}>
+          <h1 style={{
+            fontFamily: "var(--font-serif)", fontSize: 44, lineHeight: 1.08,
+            margin: 0, color: "var(--text)",
+          }}>
+            Secure Your<br />
+            <span style={{ color: "var(--svf-accent-bright)" }}>Account Access</span>
           </h1>
-
-          <p className="text-lg text-slate-300 mb-10 max-w-md font-light leading-relaxed">
+          <p style={{ fontSize: 14, color: "var(--text-dim)", marginTop: 16, lineHeight: 1.65, maxWidth: 380 }}>
             Please update your security credentials to access the Film IP Manager platform.
           </p>
 
-          <div className="grid grid-cols-3 gap-6 w-full max-w-md">
-            {[
-              { icon: Film, label: "Production" },
-              { icon: Play, label: "Distribution" },
-              { icon: MonitorPlay, label: "Television" }
-            ].map((item, i) => (
-              <div key={i} className="flex flex-col items-center space-y-2 group">
-                <div className="p-3 rounded-xl bg-white/5 border border-white/10 group-hover:bg-red-500/20 group-hover:border-red-500/50 transition-all duration-300">
-                  <item.icon className="w-6 h-6 text-slate-400 group-hover:text-red-400 transition-colors" />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginTop: 40, maxWidth: 340 }}>
+            {[{ icon: Film, label: "Production" }, { icon: Play, label: "Distribution" }, { icon: MonitorPlay, label: "Television" }].map(({ icon: Icon, label }) => (
+              <div key={label} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                <div style={{
+                  padding: 12, borderRadius: 12,
+                  background: "var(--bg-raise)", border: "1px solid var(--svf-border)",
+                }}>
+                  <Icon style={{ width: 20, height: 20, color: "var(--text-faint)" }} />
                 </div>
-                <span className="text-xs text-slate-400 font-medium group-hover:text-slate-200 transition-colors">{item.label}</span>
+                <span style={{ fontSize: 11, color: "var(--text-faint)", fontWeight: 500 }}>{label}</span>
               </div>
             ))}
           </div>
         </div>
+
+        <div style={{ position: "relative", fontSize: 11, color: "var(--text-faint)", fontFamily: "var(--font-mono)" }}>
+          © 2026 SVF Entertainment · Internal Tool
+        </div>
       </div>
 
-      {/* Right panel - Form Box */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 relative">
-        {/* Mobile background decor */}
-        <div className="absolute inset-0 lg:hidden overflow-hidden pointer-events-none">
-          <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-b from-red-950/20 to-slate-950" />
-          <div className="absolute top-[-10%] right-[-10%] w-96 h-96 bg-red-900/20 rounded-full blur-[100px]" />
-        </div>
+      {/* ── Right: form panel ── */}
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 lg:p-12"
+        style={{ background: "var(--bg)" }}>
+        <div style={{
+          width: "100%", maxWidth: 380,
+          opacity: mounted ? 1 : 0, transform: mounted ? "translateX(0)" : "translateX(16px)",
+          transition: "opacity 0.7s ease 0.2s, transform 0.7s ease 0.2s",
+        }}>
 
-        <div
-          className="w-full max-w-md relative z-10 transition-all duration-700 ease-out delay-300"
-          style={{
-            opacity: mounted ? 1 : 0,
-            transform: mounted ? 'translateX(0)' : 'translateX(20px)'
-          }}
-        >
-          {/* Logo visible only on mobile */}
-          <div className="lg:hidden flex justify-center mb-10">
-            <Image
-              src="/svf-logo.png"
-              alt="SVF Entertainment"
-              width={140}
-              height={80}
-              priority
-              className="object-contain"
-            />
+          {/* Mobile logo */}
+          <div className="flex justify-center mb-8 lg:hidden">
+            <Image src="/svf-logo.png" alt="SVF" width={110} height={62} priority className="object-contain"
+              style={{ filter: "drop-shadow(0 0 12px color-mix(in oklch, var(--svf-accent) 40%, transparent))" }} />
           </div>
 
-          <div className="mb-8 space-y-2">
-            <h2 className="text-3xl font-bold text-white tracking-tight">
-              {isFirstLogin ? "Set Password" : "Change Password"}
-            </h2>
-            <p className="text-slate-400 text-sm">
-              {isFirstLogin
-                ? "Welcome! Please set a new secure password for your account."
-                : "Enter your new password below to update your credentials."}
-            </p>
-          </div>
+          <h2 style={{ fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: "-0.01em", color: "var(--text)" }}>
+            {isFirstLogin ? "Set Password" : "Change Password"}
+          </h2>
+          <p style={{ fontSize: 13.5, color: "var(--text-faint)", marginTop: 8, marginBottom: 32 }}>
+            {isFirstLogin
+              ? "Welcome! Please set a new secure password for your account."
+              : "Enter your new password below to update your credentials."}
+          </p>
 
-          <Card className="border-slate-800/60 bg-slate-900/60 backdrop-blur-xl shadow-2xl rounded-2xl overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-600 to-amber-600" />
-            <CardContent className="p-8 pt-10">
-              <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+          {/* Card */}
+          <div style={{
+            background: "var(--panel-solid)", border: "1px solid var(--svf-border)",
+            borderRadius: 18, overflow: "hidden",
+            boxShadow: "0 4px 24px rgba(0,0,0,0.08)",
+          }}>
+            {/* Accent top bar */}
+            <div style={{ height: 3, background: "linear-gradient(90deg, var(--svf-accent), oklch(0.72 0.18 50))" }} />
+
+            <div style={{ padding: "32px 28px" }}>
+              <form onSubmit={handleSubmit} noValidate style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+
+                {/* Error */}
                 {error && (
-                  <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-4 flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
-                    <AlertCircle className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />
-                    <p className="text-sm text-red-200 leading-tight flex-1">{error}</p>
+                  <div style={{
+                    display: "flex", alignItems: "flex-start", gap: 10,
+                    padding: "12px 14px", borderRadius: 10,
+                    background: "color-mix(in oklch, var(--st-expired) 10%, transparent)",
+                    border: "1px solid color-mix(in oklch, var(--st-expired) 28%, transparent)",
+                  }}>
+                    <AlertCircle style={{ width: 16, height: 16, color: "var(--st-expired)", flexShrink: 0, marginTop: 1 }} />
+                    <p style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.45, margin: 0 }}>{error}</p>
                   </div>
                 )}
 
-                <div className="space-y-3">
-                  <label htmlFor="newPassword" className="text-sm font-medium text-slate-300">
+                {/* New Password */}
+                <div>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-dim)", marginBottom: 8, letterSpacing: "0.01em" }}>
                     New Password
                   </label>
-                  <Input
-                    id="newPassword"
-                    type="password"
-                    placeholder="Enter new password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    required
-                    disabled={loading}
-                    autoComplete="new-password"
-                    className="bg-slate-950/50 border-slate-800 focus-visible:ring-red-500/50 focus-visible:border-red-500 transition-all h-12 text-slate-200 placeholder:text-slate-600"
-                  />
+                  <div style={{ position: "relative" }}>
+                    <Lock style={{
+                      position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)",
+                      width: 15, height: 15, pointerEvents: "none",
+                      color: focusField === "new" ? "var(--svf-accent)" : "var(--text-faint)",
+                      transition: "color .2s",
+                    }} />
+                    <input
+                      type="password"
+                      placeholder="Enter new password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      onFocus={() => setFocusField("new")}
+                      onBlur={() => setFocusField(null)}
+                      required
+                      disabled={loading}
+                      autoComplete="new-password"
+                      style={{
+                        width: "100%", height: 46, paddingLeft: 40, paddingRight: 14,
+                        fontSize: 14, fontFamily: "var(--font-sans)",
+                        background: "var(--bg-raise)", color: "var(--text)",
+                        border: `1px solid ${focusField === "new" ? "var(--svf-accent-line)" : "var(--svf-border)"}`,
+                        borderRadius: 10, outline: "none", transition: "border-color .2s",
+                        boxSizing: "border-box",
+                      }}
+                    />
+                  </div>
                 </div>
 
-                <div className="space-y-3">
-                  <label htmlFor="confirmPassword" className="text-sm font-medium text-slate-300">
+                {/* Confirm Password */}
+                <div>
+                  <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--text-dim)", marginBottom: 8, letterSpacing: "0.01em" }}>
                     Confirm Password
                   </label>
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    placeholder="Confirm new password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    required
-                    disabled={loading}
-                    autoComplete="new-password"
-                    className="bg-slate-950/50 border-slate-800 focus-visible:ring-red-500/50 focus-visible:border-red-500 transition-all h-12 text-slate-200 placeholder:text-slate-600"
-                  />
+                  <div style={{ position: "relative" }}>
+                    <Lock style={{
+                      position: "absolute", left: 13, top: "50%", transform: "translateY(-50%)",
+                      width: 15, height: 15, pointerEvents: "none",
+                      color: focusField === "confirm" ? "var(--svf-accent)" : "var(--text-faint)",
+                      transition: "color .2s",
+                    }} />
+                    <input
+                      type="password"
+                      placeholder="Confirm new password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      onFocus={() => setFocusField("confirm")}
+                      onBlur={() => setFocusField(null)}
+                      required
+                      disabled={loading}
+                      autoComplete="new-password"
+                      style={{
+                        width: "100%", height: 46, paddingLeft: 40, paddingRight: 14,
+                        fontSize: 14, fontFamily: "var(--font-sans)",
+                        background: "var(--bg-raise)", color: "var(--text)",
+                        border: `1px solid ${focusField === "confirm" ? "var(--svf-accent-line)" : "var(--svf-border)"}`,
+                        borderRadius: 10, outline: "none", transition: "border-color .2s",
+                        boxSizing: "border-box",
+                      }}
+                    />
+                  </div>
                 </div>
 
-                <div className="bg-slate-950/40 p-4 rounded-lg border border-slate-800/50">
-                  <p className="text-xs font-medium text-slate-300 mb-2">Password requirements:</p>
-                  <ul className="text-xs text-slate-500 space-y-1.5 list-disc list-inside">
-                    <li>Minimum 8 characters long</li>
-                    <li>At least one uppercase letter (A-Z)</li>
-                    <li>At least one lowercase letter (a-z)</li>
-                    <li>At least one number (0-9)</li>
+                {/* Requirements */}
+                <div style={{
+                  background: "var(--bg-raise)", border: "1px solid var(--svf-border)",
+                  borderRadius: 10, padding: "14px 16px",
+                }}>
+                  <p style={{ fontSize: 11.5, fontWeight: 600, color: "var(--text-dim)", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                    Password requirements
+                  </p>
+                  <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+                    {requirements.map(({ label, met }) => (
+                      <li key={label} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                        <span style={{
+                          width: 16, height: 16, borderRadius: "50%", flexShrink: 0,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          background: met
+                            ? "color-mix(in oklch, oklch(0.72 0.17 145) 15%, transparent)"
+                            : "var(--bg-deep)",
+                          border: `1px solid ${met ? "color-mix(in oklch, oklch(0.72 0.17 145) 40%, transparent)" : "var(--svf-border)"}`,
+                          transition: "all .2s",
+                        }}>
+                          {met && <CheckCircle2 style={{ width: 10, height: 10, color: "oklch(0.72 0.17 145)" }} />}
+                        </span>
+                        <span style={{ color: met ? "var(--text)" : "var(--text-faint)", transition: "color .2s" }}>{label}</span>
+                      </li>
+                    ))}
                   </ul>
                 </div>
 
-                <Button
+                {/* Submit */}
+                <button
                   type="submit"
-                  className="w-full h-12 bg-white text-slate-950 hover:bg-slate-200 hover:scale-[1.02] transition-all duration-200 font-semibold shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.2)] mt-4"
                   disabled={loading}
+                  style={{
+                    width: "100%", height: 46, borderRadius: 10, border: "none",
+                    background: loading ? "var(--svf-border)" : "var(--svf-accent)",
+                    color: "white", fontSize: 14.5, fontWeight: 600,
+                    fontFamily: "var(--font-sans)", cursor: loading ? "not-allowed" : "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                    transition: "opacity .2s, transform .15s",
+                    opacity: loading ? 0.7 : 1,
+                    marginTop: 4,
+                  }}
+                  onMouseEnter={(e) => { if (!loading) (e.currentTarget as HTMLButtonElement).style.opacity = "0.88"; }}
+                  onMouseLeave={(e) => { if (!loading) (e.currentTarget as HTMLButtonElement).style.opacity = "1"; }}
                 >
-                  {loading ? (
-                    <>
-                      <Loader2 className="mr-2 h-5 w-5 animate-spin text-slate-950" />
-                      Updating Security...
-                    </>
-                  ) : (
-                    "Secure Account"
-                  )}
-                </Button>
+                  {loading
+                    ? <><Loader2 style={{ width: 18, height: 18, animation: "spin 1s linear infinite" }} /> Updating…</>
+                    : "Secure Account"}
+                </button>
               </form>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -325,8 +361,8 @@ function ChangePasswordForm() {
 export default function ChangePasswordPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-slate-950">
-        <Loader2 className="h-8 w-8 animate-spin text-red-500" />
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg)" }}>
+        <Loader2 className="h-8 w-8 animate-spin" style={{ color: "var(--svf-accent)" }} />
       </div>
     }>
       <ChangePasswordForm />

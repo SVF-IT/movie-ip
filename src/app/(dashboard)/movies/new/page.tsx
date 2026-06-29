@@ -106,7 +106,7 @@ function TogglePill({ value, onChange, options = ["Yes", "No"] }: {
   value: string; onChange: (v: string) => void; options?: string[]
 }) {
   return (
-    <div className="inline-flex bg-(--bg-raise)/50 border border-(--svf-border) rounded-full p-0.5 gap-0.5">
+    <div className="inline-flex bg-(--bg-raise) border border-(--svf-border) rounded-full p-0.5 gap-0.5">
       {options.map((opt) => {
         const active = value === opt;
         return (
@@ -149,7 +149,7 @@ function SyndicationField({ value, onChange }: { value: string; onChange: (v: st
           value={customText}
           onChange={(e) => handleTextChange(e.target.value)}
           placeholder="Enter custom syndication terms…"
-          className="w-64 h-8 rounded-xl border border-(--svf-border) bg-(--bg-raise)/40 px-3 text-xs text-(--text) placeholder:text-(--text-faint) focus:outline-none focus:border-(--svf-border-strong)"
+          className="w-64 h-8 rounded-xl border border-(--svf-border) bg-(--bg-raise) px-3 text-xs text-(--text) placeholder:text-(--text-faint) focus:outline-none focus:border-(--svf-border-strong)"
         />
       )}
     </div>
@@ -164,12 +164,12 @@ function RightsCard({ title, value, onChange, children }: {
   return (
     <div className={["rounded-[10px] border overflow-hidden transition-colors duration-200",
       isAcq ? "border-emerald-500/40" : "border-(--svf-border)"].join(" ")}>
-      <div className="flex items-center justify-between px-3 py-2.5 bg-(--bg-raise)/40 gap-2">
+      <div className="flex items-center justify-between px-3 py-2.5 bg-(--bg-raise) gap-2">
         <span className={["text-[11px] font-bold uppercase tracking-widest transition-colors duration-200",
           isAcq ? "text-emerald-400" : "text-(--text-faint)"].join(" ")}>{title}</span>
         <TogglePill value={value} onChange={onChange} />
       </div>
-      {isAcq && <div className="p-3 border-t border-(--svf-border) bg-(--bg-raise)/30">{children}</div>}
+      {isAcq && <div className="p-3 border-t border-(--svf-border) bg-(--bg-raise)">{children}</div>}
     </div>
   );
 }
@@ -197,7 +197,7 @@ function LangMultiPicker({ value, onChange }: { value: string; onChange: (v: str
           return (
             <button key={lang} type="button" onClick={() => toggle(lang)}
               className={["px-2 py-0.5 rounded-full text-xs font-semibold border transition-all select-none",
-                sel ? "bg-red-500/15 border-red-500/50 text-red-300" : "bg-(--bg-raise)/40 border-(--svf-border) text-(--text-faint) hover:text-(--text)",
+                sel ? "bg-red-500/15 border-red-500/50 text-red-300" : "bg-(--bg-raise) border-(--svf-border) text-(--text-faint) hover:text-(--text)",
               ].join(" ")}>{lang}</button>
           );
         })}
@@ -213,7 +213,7 @@ function LangMultiPicker({ value, onChange }: { value: string; onChange: (v: str
           <Input ref={inputRef} value={customInput} onChange={e => setCustomInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } if (e.key === "Escape") { setShowCustom(false); setCustomInput(""); } }}
             placeholder="Type language…"
-            className="h-7 flex-1 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-xs focus-visible:ring-red-500/40" />
+            className="h-7 flex-1 bg-(--bg-raise) border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-xs focus-visible:ring-red-500/40" />
           <button type="button" onClick={addCustom} className="h-7 px-2.5 rounded-[9px] bg-red-600/20 border border-red-500/30 text-red-400 text-xs font-semibold hover:bg-red-600/30">Add</button>
           <button type="button" onClick={() => { setShowCustom(false); setCustomInput(""); }} className="h-7 w-7 flex items-center justify-center rounded-[9px] text-(--text-faint) hover:text-(--text)">
             <X className="h-3.5 w-3.5" />
@@ -233,7 +233,7 @@ function LangMultiPicker({ value, onChange }: { value: string; onChange: (v: str
         </div>
       )}
       {dbVal && (
-        <div className="flex items-center gap-2 px-2.5 py-1 rounded-[9px] bg-(--bg-raise)/60 border border-(--svf-border)">
+        <div className="flex items-center gap-2 px-2.5 py-1 rounded-[9px] bg-(--bg-raise) border border-(--svf-border)">
           <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) shrink-0">DB:</span>
           <span className="text-[11px] text-(--text-faint) font-mono break-all">{dbVal}</span>
         </div>
@@ -311,8 +311,8 @@ function HoldbackPicker({ value, onChange }: { value: string; onChange: (v: stri
           return (
             <button key={opt} type="button" onClick={() => toggle(opt)}
               className={["px-2.5 py-1 rounded-full text-xs font-semibold border transition-all duration-100 select-none",
-                sel ? "bg-(--hover) border-slate-500/50 text-(--text)"
-                    : "bg-(--bg-raise)/40 border-(--svf-border) text-(--text-faint) hover:text-(--text)",
+                sel ? "bg-(--hover) border-(--svf-border-strong) text-(--text)"
+                    : "bg-(--bg-raise) border-(--svf-border) text-(--text-faint) hover:text-(--text)",
               ].join(" ")}>
               {opt}
             </button>
@@ -333,9 +333,9 @@ function HoldbackPicker({ value, onChange }: { value: string; onChange: (v: stri
           <Input ref={inputRef} value={customInput} onChange={e => setCustomInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } if (e.key === "Escape") { setShowCustom(false); setCustomInput(""); } }}
             placeholder="Type custom value…"
-            className="h-7 flex-1 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-xs focus-visible:ring-red-500/40" />
+            className="h-7 flex-1 bg-(--bg-raise) border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-xs focus-visible:ring-red-500/40" />
           <button type="button" onClick={addCustom}
-            className="h-7 px-2.5 rounded-[9px] bg-red-600/20 border border-red-500/30 text-red-400 text-xs font-semibold hover:bg-red-600/30 transition-all">
+            className="h-7 px-2.5 rounded-[9px] bg-(--bg-raise) border border-(--svf-border-strong) text-(--text) text-xs font-semibold hover:bg-(--hover) transition-all">
             Add
           </button>
           <button type="button" onClick={() => { setShowCustom(false); setCustomInput(""); }}
@@ -363,7 +363,7 @@ function HoldbackPicker({ value, onChange }: { value: string; onChange: (v: stri
 
       {/* DB preview */}
       {value && (
-        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-[9px] bg-(--bg-raise)/60 border border-(--svf-border)">
+        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-[9px] bg-(--bg-raise) border border-(--svf-border)">
           <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) shrink-0">DB value:</span>
           <span className="text-[11px] text-(--text-faint) font-mono break-all">{value}</span>
         </div>
@@ -448,7 +448,7 @@ function OtherRightsMultiPicker({ value, onChange }: { value: string; onChange: 
                   "px-2 py-0.5 rounded-full text-xs font-semibold border transition-all select-none",
                   types.includes(opt)
                     ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
-                    : "bg-(--bg-raise)/40 border-(--svf-border) text-(--text-faint) hover:text-(--text)",
+                    : "bg-(--bg-raise) border-(--svf-border) text-(--text-faint) hover:text-(--text)",
                 ].join(" ")}>
                 {opt}
               </button>
@@ -466,7 +466,7 @@ function OtherRightsMultiPicker({ value, onChange }: { value: string; onChange: 
               <Input ref={inputRef} value={customInput} onChange={e => setCustomInput(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } if (e.key === "Escape") { setShowCustom(false); setCustomInput(""); } }}
                 placeholder="Type right name…"
-                className="h-7 flex-1 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-xs focus-visible:ring-red-500/40" />
+                className="h-7 flex-1 bg-(--bg-raise) border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-xs focus-visible:ring-red-500/40" />
               <button type="button" onClick={addCustom} className="h-7 px-2.5 rounded-[9px] bg-emerald-600/20 border border-emerald-500/30 text-emerald-400 text-xs font-semibold hover:bg-emerald-600/30">Add</button>
               <button type="button" onClick={() => { setShowCustom(false); setCustomInput(""); }} className="h-7 w-7 flex items-center justify-center rounded-[9px] text-(--text-faint) hover:text-(--text)">
                 <X className="h-3.5 w-3.5" />
@@ -529,8 +529,8 @@ function MultiChipsWithCustom({
           return (
             <button key={opt} type="button" onClick={() => toggle(opt)}
               className={["px-2.5 py-1 rounded-full text-xs font-semibold border transition-all duration-100 select-none",
-                sel ? "bg-(--hover) border-slate-500/50 text-(--text)"
-                    : "bg-(--bg-raise)/40 border-(--svf-border) text-(--text-faint) hover:text-(--text)",
+                sel ? "bg-(--hover) border-(--svf-border-strong) text-(--text)"
+                    : "bg-(--bg-raise) border-(--svf-border) text-(--text-faint) hover:text-(--text)",
               ].join(" ")}>
               {opt}
             </button>
@@ -548,9 +548,9 @@ function MultiChipsWithCustom({
           <Input ref={inputRef} value={customInput} onChange={e => setCustomInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } if (e.key === "Escape") { setShowCustom(false); setCustomInput(""); } }}
             placeholder={placeholder || "Type value…"}
-            className="h-7 flex-1 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-xs focus-visible:ring-red-500/40" />
+            className="h-7 flex-1 bg-(--bg-raise) border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-xs focus-visible:ring-red-500/40" />
           <button type="button" onClick={addCustom}
-            className="h-7 px-2.5 rounded-[9px] bg-red-600/20 border border-red-500/30 text-red-400 text-xs font-semibold hover:bg-red-600/30 transition-all">
+            className="h-7 px-2.5 rounded-[9px] bg-(--bg-raise) border border-(--svf-border-strong) text-(--text) text-xs font-semibold hover:bg-(--hover) transition-all">
             Add
           </button>
           <button type="button" onClick={() => { setShowCustom(false); setCustomInput(""); }}
@@ -566,7 +566,7 @@ function MultiChipsWithCustom({
               className="flex items-center gap-1 pl-2.5 pr-1 py-0.5 rounded-full bg-(--bg-deep) border border-(--svf-border-strong) text-xs font-semibold text-(--text)">
               {item}
               <button type="button" onClick={() => removeItem(item)}
-                className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-slate-600/40 transition-all">
+                className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-(--hover) transition-all">
                 <X className="h-2.5 w-2.5" />
               </button>
             </span>
@@ -574,7 +574,7 @@ function MultiChipsWithCustom({
         </div>
       )}
       {value && (
-        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-[9px] bg-(--bg-raise)/60 border border-(--svf-border)">
+        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-[9px] bg-(--bg-raise) border border-(--svf-border)">
           <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) shrink-0">Stored as:</span>
           <span className="text-[11px] text-(--text-faint) font-mono break-all">{value}</span>
         </div>
@@ -643,7 +643,7 @@ function ClipDurationField({ value, onChange, className }: { value: string; onCh
           value={customText}
           onChange={(e) => handleTextChange(e.target.value)}
           placeholder="e.g. 30 seconds, 2 mins…"
-          className={`h-9 rounded-xl border border-(--svf-border) bg-(--bg-raise)/40 px-3 text-xs text-(--text) placeholder:text-(--text-faint) focus:outline-none focus:border-(--svf-border-strong) w-full ${className ?? ""}`}
+          className={`h-9 rounded-xl border border-(--svf-border) bg-(--bg-raise) px-3 text-xs text-(--text) placeholder:text-(--text-faint) focus:outline-none focus:border-(--svf-border-strong) w-full ${className ?? ""}`}
         />
       ) : (
         <DurationInput value={isTimestamp ? value : ""} onChange={onChange} className={className} />
@@ -869,7 +869,7 @@ export default function NewMoviePage() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="relative overflow-hidden rounded-[12px] bg-(--bg-raise)/60 border border-(--svf-border) backdrop-blur-xl p-3">
+      <div className="relative overflow-hidden rounded-[12px] bg-(--panel-solid) border border-(--svf-border) p-3">
         <div className="relative flex items-center gap-4">
           <Button variant="ghost" size="sm" asChild className="text-(--text-faint) hover:text-(--text) hover:bg-(--hover) h-8 w-8 p-0 shrink-0">
             <Link href="/movies"><ArrowLeft className="h-4 w-4" /></Link>
@@ -878,14 +878,14 @@ export default function NewMoviePage() {
             <Plus className="h-5 w-5 text-red-400" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-100">Add New Movie</h1>
+            <h1 className="text-xl font-bold tracking-tight text-(--text)">Add New Movie</h1>
             <p className="text-(--text-faint) text-sm mt-0.5">Add a new film to the catalog. Cast &amp; Crew can be added after saving.</p>
           </div>
         </div>
       </div>
 
       {/* Step Nav */}
-      <div className="flex items-stretch bg-(--bg-raise)/60 border border-(--svf-border) rounded-[12px] p-1 gap-1 overflow-x-auto">
+      <div className="flex items-stretch bg-(--bg-raise) border border-(--svf-border) rounded-[12px] p-1 gap-1 overflow-x-auto">
         {STEPS.map((step, i) => {
           const isActive = activeTab === step.id;
           const isDone = i < currentStepIndex;
@@ -949,7 +949,7 @@ export default function NewMoviePage() {
                       }}
                       className={["px-3 py-1 rounded-full border text-xs font-semibold transition-all duration-150 select-none",
                         sel ? "border-red-500/70 bg-red-500/12 text-red-400 shadow-[0_0_0_1px] shadow-red-500/20"
-                            : "border-(--svf-border) bg-(--bg-raise)/40 text-(--text-faint) hover:text-(--text) hover:border-slate-600",
+                            : "border-(--svf-border) bg-(--bg-raise) text-(--text-faint) hover:text-(--text) hover:border-(--svf-border-strong)",
                       ].join(" ")}>
                       {opt.label}
                     </button>
@@ -1003,7 +1003,7 @@ export default function NewMoviePage() {
 
               {/* Color / B&W */}
               <FormField label="Color / B&W">
-                <div className="inline-flex bg-(--bg-raise)/50 border border-(--svf-border) rounded-full p-0.5 gap-0.5">
+                <div className="inline-flex bg-(--bg-raise) border border-(--svf-border) rounded-full p-0.5 gap-0.5">
                   {["Color", "B&W"].map(opt => (
                     <button key={opt} type="button" onClick={() => setColorOrBw(opt)}
                       className={["px-4 py-1.5 rounded-full text-sm font-semibold transition-all duration-150",
@@ -1073,7 +1073,7 @@ export default function NewMoviePage() {
                             }}
                             className={["px-4 py-1.5 rounded-full border text-[12.5px] font-semibold transition-all duration-120 select-none",
                               sel ? "bg-red-500/12 border-red-500/60 text-red-400"
-                                  : "bg-(--bg-raise)/40 border-(--svf-border) text-(--text-faint) hover:text-(--text)",
+                                  : "bg-(--bg-raise) border-(--svf-border) text-(--text-faint) hover:text-(--text)",
                             ].join(" ")}>
                             {opt.label}
                           </button>
@@ -1122,7 +1122,7 @@ export default function NewMoviePage() {
               {isHomeProd && isJointly && (
                 <div className="md:col-span-2 pt-1">
                   <Button variant="outline" size="sm" onClick={() => setSelectedHouseIds(ids => [...ids, ""])}
-                    className="w-full border-dashed border-(--svf-border) bg-transparent text-(--text-faint) hover:text-(--text) hover:bg-(--hover) hover:border-slate-600">
+                    className="w-full border-dashed border-(--svf-border) bg-transparent text-(--text-faint) hover:text-(--text) hover:bg-(--hover) hover:border-(--svf-border-strong)">
                     + Add Production House
                   </Button>
                 </div>
@@ -1162,7 +1162,7 @@ export default function NewMoviePage() {
                         <button key={c} type="button" onClick={() => setCertification(sel ? "" : c)}
                           className={["px-3 py-1.5 rounded-full border text-xs font-semibold transition-all duration-100 select-none",
                             sel ? "bg-red-500/12 border-red-500/60 text-red-400"
-                                : "bg-(--bg-raise)/40 border-(--svf-border) text-(--text-faint) hover:text-(--text)",
+                                : "bg-(--bg-raise) border-(--svf-border) text-(--text-faint) hover:text-(--text)",
                           ].join(" ")}>
                           {c}
                         </button>
@@ -1268,11 +1268,11 @@ export default function NewMoviePage() {
               {/* Other */}
               <div className={["rounded-[10px] border overflow-hidden transition-colors duration-200",
                 (otherRights && otherRights !== "No") ? "border-emerald-500/40" : "border-(--svf-border)"].join(" ")}>
-                <div className="flex items-center justify-between px-3 py-2.5 bg-(--bg-raise)/40 gap-2">
+                <div className="flex items-center justify-between px-3 py-2.5 bg-(--bg-raise) gap-2">
                   <span className={["text-[11px] font-bold uppercase tracking-widest transition-colors duration-200",
                     (otherRights && otherRights !== "No") ? "text-emerald-400" : "text-(--text-faint)"].join(" ")}>Other Rights</span>
                 </div>
-                <div className="p-3 border-t border-(--svf-border) bg-(--bg-raise)/30 space-y-2.5">
+                <div className="p-3 border-t border-(--svf-border) bg-(--bg-raise) space-y-2.5">
                   <OtherRightsMultiPicker value={otherRights} onChange={setOtherRights} />
                   {(otherRights === "Yes" || (otherRights && otherRights !== "No")) && (
                     <>
@@ -1381,7 +1381,7 @@ export default function NewMoviePage() {
                   </Button>
                 </div>
                 {addingRole === "cast" && (
-                  <div className="space-y-2 p-3 border border-(--svf-border) rounded-[10px] bg-(--bg-deep)/30">
+                  <div className="space-y-2 p-3 border border-(--svf-border) rounded-[10px] bg-(--bg-raise)">
                     <div className="relative">
                       <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-(--text-faint)" />
                       <Input placeholder="Search people by name…" value={personSearch} onChange={e => handlePersonSearch(e.target.value)} className={`${inputCls} pl-8`} autoFocus />
@@ -1423,7 +1423,7 @@ export default function NewMoviePage() {
                   </Button>
                 </div>
                 {addingRole === "director" && (
-                  <div className="space-y-2 p-3 border border-(--svf-border) rounded-[10px] bg-(--bg-deep)/30">
+                  <div className="space-y-2 p-3 border border-(--svf-border) rounded-[10px] bg-(--bg-raise)">
                     <div className="relative">
                       <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-(--text-faint)" />
                       <Input placeholder="Search people by name…" value={personSearch} onChange={e => handlePersonSearch(e.target.value)} className={`${inputCls} pl-8`} autoFocus />

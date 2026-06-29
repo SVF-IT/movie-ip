@@ -147,7 +147,7 @@ export async function getPendingChanges(options?: {
   try {
     let query = supabase
       .from("movie_pending_changes")
-      .select("*, movie:movies(id, title)", { count: "exact" });
+      .select("*", { count: "exact" });
 
     const status = options?.status ?? "pending";
     if (status !== "all") query = query.eq("status", status);
@@ -164,6 +164,19 @@ export async function getPendingChanges(options?: {
 
     let results = (data || []) as PendingChange[];
 
+    // Enrich with movie titles via a separate query (avoids PostgREST FK join ambiguity)
+    if (results.length > 0) {
+      const movieIds = [...new Set(results.map((r) => r.movie_id))];
+      const { data: movies } = await supabase
+        .from("movies")
+        .select("id, title")
+        .in("id", movieIds);
+      if (movies) {
+        const movieMap = Object.fromEntries(movies.map((m) => [m.id, m]));
+        results = results.map((r) => ({ ...r, movie: movieMap[r.movie_id] ?? null }));
+      }
+    }
+
     if (options?.search) {
       const q = options.search.toLowerCase();
       results = results.filter(
@@ -176,7 +189,7 @@ export async function getPendingChanges(options?: {
     return { data: results, count: count || 0 };
   } catch (err) {
     console.error("Error fetching pending changes:", err);
-    return { data: [], count: 0 };
+    throw err;
   }
 }
 

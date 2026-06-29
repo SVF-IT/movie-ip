@@ -246,7 +246,7 @@ function MovieCard({ movie, onApprove, onReject, isLegalOrAdmin }: MovieCardProp
         </div>
 
         {(movie.cast_names || movie.director_names) && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-(--svf-border)/40">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-(--svf-border)">
             {movie.director_names && (
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Directors</span>
@@ -271,7 +271,7 @@ function MovieCard({ movie, onApprove, onReject, isLegalOrAdmin }: MovieCardProp
         </button>
 
         {expanded && (
-          <div className="space-y-3 pt-2 border-t border-(--svf-border)/40">
+          <div className="space-y-3 pt-2 border-t border-(--svf-border)">
             {historyLoading ? (
               <div className="flex items-center gap-2 text-(--text-faint) text-sm">
                 <Loader2 className="h-4 w-4 animate-spin" /> Loading history…
@@ -376,11 +376,11 @@ function PendingChangeCard({
             </button>
             {expanded && (
               <div className="rounded-lg border border-(--svf-border) overflow-hidden">
-                <div className="grid grid-cols-3 gap-0 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) px-3 py-1.5 bg-(--bg-raise)/40 border-b border-(--svf-border)">
+                <div className="grid grid-cols-3 gap-0 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) px-3 py-1.5 bg-(--bg-raise) border-b border-(--svf-border)">
                   <span>Field</span><span className="text-red-400">Before</span><span className="text-emerald-400">After</span>
                 </div>
                 {changedFields.map(k => (
-                  <div key={k} className="grid grid-cols-3 gap-0 text-xs px-3 py-2 border-b border-(--svf-border)/40 last:border-0 hover:bg-(--hover)">
+                  <div key={k} className="grid grid-cols-3 gap-0 text-xs px-3 py-2 border-b border-(--svf-border) last:border-0 hover:bg-(--hover)">
                     <span className="text-(--text-faint) font-medium">{k.replace(/_/g, " ")}</span>
                     <span className="text-red-400 truncate pr-2">{String(before[k] ?? "—") || "—"}</span>
                     <span className="text-emerald-400 truncate">{String(after[k] ?? "—") || "—"}</span>
@@ -403,14 +403,14 @@ function PendingChangeCard({
               <div className="rounded-lg border border-(--svf-border) p-3 space-y-1.5 text-xs">
                 {change.change_type === "right_update" && Object.keys(before).length > 0 && (
                   <div className="rounded border border-(--svf-border) overflow-hidden mb-2">
-                    <div className="grid grid-cols-3 gap-0 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) px-3 py-1.5 bg-(--bg-raise)/40 border-b border-(--svf-border)">
+                    <div className="grid grid-cols-3 gap-0 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) px-3 py-1.5 bg-(--bg-raise) border-b border-(--svf-border)">
                       <span>Field</span><span className="text-red-400">Before</span><span className="text-emerald-400">After</span>
                     </div>
                     {(["platform_id", "nature", "start_date", "end_date", "territory", "remarks"] as const).filter(k => {
                       const bv = (before as any)[k]; const av = (after as any)[k];
                       return bv !== av && (bv || av);
                     }).map(k => (
-                      <div key={k} className="grid grid-cols-3 gap-0 text-xs px-3 py-1.5 border-b border-(--svf-border)/40 last:border-0">
+                      <div key={k} className="grid grid-cols-3 gap-0 text-xs px-3 py-1.5 border-b border-(--svf-border) last:border-0">
                         <span className="text-(--text-faint)">{k.replace(/_/g, " ")}</span>
                         <span className="text-red-400 truncate pr-2">{String((before as any)[k] ?? "—") || "—"}</span>
                         <span className="text-emerald-400 truncate">{String((after as any)[k] ?? "—") || "—"}</span>
@@ -612,10 +612,10 @@ export default function LegalApprovalsPage() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-(--text-faint)" />
                 <Input placeholder="Search by title…" value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text)" />
+                  className="pl-10 h-9 bg-(--bg-raise) border-(--svf-border) text-(--text)" />
               </div>
               <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as ApprovalStatus | "all")}>
-                <SelectTrigger className="h-9 w-40 bg-(--bg-raise)/40 border-(--svf-border) text-(--text)">
+                <SelectTrigger className="h-9 w-40 bg-(--bg-raise) border-(--svf-border) text-(--text)">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -633,7 +633,7 @@ export default function LegalApprovalsPage() {
               <Loader2 className="h-6 w-6 animate-spin" /> Loading movies…
             </div>
           ) : movies.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 rounded-[14px] border border-dashed border-(--svf-border)/60">
+            <div className="flex flex-col items-center justify-center py-20 rounded-[14px] border border-dashed border-(--svf-border)">
               <CheckCircle className="h-12 w-12 text-green-400/40 mb-4" />
               <h3 className="font-bold text-xl text-(--text)">
                 {statusFilter === "pending" ? "No pending approvals" : "No movies found"}
@@ -659,10 +659,10 @@ export default function LegalApprovalsPage() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-(--text-faint)" />
                 <Input placeholder="Search by movie title or change summary…" value={changesSearch}
                   onChange={(e) => setChangesSearch(e.target.value)}
-                  className="pl-10 h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text)" />
+                  className="pl-10 h-9 bg-(--bg-raise) border-(--svf-border) text-(--text)" />
               </div>
               <Select value={changesStatusFilter} onValueChange={(v) => setChangesStatusFilter(v as typeof changesStatusFilter)}>
-                <SelectTrigger className="h-9 w-40 bg-(--bg-raise)/40 border-(--svf-border) text-(--text)">
+                <SelectTrigger className="h-9 w-40 bg-(--bg-raise) border-(--svf-border) text-(--text)">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -680,7 +680,7 @@ export default function LegalApprovalsPage() {
               <Loader2 className="h-6 w-6 animate-spin" /> Loading edit requests…
             </div>
           ) : changes.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 rounded-[14px] border border-dashed border-(--svf-border)/60">
+            <div className="flex flex-col items-center justify-center py-20 rounded-[14px] border border-dashed border-(--svf-border)">
               <GitPullRequest className="h-12 w-12 text-blue-400/40 mb-4" />
               <h3 className="font-bold text-xl text-(--text)">
                 {changesStatusFilter === "pending" ? "No pending edit requests" : "No edit requests found"}

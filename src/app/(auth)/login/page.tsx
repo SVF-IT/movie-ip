@@ -15,6 +15,56 @@ const POSTER_TITLES = [
   "Dawshom Awbotaar", "Ballavpurer", "Roopkatha", "Guptodhoner", "Amazon Obhijaan", "Har Har Byomkesh",
 ];
 
+function PosterWall() {
+  return (
+    <div style={{
+      position: "absolute", inset: 0,
+      display: "grid",
+      gridTemplateColumns: "repeat(3, 1fr)",
+      gridAutoRows: "1fr",
+      gap: 12,
+      padding: 12,
+      transform: "rotate(-8deg) scale(1.5) translateY(-4%)",
+      pointerEvents: "none",
+    }}>
+      {POSTER_HUES.concat(POSTER_HUES).slice(0, 24).map((hue, i) => (
+        <div key={i} className="poster-tile" style={{
+          borderRadius: 10,
+          position: "relative",
+          minHeight: 120,
+          ["--hue" as string]: hue,
+          ["--hue2" as string]: (hue + 20) % 360,
+        }}>
+          {/* bottom vignette */}
+          <div style={{
+            position: "absolute", inset: 0,
+            background: "linear-gradient(to top, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.05) 55%, transparent 100%)",
+            borderRadius: 10,
+          }} />
+          {/* prod number */}
+          <div style={{
+            position: "absolute", top: 9, left: 10,
+            fontFamily: "var(--font-mono)", fontSize: 9,
+            letterSpacing: "0.07em", color: "rgba(255,255,255,0.6)",
+          }}>
+            P-{2000 + (i * 100) % 1400}
+          </div>
+          {/* movie title */}
+          <div style={{
+            position: "absolute", bottom: 0, left: 0, right: 0,
+            padding: "0 11px 11px",
+            fontFamily: "var(--font-serif)", fontSize: 17, fontWeight: 400,
+            color: "white", lineHeight: 1.15,
+            textShadow: "0 2px 12px rgba(0,0,0,0.8)",
+          }}>
+            {POSTER_TITLES[i % POSTER_TITLES.length]}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -74,73 +124,12 @@ export default function LoginPage() {
       <div className="hidden lg:flex w-[54%] relative overflow-hidden flex-col justify-between p-12">
 
         {/* Poster wall — rotated grid behind everything */}
-        <div style={{
-          position: "absolute", inset: 0,
-          display: "grid",
-          gridTemplateColumns: "repeat(3, 1fr)",
-          gridAutoRows: "1fr",
-          gap: 12,
-          padding: 12,
-          opacity: 0.52,
-          transform: "rotate(-8deg) scale(1.5) translateY(-4%)",
-          filter: "saturate(0.9)",
-          pointerEvents: "none",
-        }}>
-          {POSTER_HUES.concat(POSTER_HUES).slice(0, 24).map((hue, i) => (
-            <div key={i} style={{
-              borderRadius: 10,
-              background: `linear-gradient(150deg,
-                oklch(0.42 0.13 ${hue}) 0%,
-                oklch(0.26 0.10 ${hue}) 42%,
-                oklch(0.17 0.06 ${(hue + 20) % 360}) 100%)`,
-              border: "1px solid rgba(255,255,255,0.1)",
-              position: "relative",
-              minHeight: 120,
-            }}>
-              {/* top highlight */}
-              <div style={{
-                position: "absolute", top: 0, left: 0, right: 0, height: "45%",
-                background: `radial-gradient(ellipse at 70% 0%, oklch(0.85 0.12 ${hue} / 0.18), transparent 65%)`,
-                mixBlendMode: "screen",
-                borderRadius: "10px 10px 0 0",
-              }} />
-              {/* bottom vignette */}
-              <div style={{
-                position: "absolute", inset: 0,
-                background: "linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.1) 50%, transparent 100%)",
-                borderRadius: 10,
-              }} />
-              {/* prod number top-left */}
-              <div style={{
-                position: "absolute", top: 9, left: 10,
-                fontFamily: "var(--font-mono)",
-                fontSize: 9,
-                letterSpacing: "0.07em",
-                color: "rgba(255,255,255,0.55)",
-              }}>
-                P-{2000 + (i * 100) % 1400}
-              </div>
-              {/* movie title bottom */}
-              <div style={{
-                position: "absolute", bottom: 0, left: 0, right: 0,
-                padding: "0 11px 11px",
-                fontFamily: "var(--font-serif)",
-                fontSize: 17,
-                fontWeight: 400,
-                color: "white",
-                lineHeight: 1.15,
-                textShadow: "0 2px 12px rgba(0,0,0,0.8)",
-              }}>
-                {POSTER_TITLES[i % POSTER_TITLES.length]}
-              </div>
-            </div>
-          ))}
-        </div>
+        <PosterWall />
 
-        {/* Dark gradient overlay over poster wall */}
+        {/* Gradient overlay over poster wall */}
         <div style={{
           position: "absolute", inset: 0,
-          background: "linear-gradient(180deg, color-mix(in oklch, var(--bg) 55%, transparent), color-mix(in oklch, var(--bg) 90%, transparent))",
+          background: "linear-gradient(180deg, color-mix(in oklch, var(--bg) 30%, transparent) 0%, color-mix(in oklch, var(--bg) 75%, transparent) 100%)",
           pointerEvents: "none",
         }} />
         {/* Accent radial glow from bottom-left */}

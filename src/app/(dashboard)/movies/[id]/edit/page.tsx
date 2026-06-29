@@ -13,7 +13,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/auth-context";
 import { useAppToast } from "@/hooks/use-app-toast";
@@ -60,14 +59,14 @@ const HOME_NATURE_OPTIONS = [
 
 const HOLDBACK_PRESETS = ["Audio Rights", "Theatrical Exploitation", "FVOD", "AVOD", "SVOD", "TVOD"];
 
-const inputCls = "bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) focus:border-slate-500 h-10";
-const selectCls = "bg-(--bg-raise)/40 border-(--svf-border) text-(--text) h-10";
-const textareaCls = "bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) focus:border-slate-500";
+const inputCls = "bg-(--bg-raise) border-(--svf-border) text-(--text) placeholder:text-(--text-faint) focus-visible:border-(--svf-border-strong) focus-visible:ring-0 h-10";
+const selectCls = "bg-(--bg-raise) border-(--svf-border) text-(--text) h-10";
+const textareaCls = "bg-(--bg-raise) border-(--svf-border) text-(--text) placeholder:text-(--text-faint) focus-visible:border-(--svf-border-strong) focus-visible:ring-0";
 const labelCls = "text-xs font-semibold text-(--text-faint) uppercase tracking-wider";
 
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="relative overflow-hidden rounded-[12px] bg-(--panel-solid)/40 border border-(--svf-border) backdrop-blur-xl shadow-xl">
+    <div className="relative overflow-hidden rounded-[12px] bg-(--panel-solid) border border-(--svf-border) shadow-sm">
       <div className="flex items-center gap-3 px-5 py-4 border-b border-(--svf-border)">
         <div className="p-1.5 rounded-[10px] bg-amber-500/15 border border-amber-500/30">
           <Film className="h-3.5 w-3.5 text-amber-400" />
@@ -91,15 +90,15 @@ function FormField({ label, required, hint, children }: { label: string; require
 
 function TogglePill({ value, onChange, options = ["Yes", "No"] }: { value: string; onChange: (v: string) => void; options?: string[] }) {
   return (
-    <div className="inline-flex bg-(--bg-raise)/50 border border-(--svf-border) rounded-full p-0.5 gap-0.5">
+    <div className="inline-flex bg-(--bg-raise) border border-(--svf-border) rounded-full p-0.5 gap-0.5">
       {options.map((opt) => {
         const active = value === opt;
         return (
           <button key={opt} type="button" onClick={() => onChange(active ? "" : opt)}
             className={[
               "px-3 py-1 rounded-full text-[12.5px] font-semibold transition-all duration-150 whitespace-nowrap select-none",
-              active && opt === "Yes" ? "bg-emerald-500/20 text-emerald-400" :
-                active && opt === "No" ? "bg-red-500/20 text-red-400" :
+              active && opt === "Yes" ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-400" :
+                active && opt === "No" ? "bg-red-500/20 text-red-700 dark:text-red-400" :
                   active ? "bg-(--hover) text-(--text)" :
                     "text-(--text-faint) hover:text-(--text)",
             ].filter(Boolean).join(" ")}>
@@ -134,7 +133,7 @@ function SyndicationField({ value, onChange }: { value: string; onChange: (v: st
           value={customText}
           onChange={(e) => handleTextChange(e.target.value)}
           placeholder="Enter custom syndication terms…"
-          className="w-64 h-8 rounded-xl border border-(--svf-border) bg-(--bg-raise)/40 px-3 text-xs text-(--text) placeholder:text-(--text-faint) focus:outline-none focus:border-(--svf-border-strong)"
+          className="w-64 h-8 rounded-xl border border-(--svf-border) bg-(--bg-raise) px-3 text-xs text-(--text) placeholder:text-(--text-faint) focus:outline-none focus:border-(--svf-border-strong)"
         />
       )}
     </div>
@@ -145,11 +144,11 @@ function RightsCard({ title, value, onChange, children }: { title: string; value
   const isAcq = value === "Yes";
   return (
     <div className={["rounded-[10px] border overflow-hidden transition-colors duration-200", isAcq ? "border-emerald-500/40" : "border-(--svf-border)"].join(" ")}>
-      <div className="flex items-center justify-between px-3 py-2.5 bg-(--bg-raise)/40 gap-2">
-        <span className={["text-[11px] font-bold uppercase tracking-widest transition-colors duration-200", isAcq ? "text-emerald-400" : "text-(--text-faint)"].join(" ")}>{title}</span>
+      <div className="flex items-center justify-between px-3 py-2.5 bg-(--bg-raise) gap-2">
+        <span className={["text-[11px] font-bold uppercase tracking-widest transition-colors duration-200", isAcq ? "text-emerald-700 dark:text-emerald-400" : "text-(--text-faint)"].join(" ")}>{title}</span>
         <TogglePill value={value} onChange={onChange} />
       </div>
-      {isAcq && <div className="p-3 border-t border-(--svf-border) bg-(--bg-raise)/30">{children}</div>}
+      {isAcq && <div className="p-3 border-t border-(--svf-border) bg-(--bg-raise)">{children}</div>}
     </div>
   );
 }
@@ -177,7 +176,7 @@ function LangMultiPicker({ value, onChange }: { value: string; onChange: (v: str
           return (
             <button key={lang} type="button" onClick={() => toggle(lang)}
               className={["px-2 py-0.5 rounded-full text-xs font-semibold border transition-all select-none",
-                sel ? "bg-amber-500/15 border-amber-500/50 text-amber-300" : "bg-(--bg-raise)/40 border-(--svf-border) text-(--text-faint) hover:text-(--text)",
+                sel ? "bg-amber-500/15 border-amber-500/50 text-amber-700 dark:text-amber-300" : "bg-(--bg-raise) border-(--svf-border) text-(--text-faint) hover:text-(--text)",
               ].join(" ")}>{lang}</button>
           );
         })}
@@ -193,8 +192,8 @@ function LangMultiPicker({ value, onChange }: { value: string; onChange: (v: str
           <Input ref={inputRef} value={customInput} onChange={e => setCustomInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } if (e.key === "Escape") { setShowCustom(false); setCustomInput(""); } }}
             placeholder="Type language…"
-            className="h-7 flex-1 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-xs" />
-          <button type="button" onClick={addCustom} className="h-7 px-2.5 rounded-[9px] bg-amber-600/20 border border-amber-500/30 text-amber-400 text-xs font-semibold hover:bg-amber-600/30">Add</button>
+            className="h-7 flex-1 bg-(--bg-raise) border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-xs" />
+          <button type="button" onClick={addCustom} className="h-7 px-2.5 rounded-[9px] bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-amber-400 text-xs font-semibold hover:bg-amber-500/25">Add</button>
           <button type="button" onClick={() => { setShowCustom(false); setCustomInput(""); }} className="h-7 w-7 flex items-center justify-center rounded-[9px] text-(--text-faint) hover:text-(--text)">
             <X className="h-3.5 w-3.5" />
           </button>
@@ -203,7 +202,7 @@ function LangMultiPicker({ value, onChange }: { value: string; onChange: (v: str
       {selected.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {selected.map(lang => (
-            <span key={lang} className="flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/25 text-xs font-semibold text-amber-300">
+            <span key={lang} className="flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/25 text-xs font-semibold text-amber-700 dark:text-amber-300">
               {lang}
               <button type="button" onClick={() => commit(selected.filter(s => s !== lang))} className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-amber-500/20">
                 <X className="h-2.5 w-2.5" />
@@ -213,7 +212,7 @@ function LangMultiPicker({ value, onChange }: { value: string; onChange: (v: str
         </div>
       )}
       {dbVal && (
-        <div className="flex items-center gap-2 px-2.5 py-1 rounded-[9px] bg-(--bg-raise)/60 border border-(--svf-border)">
+        <div className="flex items-center gap-2 px-2.5 py-1 rounded-[9px] bg-(--bg-raise) border border-(--svf-border)">
           <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) shrink-0">DB:</span>
           <span className="text-[11px] text-(--text-faint) font-mono break-all">{dbVal}</span>
         </div>
@@ -237,24 +236,67 @@ function InlineRightsRow({ label, value, onChange, langValue, onLangChange }: { 
 }
 
 function MultiChips({ options, value, onChange }: { options: string[]; value: string; onChange: (v: string) => void }) {
+  const [customInput, setCustomInput] = useState("");
+  const [showCustom, setShowCustom] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   const selected = value ? value.split(",").map(s => s.trim()).filter(Boolean) : [];
-  const toggle = (opt: string) => {
-    const next = selected.includes(opt) ? selected.filter(s => s !== opt) : [...selected, opt];
-    onChange(next.join(", "));
+  const commit = (next: string[]) => onChange(next.join(", "));
+  const toggle = (opt: string) => commit(selected.includes(opt) ? selected.filter(s => s !== opt) : [...selected, opt]);
+  const addCustom = () => {
+    const val = customInput.trim();
+    if (!val || selected.includes(val)) { setCustomInput(""); setShowCustom(false); return; }
+    commit([...selected, val]); setCustomInput(""); setShowCustom(false);
   };
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {options.map(opt => {
-        const sel = selected.includes(opt);
-        return (
-          <button key={opt} type="button" onClick={() => toggle(opt)}
-            className={["px-2.5 py-1 rounded-full text-xs font-semibold border transition-all duration-100 select-none",
-              sel ? "bg-(--hover) border-slate-500/50 text-(--text)" : "bg-(--bg-raise)/40 border-(--svf-border) text-(--text-faint) hover:text-(--text)",
-            ].join(" ")}>
-            {opt}
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-1.5">
+        {options.map(opt => {
+          const sel = selected.includes(opt);
+          return (
+            <button key={opt} type="button" onClick={() => toggle(opt)}
+              className={["px-2.5 py-1 rounded-full text-xs font-semibold border transition-all duration-100 select-none",
+                sel ? "bg-(--hover) border-(--svf-border-strong) text-(--text)" : "bg-(--bg-raise) border-(--svf-border) text-(--text-faint) hover:text-(--text)",
+              ].join(" ")}>
+              {opt}
+            </button>
+          );
+        })}
+        {!showCustom && (
+          <button type="button" onClick={() => { setShowCustom(true); setTimeout(() => inputRef.current?.focus(), 50); }}
+            className="px-2.5 py-1 rounded-full text-xs font-semibold border border-dashed border-(--svf-border-strong) text-(--text-faint) hover:text-(--text) hover:border-(--svf-border-strong) transition-all">
+            + Custom
           </button>
-        );
-      })}
+        )}
+      </div>
+      {showCustom && (
+        <div className="flex gap-2 items-center">
+          <Input ref={inputRef} value={customInput} onChange={e => setCustomInput(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } if (e.key === "Escape") { setShowCustom(false); setCustomInput(""); } }}
+            placeholder="Type value…"
+            className="h-7 flex-1 bg-(--bg-raise) border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-xs" />
+          <button type="button" onClick={addCustom}
+            className="h-7 px-2.5 rounded-[9px] bg-(--bg-raise) border border-(--svf-border-strong) text-(--text) text-xs font-semibold hover:bg-(--hover) transition-all">
+            Add
+          </button>
+          <button type="button" onClick={() => { setShowCustom(false); setCustomInput(""); }}
+            className="h-7 w-7 flex items-center justify-center rounded-[9px] text-(--text-faint) hover:text-(--text)">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {selected.map(item => (
+            <span key={item} className="flex items-center gap-1 pl-2.5 pr-1 py-0.5 rounded-full bg-(--bg-deep) border border-(--svf-border-strong) text-xs font-semibold text-(--text)">
+              {item}
+              <button type="button" onClick={() => commit(selected.filter(s => s !== item))}
+                className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-(--hover) transition-all">
+                <X className="h-2.5 w-2.5" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -280,7 +322,7 @@ function HoldbackPicker({ value, onChange }: { value: string; onChange: (v: stri
           return (
             <button key={opt} type="button" onClick={() => toggle(opt)}
               className={["px-2.5 py-1 rounded-full text-xs font-semibold border transition-all duration-100 select-none",
-                sel ? "bg-(--hover) border-slate-500/50 text-(--text)" : "bg-(--bg-raise)/40 border-(--svf-border) text-(--text-faint) hover:text-(--text)",
+                sel ? "bg-(--hover) border-(--svf-border-strong) text-(--text)" : "bg-(--bg-raise) border-(--svf-border) text-(--text-faint) hover:text-(--text)",
               ].join(" ")}>{opt}</button>
           );
         })}
@@ -296,7 +338,7 @@ function HoldbackPicker({ value, onChange }: { value: string; onChange: (v: stri
           <Input ref={inputRef} value={customInput} onChange={e => setCustomInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } if (e.key === "Escape") { setShowCustom(false); setCustomInput(""); } }}
             placeholder="Type custom value…"
-            className="h-7 flex-1 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-xs focus-visible:ring-amber-500/40" />
+            className="h-7 flex-1 bg-(--bg-raise) border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-xs focus-visible:ring-amber-500/40" />
           <button type="button" onClick={addCustom}
             className="h-7 px-2.5 rounded-[9px] bg-amber-600/20 border border-amber-500/30 text-amber-400 text-xs font-semibold hover:bg-amber-600/30 transition-all">Add</button>
           <button type="button" onClick={() => { setShowCustom(false); setCustomInput(""); }}
@@ -308,7 +350,7 @@ function HoldbackPicker({ value, onChange }: { value: string; onChange: (v: stri
       {selected.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {selected.map(item => (
-            <span key={item} className="flex items-center gap-1 pl-2.5 pr-1 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/25 text-xs font-semibold text-amber-300">
+            <span key={item} className="flex items-center gap-1 pl-2.5 pr-1 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/25 text-xs font-semibold text-amber-700 dark:text-amber-300">
               {item}
               <button type="button" onClick={() => commit(selected.filter(s => s !== item))}
                 className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-amber-500/20 transition-all">
@@ -319,7 +361,7 @@ function HoldbackPicker({ value, onChange }: { value: string; onChange: (v: stri
         </div>
       )}
       {value && (
-        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-[9px] bg-(--bg-raise)/60 border border-(--svf-border)">
+        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-[9px] bg-(--bg-raise) border border-(--svf-border)">
           <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) shrink-0">DB value:</span>
           <span className="text-[11px] text-(--text-faint) font-mono break-all">{value}</span>
         </div>
@@ -401,8 +443,8 @@ function OtherRightsMultiPicker({ value, onChange }: { value: string; onChange: 
                 className={[
                   "px-2 py-0.5 rounded-full text-xs font-semibold border transition-all select-none",
                   types.includes(opt)
-                    ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-300"
-                    : "bg-(--bg-raise)/40 border-(--svf-border) text-(--text-faint) hover:text-(--text)",
+                    ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-700 dark:text-emerald-300"
+                    : "bg-(--bg-raise) border-(--svf-border) text-(--text-faint) hover:text-(--text)",
                 ].join(" ")}>
                 {opt}
               </button>
@@ -420,8 +462,8 @@ function OtherRightsMultiPicker({ value, onChange }: { value: string; onChange: 
               <Input ref={inputRef} value={customInput} onChange={e => setCustomInput(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } if (e.key === "Escape") { setShowCustom(false); setCustomInput(""); } }}
                 placeholder="Type right name…"
-                className="h-7 flex-1 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-xs focus-visible:ring-red-500/40" />
-              <button type="button" onClick={addCustom} className="h-7 px-2.5 rounded-[9px] bg-emerald-600/20 border border-emerald-500/30 text-emerald-400 text-xs font-semibold hover:bg-emerald-600/30">Add</button>
+                className="h-7 flex-1 bg-(--bg-raise) border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-xs focus-visible:ring-red-500/40" />
+              <button type="button" onClick={addCustom} className="h-7 px-2.5 rounded-[9px] bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-xs font-semibold hover:bg-emerald-500/25">Add</button>
               <button type="button" onClick={() => { setShowCustom(false); setCustomInput(""); }} className="h-7 w-7 flex items-center justify-center rounded-[9px] text-(--text-faint) hover:text-(--text)">
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -431,7 +473,7 @@ function OtherRightsMultiPicker({ value, onChange }: { value: string; onChange: 
           {types.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {types.map(s => (
-                <span key={s} className="flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-xs font-semibold text-emerald-300">
+                <span key={s} className="flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
                   {s}
                   <button type="button" onClick={() => remove(s)} className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-emerald-500/20">
                     <X className="h-2.5 w-2.5" />
@@ -479,7 +521,7 @@ function ClipDurationField({ value, onChange, className }: { value: string; onCh
           value={customText}
           onChange={(e) => handleTextChange(e.target.value)}
           placeholder="e.g. 30 seconds, 2 mins…"
-          className={`h-9 rounded-xl border border-(--svf-border) bg-(--bg-raise)/40 px-3 text-xs text-(--text) placeholder:text-(--text-faint) focus:outline-none focus:border-(--svf-border-strong) w-full ${className ?? ""}`}
+          className={`h-9 rounded-xl border border-(--svf-border) bg-(--bg-raise) px-3 text-xs text-(--text) placeholder:text-(--text-faint) focus:outline-none focus:border-(--svf-border-strong) w-full ${className ?? ""}`}
         />
       ) : (
         <DurationInput value={isTimestamp ? value : ""} onChange={onChange} className={className} />
@@ -998,7 +1040,7 @@ export default function EditMoviePage() {
   return (
     <div className="space-y-4">
       {/* ── Cinematic Header ── */}
-      <div className="relative overflow-hidden rounded-[12px] bg-(--bg-raise)/60 border border-(--svf-border) backdrop-blur-xl p-3">
+      <div className="relative overflow-hidden rounded-[12px] bg-(--panel-solid) border border-(--svf-border) p-3">
 
         <div className="relative flex items-center gap-4">
           <Link href="/movies">
@@ -1012,7 +1054,7 @@ export default function EditMoviePage() {
               <Film className="h-5 w-5 text-amber-400" />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
+              <h1 className="text-xl font-bold tracking-tight text-(--text)">
                 Edit Movie
               </h1>
               <p className="text-xs text-(--text-faint) mt-0.5">Updating <span className="text-(--text)">{title}</span></p>
@@ -1023,35 +1065,44 @@ export default function EditMoviePage() {
 
       {shouldStage && (
         <div className="flex items-start gap-3 px-4 py-3 rounded-[12px] bg-blue-500/10 border border-blue-500/30">
-          <GitPullRequest className="h-4 w-4 text-blue-400 mt-0.5 shrink-0" />
-          <p className="text-sm text-blue-300">
+          <GitPullRequest className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
+          <p className="text-sm text-blue-800 dark:text-blue-200">
             Changes you save will be <strong>submitted for review</strong> before being applied.
           </p>
         </div>
       )}
 
-      <div className="relative overflow-hidden rounded-[12px] bg-(--panel-solid)/40 border border-(--svf-border) backdrop-blur-xl shadow-xl p-6">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-6 bg-transparent border-b border-(--svf-border) rounded-[9px] p-0 h-auto gap-8">
-            <TabsTrigger value="basic" className="relative rounded-[9px] border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent bg-transparent text-(--text-faint) data-[state=active]:text-amber-400 px-0 py-3">Basic</TabsTrigger>
-            <TabsTrigger value="acquired" disabled={isHomeProd} className="relative rounded-[9px] border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent bg-transparent text-(--text-faint) data-[state=active]:text-amber-400 px-0 py-3 disabled:opacity-40">Acquired</TabsTrigger>
-            <TabsTrigger value="rights" disabled={isHomeProd} className="relative rounded-[9px] border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent bg-transparent text-(--text-faint) data-[state=active]:text-amber-400 px-0 py-3 disabled:opacity-40">
-              Rights{isHomeProd && <span className="ml-1.5 text-[9px] font-bold uppercase tracking-widest text-emerald-500 border border-emerald-500/40 rounded px-1 py-0.5">All Yes</span>}
-            </TabsTrigger>
-            <TabsTrigger value="notes" className="relative rounded-[9px] border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent bg-transparent text-(--text-faint) data-[state=active]:text-amber-400 px-0 py-3">Notes</TabsTrigger>
-            <TabsTrigger value="people" className="relative rounded-[9px] border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent bg-transparent text-(--text-faint) data-[state=active]:text-amber-400 px-0 py-3">Cast & Crew</TabsTrigger>
-            <TabsTrigger value="approval" className="relative rounded-[9px] border-b-2 border-transparent data-[state=active]:border-amber-500 data-[state=active]:bg-transparent bg-transparent text-(--text-faint) data-[state=active]:text-amber-400 px-0 py-3">
-              Approval
-              {approvalStatus === "rejected" && (
-                <span className="absolute top-2 -right-2 h-2 w-2 rounded-full bg-red-500" />
-              )}
-              {approvalStatus === "pending" && (
-                <span className="absolute top-2 -right-2 h-2 w-2 rounded-full bg-amber-500" />
-              )}
-            </TabsTrigger>
-          </TabsList>
+      {/* Step Nav */}
+      <div className="flex items-stretch bg-(--bg-raise) border border-(--svf-border) rounded-[12px] p-1 gap-1 overflow-x-auto">
+        {[
+          { id: "basic",    label: "Basic" },
+          { id: "acquired", label: "Acquired",  disabled: isHomeProd },
+          { id: "rights",   label: "Rights",    disabled: isHomeProd, tag: isHomeProd ? "All Yes" : null },
+          { id: "notes",    label: "Notes" },
+          { id: "people",   label: "Cast & Crew" },
+          { id: "approval", label: "Approval",  dot: approvalStatus === "rejected" ? "red" : approvalStatus === "pending" ? "amber" : null },
+        ].map(step => {
+          const isActive = activeTab === step.id;
+          return (
+            <button key={step.id} type="button" disabled={step.disabled}
+              onClick={() => !step.disabled && setActiveTab(step.id)}
+              className={["relative flex items-center gap-2 px-3 py-2 rounded-[10px] text-[12.5px] font-semibold whitespace-nowrap transition-all duration-150 shrink-0 border",
+                isActive      ? "bg-(--panel-solid) text-(--text) border-(--svf-border-strong) shadow-sm" :
+                step.disabled ? "opacity-30 cursor-not-allowed text-(--text-faint) border-transparent" :
+                                "text-(--text-faint) hover:text-(--text) hover:bg-(--hover) border-transparent",
+              ].join(" ")}>
+              {step.label}
+              {step.tag && <span className="text-[9px] font-bold uppercase tracking-widest text-emerald-600 dark:text-emerald-400 border border-emerald-500/40 rounded px-1 py-0.5">{step.tag}</span>}
+              {step.dot === "red"   && <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-red-500" />}
+              {step.dot === "amber" && <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-amber-500" />}
+            </button>
+          );
+        })}
+      </div>
 
-          <TabsContent value="basic" className="space-y-4 mt-4">
+      <div className="space-y-4">
+
+          {activeTab === "basic" && <div className="space-y-4">
             <SectionCard title="Movie Information">
               <div className="grid gap-4 md:grid-cols-2">
                 <FormField label="Title" required>
@@ -1075,11 +1126,11 @@ export default function EditMoviePage() {
 
                 {/* Color / B&W — toggle pill */}
                 <FormField label="Color / B&W">
-                  <div className="inline-flex bg-(--bg-raise)/50 border border-(--svf-border) rounded-full p-0.5 gap-0.5">
+                  <div className="inline-flex bg-(--bg-raise) border border-(--svf-border) rounded-full p-0.5 gap-0.5">
                     {["Color", "B&W"].map((opt) => (
                       <button key={opt} type="button" onClick={() => setColorOrBw(opt)}
                         className={["px-4 py-1.5 rounded-full text-sm font-semibold transition-all duration-150",
-                          colorOrBw === opt ? "bg-emerald-500/20 text-emerald-400" : "text-(--text-faint) hover:text-(--text)",
+                          colorOrBw === opt ? "bg-emerald-500/20 text-emerald-700 dark:text-emerald-400" : "text-(--text-faint) hover:text-(--text)",
                         ].join(" ")}>
                         {opt}
                       </button>
@@ -1126,9 +1177,9 @@ export default function EditMoviePage() {
                             onClick={() => { setSource(opt.value as MovieSource); if (opt.value === 'home_production' && natureOfRights === 'Non-Exclusive') setNatureOfRights(''); }}
                             className={["text-left p-4 rounded-[10px] border-[1.5px] transition-all duration-150 cursor-pointer",
                               sel ? "border-amber-500/70 bg-amber-500/10 shadow-[0_0_0_1px] shadow-amber-500/30"
-                                : "border-(--svf-border) bg-(--bg-raise)/40 hover:border-amber-500/30 hover:bg-amber-500/5",
+                                : "border-(--svf-border) bg-(--bg-raise) hover:border-amber-500/30 hover:bg-amber-500/5",
                             ].join(" ")}>
-                            <strong className={`block text-sm font-bold mb-0.5 ${sel ? "text-amber-400" : "text-(--text)"}`}>{opt.label}</strong>
+                            <strong className={`block text-sm font-bold mb-0.5 ${sel ? "text-amber-700 dark:text-amber-400" : "text-(--text)"}`}>{opt.label}</strong>
                             <span className="text-xs text-(--text-faint)">{opt.desc}</span>
                           </button>
                         );
@@ -1161,8 +1212,8 @@ export default function EditMoviePage() {
                                 }
                               }}
                               className={["px-4 py-2 rounded-full border text-[12.5px] font-semibold transition-all duration-120 select-none",
-                                sel ? "bg-amber-500/12 border-amber-500/60 text-amber-400"
-                                  : "bg-(--bg-raise)/40 border-(--svf-border) text-(--text-faint) hover:text-(--text)",
+                                sel ? "bg-amber-500/12 border-amber-500/60 text-amber-700 dark:text-amber-400"
+                                  : "bg-(--bg-raise) border-(--svf-border) text-(--text-faint) hover:text-(--text)",
                               ].join(" ")}>
                               {opt.label}
                             </button>
@@ -1184,7 +1235,7 @@ export default function EditMoviePage() {
                           Production House {isJointly ? index + 1 : ''}
                         </Label>
                         {isJointly && !isSvfLocked && index > 0 && (
-                          <Button variant="ghost" size="sm" className="h-6 text-xs text-red-400 hover:text-red-300"
+                          <Button variant="ghost" size="sm" className="h-6 text-xs text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
                             onClick={() => setSelectedHouseIds(ids => ids.filter((_, i) => i !== index))}>
                             Remove
                           </Button>
@@ -1258,8 +1309,8 @@ export default function EditMoviePage() {
                           <button key={c} type="button"
                             onClick={() => { const newVal = sel ? "" : c; setCertification(newVal); setRecensorFlag(newVal === "A"); }}
                             className={["px-3 py-1.5 rounded-full border text-xs font-semibold transition-all duration-100 select-none",
-                              sel ? "bg-amber-500/12 border-amber-500/60 text-amber-400"
-                                : "bg-(--bg-raise)/40 border-(--svf-border) text-(--text-faint) hover:text-(--text)",
+                              sel ? "bg-amber-500/12 border-amber-500/60 text-amber-700 dark:text-amber-400"
+                                : "bg-(--bg-raise) border-(--svf-border) text-(--text-faint) hover:text-(--text)",
                             ].join(" ")}>
                             {c}
                           </button>
@@ -1271,9 +1322,9 @@ export default function EditMoviePage() {
 
               </div>
             </SectionCard>
-          </TabsContent>
+          </div>}
 
-          <TabsContent value="acquired" className="space-y-4 mt-4">
+          {activeTab === "acquired" && <div className="space-y-4">
             <SectionCard title="Acquisition Details">
               <div className="grid gap-4 md:grid-cols-2">
                 <FormField label="Assignor / Licensor">
@@ -1293,9 +1344,9 @@ export default function EditMoviePage() {
                 </FormField>
               </div>
             </SectionCard>
-          </TabsContent>
+          </div>}
 
-          <TabsContent value="rights" className="space-y-4 mt-4">
+          {activeTab === "rights" && <div className="space-y-4">
             <SectionCard title="Primary Rights">
               <p className="text-xs text-(--text-faint) mb-3">Toggle <strong className="text-(--text)">Yes</strong> to expand details for each rights type.</p>
               <div className="grid gap-3 md:grid-cols-2">
@@ -1360,11 +1411,11 @@ export default function EditMoviePage() {
                 {/* Other */}
                 <div className={["rounded-[10px] border overflow-hidden transition-colors duration-200",
                   (otherRights && otherRights !== "No") ? "border-emerald-500/40" : "border-(--svf-border)"].join(" ")}>
-                  <div className="flex items-center justify-between px-3 py-2.5 bg-(--bg-raise)/40 gap-2">
+                  <div className="flex items-center justify-between px-3 py-2.5 bg-(--bg-raise) gap-2">
                     <span className={["text-[11px] font-bold uppercase tracking-widest transition-colors duration-200",
-                      (otherRights && otherRights !== "No") ? "text-emerald-400" : "text-(--text-faint)"].join(" ")}>Other Rights</span>
+                      (otherRights && otherRights !== "No") ? "text-emerald-700 dark:text-emerald-400" : "text-(--text-faint)"].join(" ")}>Other Rights</span>
                   </div>
-                  <div className="p-3 border-t border-(--svf-border) bg-(--bg-raise)/30 space-y-2.5">
+                  <div className="p-3 border-t border-(--svf-border) bg-(--bg-raise) space-y-2.5">
                     <OtherRightsMultiPicker value={otherRights} onChange={setOtherRights} />
                     {(otherRights && otherRights !== "No") && (
                       <>
@@ -1413,7 +1464,7 @@ export default function EditMoviePage() {
                 <InlineRightsRow label="Sub-Titling Rights" value={subtitlingRights} onChange={(v) => { setSubtitlingRights(v); if (v !== "Yes" && v !== "No") setSubtitlingLang(""); }}
                   langValue={subtitlingLang} onLangChange={setSubtitlingLang} />
                 {(subtitlingRights === "Yes" || subtitlingRights === "No") && subtitlingLang && (
-                  <div className="flex items-center gap-2 px-3 py-1.5 mb-1 rounded-[9px] bg-(--bg-raise)/60 border border-(--svf-border)">
+                  <div className="flex items-center gap-2 px-3 py-1.5 mb-1 rounded-[9px] bg-(--bg-raise) border border-(--svf-border)">
                     <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) shrink-0">DB value:</span>
                     <span className="text-[11px] text-(--text-faint) font-mono">{subtitlingRights}({subtitlingLang})</span>
                   </div>
@@ -1421,16 +1472,16 @@ export default function EditMoviePage() {
                 <InlineRightsRow label="Dubbing Rights" value={dubbingRights} onChange={(v) => { setDubbingRights(v); if (v !== "Yes" && v !== "No") setDubbingLang(""); }}
                   langValue={dubbingLang} onLangChange={setDubbingLang} />
                 {(dubbingRights === "Yes" || dubbingRights === "No") && dubbingLang && (
-                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-[9px] bg-(--bg-raise)/60 border border-(--svf-border)">
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-[9px] bg-(--bg-raise) border border-(--svf-border)">
                     <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) shrink-0">DB value:</span>
                     <span className="text-[11px] text-(--text-faint) font-mono">{dubbingRights}({dubbingLang})</span>
                   </div>
                 )}
               </div>
             </SectionCard>
-          </TabsContent>
+          </div>}
 
-          <TabsContent value="notes" className="space-y-4 mt-4">
+          {activeTab === "notes" && <div className="space-y-4">
             <SectionCard title="Notes & Holdbacks">
               <div className="space-y-4">
                 <FormField label="Holdbacks apply to">
@@ -1444,7 +1495,7 @@ export default function EditMoviePage() {
                 <FormField label="Actionables">
                   <Textarea value={actionables} onChange={(e) => setActionables(e.target.value)} rows={3} className={textareaCls} />
                 </FormField>
-                <div className="flex items-start gap-3 rounded-[10px] border border-(--svf-border) p-3 bg-(--bg-deep)/20">
+                <div className="flex items-start gap-3 rounded-[10px] border border-(--svf-border) p-3 bg-(--bg-raise)">
                   <Checkbox
                     id="recensor_flag"
                     checked={recensorFlag}
@@ -1460,9 +1511,9 @@ export default function EditMoviePage() {
                 </div>
               </div>
             </SectionCard>
-          </TabsContent>
+          </div>}
 
-          <TabsContent value="people" className="space-y-4 mt-4">
+          {activeTab === "people" && <div className="space-y-4">
             <SectionCard title="Cast & Crew">
               <p className="text-xs text-(--text-faint) mb-4">
                 Search existing people and link them. To add a new person first go to the{" "}
@@ -1478,16 +1529,16 @@ export default function EditMoviePage() {
                   </Button>
                 </div>
                 {addingRole === "cast" && (
-                  <div className="space-y-2 p-3 border border-(--svf-border) rounded-[10px] bg-(--bg-raise)/40">
+                  <div className="space-y-2 p-3 border border-(--svf-border) rounded-[10px] bg-(--bg-raise)">
                     <div className="relative">
                       <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-(--text-faint)" />
                       <Input placeholder="Search people by name…" value={personSearch} onChange={(e) => handlePersonSearch(e.target.value)} className={`${inputCls} pl-8`} autoFocus />
                     </div>
                     {searchingPeople && <div className="flex items-center gap-2 text-sm text-(--text-faint)"><Loader2 className="h-3 w-3 animate-spin" />Searching…</div>}
                     {personResults.length > 0 && (
-                      <div className="border border-(--svf-border) rounded-[10px] max-h-40 overflow-y-auto bg-(--bg-deep)/20">
+                      <div className="border border-(--svf-border) rounded-[10px] max-h-40 overflow-y-auto bg-(--bg-raise)">
                         {personResults.map((p) => (
-                          <button key={p.id} className="w-full px-3 py-1.5 text-left text-sm text-(--text) hover:bg-(--hover) flex items-center justify-between border-b border-slate-800/40 last:border-0" onClick={() => handleAddCast(p)}>
+                          <button key={p.id} className="w-full px-3 py-1.5 text-left text-sm text-(--text) hover:bg-(--hover) flex items-center justify-between border-b border-(--svf-border) last:border-0" onClick={() => handleAddCast(p)}>
                             <span>{p.name}</span>
                             {p.role && <span className="text-xs text-(--text-faint) capitalize">{p.role}</span>}
                           </button>
@@ -1501,7 +1552,7 @@ export default function EditMoviePage() {
                 )}
                 <div className="flex flex-wrap gap-2">
                   {cast.map((m) => (
-                    <Badge key={m.id} variant="secondary" className="gap-1 pr-1 bg-amber-500/20 text-amber-300 border-amber-500/30">
+                    <Badge key={m.id} variant="secondary" className="gap-1 pr-1 bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30">
                       {m.person?.name || "Unknown"}
                       <button onClick={() => handleRemoveCast(m)} className="ml-1 rounded-full hover:bg-amber-500/30 p-0.5"><X className="h-3 w-3" /></button>
                     </Badge>
@@ -1519,16 +1570,16 @@ export default function EditMoviePage() {
                   </Button>
                 </div>
                 {addingRole === "director" && (
-                  <div className="space-y-2 p-3 border border-(--svf-border) rounded-[10px] bg-(--bg-raise)/40">
+                  <div className="space-y-2 p-3 border border-(--svf-border) rounded-[10px] bg-(--bg-raise)">
                     <div className="relative">
                       <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-(--text-faint)" />
                       <Input placeholder="Search people by name…" value={personSearch} onChange={(e) => handlePersonSearch(e.target.value)} className={`${inputCls} pl-8`} autoFocus />
                     </div>
                     {searchingPeople && <div className="flex items-center gap-2 text-sm text-(--text-faint)"><Loader2 className="h-3 w-3 animate-spin" />Searching…</div>}
                     {personResults.length > 0 && (
-                      <div className="border border-(--svf-border) rounded-[10px] max-h-40 overflow-y-auto bg-(--bg-deep)/20">
+                      <div className="border border-(--svf-border) rounded-[10px] max-h-40 overflow-y-auto bg-(--bg-raise)">
                         {personResults.map((p) => (
-                          <button key={p.id} className="w-full px-3 py-1.5 text-left text-sm text-(--text) hover:bg-(--hover) flex items-center justify-between border-b border-slate-800/40 last:border-0" onClick={() => handleAddDirector(p)}>
+                          <button key={p.id} className="w-full px-3 py-1.5 text-left text-sm text-(--text) hover:bg-(--hover) flex items-center justify-between border-b border-(--svf-border) last:border-0" onClick={() => handleAddDirector(p)}>
                             <span>{p.name}</span>
                             {p.role && <span className="text-xs text-(--text-faint) capitalize">{p.role}</span>}
                           </button>
@@ -1542,7 +1593,7 @@ export default function EditMoviePage() {
                 )}
                 <div className="flex flex-wrap gap-2">
                   {directors.map((d) => (
-                    <Badge key={d.id} variant="secondary" className="gap-1 pr-1 bg-blue-500/20 text-blue-300 border-blue-500/30">
+                    <Badge key={d.id} variant="secondary" className="gap-1 pr-1 bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30">
                       {d.person?.name || "Unknown"}
                       <button onClick={() => handleRemoveDirector(d)} className="ml-1 rounded-full hover:bg-blue-500/30 p-0.5"><X className="h-3 w-3" /></button>
                     </Badge>
@@ -1551,26 +1602,26 @@ export default function EditMoviePage() {
                 </div>
               </div>
             </SectionCard>
-          </TabsContent>
+          </div>}
 
-          <TabsContent value="approval" className="space-y-6 mt-4">
+          {activeTab === "approval" && <div className="space-y-4">
             <SectionCard title="Approval Status">
               <div className="space-y-4">
                 {/* Current status */}
-                <div className="flex items-center gap-3 p-3 rounded-[10px] bg-(--bg-raise)/40 border border-(--svf-border)">
+                <div className="flex items-center gap-3 p-3 rounded-[10px] bg-(--bg-raise) border border-(--svf-border)">
                   <span className="text-xs font-bold uppercase tracking-widest text-(--text-faint)">Current Status:</span>
                   {approvalStatus === "approved" && (
-                    <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-400">
+                    <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-700 dark:text-emerald-400">
                       <CheckCircle className="h-4 w-4" /> Approved
                     </span>
                   )}
                   {approvalStatus === "pending" && (
-                    <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-amber-400">
+                    <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-amber-700 dark:text-amber-400">
                       <Clock className="h-4 w-4" /> Pending Review
                     </span>
                   )}
                   {approvalStatus === "rejected" && (
-                    <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-red-400">
+                    <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-red-700 dark:text-red-400">
                       <XCircle className="h-4 w-4" /> Rejected
                     </span>
                   )}
@@ -1583,9 +1634,9 @@ export default function EditMoviePage() {
                   return (
                     <div className="rounded-[10px] border border-red-500/30 bg-red-500/10 p-4 space-y-3">
                       <div className="flex items-start gap-2">
-                        <AlertTriangle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
+                        <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
                         <div className="space-y-1">
-                          <p className="text-sm font-semibold text-red-400">Rejection reason</p>
+                          <p className="text-sm font-semibold text-red-700 dark:text-red-400">Rejection reason</p>
                           {lastRejection?.reason ? (
                             <p className="text-sm text-(--text) italic">&quot;{lastRejection.reason}&quot;</p>
                           ) : (
@@ -1603,7 +1654,7 @@ export default function EditMoviePage() {
                         onClick={handleResubmit}
                         disabled={resubmitting}
                         size="sm"
-                        className="bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 border border-amber-500/30"
+                        className="bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-400 border border-amber-500/30"
                         variant="outline"
                       >
                         {resubmitting
@@ -1620,9 +1671,9 @@ export default function EditMoviePage() {
                   return (
                     <div className="rounded-[10px] border border-amber-500/30 bg-amber-500/10 p-4 space-y-3">
                       <div className="flex items-start gap-2">
-                        <Clock className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                        <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                         <div className="space-y-1">
-                          <p className="text-sm font-semibold text-amber-400">Awaiting legal review</p>
+                          <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Awaiting legal review</p>
                           <p className="text-xs text-(--text-faint)">
                             This movie is in the approval queue. If you make changes here, it will be resubmitted automatically when you save.
                           </p>
@@ -1637,7 +1688,7 @@ export default function EditMoviePage() {
                         onClick={handleResubmit}
                         disabled={resubmitting}
                         size="sm"
-                        className="bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 border border-amber-500/30"
+                        className="bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-400 border border-amber-500/30"
                         variant="outline"
                       >
                         {resubmitting
@@ -1650,7 +1701,7 @@ export default function EditMoviePage() {
                 })()}
 
                 {approvalStatus === "approved" && (
-                  <div className="rounded-[10px] border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-300 flex items-start gap-2">
+                  <div className="rounded-[10px] border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-700 dark:text-emerald-300 flex items-start gap-2">
                     <CheckCircle className="h-4 w-4 shrink-0 mt-0.5" />
                     <span>This movie has been approved and is live in the catalog. Approval status cannot be changed.</span>
                   </div>
@@ -1669,8 +1720,8 @@ export default function EditMoviePage() {
                       }`}>
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-medium text-(--text)">{c.change_summary}</span>
-                        <span className={`text-xs font-semibold uppercase tracking-wide ${c.status === "pending" ? "text-amber-400" :
-                          c.status === "approved" ? "text-emerald-400" : "text-red-400"
+                        <span className={`text-xs font-semibold uppercase tracking-wide ${c.status === "pending" ? "text-amber-700 dark:text-amber-400" :
+                          c.status === "approved" ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"
                           }`}>{c.status}</span>
                       </div>
                       {c.change_type === "movie_fields" && c.status === "pending" && (() => {
@@ -1682,8 +1733,8 @@ export default function EditMoviePage() {
                             {changed.map(k => (
                               <div key={k} className="text-xs grid grid-cols-3 gap-2">
                                 <span className="text-(--text-faint) uppercase tracking-wide">{k.replace(/_/g, " ")}</span>
-                                <span className="text-red-400 line-through truncate">{String(before[k] ?? "—")}</span>
-                                <span className="text-emerald-400 truncate">{String(after[k] ?? "—")}</span>
+                                <span className="text-red-600 dark:text-red-400 line-through truncate">{String(before[k] ?? "—")}</span>
+                                <span className="text-emerald-700 dark:text-emerald-400 truncate">{String(after[k] ?? "—")}</span>
                               </div>
                             ))}
                           </div>
@@ -1705,13 +1756,13 @@ export default function EditMoviePage() {
               <SectionCard title="Approval History">
                 <div className="space-y-3">
                   {approvalHistory.map((entry) => (
-                    <div key={entry.id} className="flex items-start gap-3 text-sm p-3 rounded-[10px] bg-(--bg-raise)/40 border border-(--svf-border)">
+                    <div key={entry.id} className="flex items-start gap-3 text-sm p-3 rounded-[10px] bg-(--bg-raise) border border-(--svf-border)">
                       <div className="mt-0.5 shrink-0">
                         {entry.status === "approved"
-                          ? <CheckCircle className="h-4 w-4 text-emerald-400" />
+                          ? <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                           : entry.status === "rejected"
-                            ? <XCircle className="h-4 w-4 text-red-400" />
-                            : <Clock className="h-4 w-4 text-amber-400" />}
+                            ? <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                            : <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />}
                       </div>
                       <div className="flex-1">
                         <p className="text-(--text) font-medium capitalize">{entry.status}</p>
@@ -1728,9 +1779,8 @@ export default function EditMoviePage() {
                 </div>
               </SectionCard>
             )}
-          </TabsContent>
-        </Tabs>
-      </div>
+          </div>}
+        </div>
 
       {/* ── Actions ── */}
       <div className="flex justify-end gap-3">
@@ -1741,8 +1791,8 @@ export default function EditMoviePage() {
         </Link>
         <Button
           onClick={handleSave}
-          disabled={saving || !title.trim()}
-          className="bg-amber-600 hover:bg-amber-500 text-white border-0 shadow-lg shadow-amber-900/30 min-w-[140px]"
+          disabled={saving}
+          className="bg-red-600 hover:bg-red-500 text-white border-0 shadow-lg shadow-red-600/30 min-w-[140px]"
         >
           {saving
             ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{isApproved ? "Submitting..." : "Saving..."}</>

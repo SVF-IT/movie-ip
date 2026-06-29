@@ -543,3 +543,22 @@ input[type="datetime-local"] {
   animation: shimmer 1.4s infinite linear;
   border-radius: 6px;
 }
+
+/* Login page poster tiles — light/dark adaptive */
+.poster-tile {
+  background: linear-gradient(150deg,
+    oklch(0.55 0.20 var(--hue)) 0%,
+    oklch(0.42 0.16 var(--hue)) 42%,
+    oklch(0.32 0.10 var(--hue2)) 100%);
+  border: 1px solid rgba(255,255,255,0.15);
+  opacity: 0.82;
+}
+
+.dark .poster-tile {
+  background: linear-gradient(150deg,
+    oklch(0.42 0.13 var(--hue)) 0%,
+    oklch(0.26 0.10 var(--hue)) 42%,
+    oklch(0.17 0.06 var(--hue2)) 100%);
+  border: 1px solid rgba(255,255,255,0.08);
+  opacity: 0.55;
+}

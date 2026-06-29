@@ -61,6 +61,29 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+function PosterImage({ title }: { title: string }) {
+  const [failed, setFailed] = useState(false);
+  const initials = title.split(" ").slice(0, 2).map(w => w[0]?.toUpperCase() ?? "").join("");
+  return (
+    <div className="relative w-28 aspect-2/3 rounded-[12px] overflow-hidden shadow-2xl ring-1 ring-(--svf-border)">
+      {!failed ? (
+        <img
+          src={`https://fileapi.mni.agency/api/FileFolderManager/PreviewFile?path=%2Fmnt%2Fmni%2FMoviePoster%2F${encodeURIComponent(title)}.jpg&userId=1&platform=WebMicrosoft%20Windows%20NT%2010.0.20348.0`}
+          alt={title}
+          className="w-full h-full object-cover"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center gap-2" style={{ background: "linear-gradient(135deg, var(--bg-raise) 0%, var(--panel-solid) 100%)" }}>
+          <Film className="h-8 w-8" style={{ color: "var(--text-faint)" }} />
+          <span className="text-lg font-bold" style={{ color: "var(--text-faint)" }}>{initials}</span>
+        </div>
+      )}
+      {!failed && <div className="absolute inset-0 bg-linear-to-t from-black/40 to-transparent pointer-events-none" />}
+    </div>
+  );
+}
+
 function parseOtherRights(value: string): { isYes: boolean; types: string[] } {
   if (!value) return { isYes: false, types: [] };
   const trimmed = value.trim();
@@ -117,7 +140,7 @@ function HoldbacksBlock({ value }: { value: string }) {
         <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
         <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400/80">Holdbacks</span>
       </div>
-      <p className="text-sm text-amber-100/80 leading-relaxed whitespace-pre-line">{value}</p>
+      <p className="text-sm leading-relaxed whitespace-pre-line">{value}</p>
     </div>
   );
 }
@@ -302,7 +325,7 @@ export default function MovieDetailPage() {
           </TableHeader>
           <TableBody>
             {items.map((right) => (
-              <TableRow key={right.id} className={cn("border-slate-800/40 hover:bg-(--hover)/20 transition-colors", expired && "opacity-65")}>
+              <TableRow key={right.id} className={cn("border-(--svf-border) hover:bg-(--hover) transition-colors", expired && "opacity-65")}>
                 <TableCell className="font-semibold text-sm text-(--text)">{right.platforms?.name || "—"}</TableCell>
                 <TableCell className="text-xs text-(--text-faint)">{right.platforms?.platform_type || "—"}</TableCell>
                 <TableCell className="text-xs text-(--text-faint)">{right.category || "—"}</TableCell>
@@ -372,7 +395,7 @@ export default function MovieDetailPage() {
               className={cn(
                 "flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold border-b-2 transition-all",
                 sub === id
-                  ? expired ? "border-slate-500 text-(--text)" : "border-red-500 text-red-400"
+                  ? expired ? "border-(--svf-border-strong) text-(--text)" : "border-red-500 text-red-400"
                   : "border-transparent text-(--text-faint) hover:text-(--text-faint)"
               )}
             >
@@ -390,7 +413,7 @@ export default function MovieDetailPage() {
     <div className="space-y-4 pb-10">
       {loading && movie && (
         <div className="fixed inset-0 bg-(--bg-deep)/70 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="flex items-center gap-3 bg-(--panel-solid)/90 border border-slate-700/60 px-6 py-4 rounded-[12px] shadow-2xl">
+          <div className="flex items-center gap-3 bg-(--panel-solid) border border-(--svf-border) px-6 py-4 rounded-[12px] shadow-2xl">
             <Loader2 className="h-5 w-5 animate-spin text-red-400" />
             <span className="text-(--text) text-sm font-medium">Loading version…</span>
           </div>
@@ -398,8 +421,8 @@ export default function MovieDetailPage() {
       )}
 
       {/* ── Cinematic Hero ── */}
-      <div className="relative overflow-hidden rounded-[12px] bg-(--bg-raise)/60 border border-(--svf-border) backdrop-blur-xl shadow-2xl">
-        <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(to right, color-mix(in oklch, var(--bg-deep) 92%, transparent) 0%, color-mix(in oklch, var(--bg-deep) 55%, transparent) 50%, transparent 100%)" }} />
+      <div className="relative overflow-hidden rounded-[12px] bg-(--panel-solid) border border-(--svf-border) shadow-sm">
+        <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(to right, color-mix(in oklch, var(--bg-raise) 80%, transparent) 0%, transparent 60%)" }} />
 
         <div className="relative flex items-start gap-6 p-6">
           <Button variant="ghost" size="sm" asChild className="absolute top-5 left-5 text-(--text-faint) hover:text-(--text) hover:bg-(--hover) h-8 w-8 p-0">
@@ -409,17 +432,17 @@ export default function MovieDetailPage() {
           {languageVersions.length > 1 && (
             <div className="absolute top-4 right-4">
               <Select value={selectedVersionId} onValueChange={handleVersionChange}>
-                <SelectTrigger className="h-9 w-auto min-w-44 bg-(--panel-solid)/80 border border-(--svf-border-strong) text-(--text) text-sm font-medium backdrop-blur-md gap-2 pr-3">
+                <SelectTrigger className="h-9 w-auto min-w-44 bg-(--panel-solid) border border-(--svf-border-strong) text-(--text) text-sm font-medium gap-2 pr-3">
                   <div className="flex items-center gap-2 flex-1 min-w-0"><SelectValue /></div>
                 </SelectTrigger>
-                <SelectContent className="bg-(--panel-solid)/95 border-(--svf-border-strong) backdrop-blur-xl shadow-2xl">
+                <SelectContent className="bg-(--panel-solid) border-(--svf-border-strong) shadow-2xl">
                   <div className="px-2 py-1.5 border-b border-(--svf-border) mb-1">
                     <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Select Version</p>
                   </div>
                   {languageVersions.map((version) => (
                     <SelectItem key={version.id} value={version.id} className="text-(--text) py-2">
                       <div className="flex items-center gap-2.5">
-                        <div className={`h-2 w-2 rounded-full shrink-0 ${version.id === selectedVersionId ? "bg-red-500" : "bg-slate-600"}`} />
+                        <div className={`h-2 w-2 rounded-full shrink-0 ${version.id === selectedVersionId ? "bg-red-500" : "bg-(--text-faint)"}`} />
                         <span className="font-medium">{version.language || "Unknown"}</span>
                         {version.is_primary && (
                           <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
@@ -436,24 +459,7 @@ export default function MovieDetailPage() {
 
           {/* Poster */}
           <div className="mt-8 ml-2 shrink-0">
-            <div className="relative w-28 aspect-[2/3] rounded-[12px] overflow-hidden shadow-2xl ring-1 ring-white/10">
-              <img
-                src={`https://fileapi.mni.agency/api/FileFolderManager/PreviewFile?path=%2Fmnt%2Fmni%2FMoviePoster%2F${encodeURIComponent(movie.title)}.jpg&userId=1&platform=WebMicrosoft%20Windows%20NT%2010.0.20348.0`}
-                alt={movie.title}
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  const el = e.currentTarget;
-                  el.style.display = "none";
-                  el.parentElement!.innerHTML = `<div class="w-full h-full bg-(--bg-raise) border border-[var(--svf-border)] flex items-center justify-center"><svg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' class='text-slate-600'><rect width='18' height='18' x='3' y='3' rx='2'/><path d='m9 8 6 8'/><path d='m15 8-6 8'/></svg></div>`;
-                }}
-                onLoad={(e) => {
-                  const target = e.currentTarget;
-                  target.style.display = "";
-                  target.nextElementSibling?.classList.add("hidden");
-                }}
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent pointer-events-none" />
-            </div>
+            <PosterImage title={movie.title} />
           </div>
 
           {/* Title block */}
@@ -515,7 +521,7 @@ export default function MovieDetailPage() {
               )}
               {canDelete && (
                 <Button variant="outline" size="sm" onClick={() => setShowDeleteDialog(true)}
-                  className="h-8 px-3 bg-red-950/30 border-red-800/40 text-red-400 hover:bg-red-950/60 hover:border-red-700/60 hover:text-red-300 gap-1.5">
+                  className="h-8 px-3 bg-red-500/10 border-red-500/30 text-red-500 hover:bg-red-500/20 hover:border-red-500/50 gap-1.5">
                   <Trash2 className="h-3.5 w-3.5" />Delete
                 </Button>
               )}
@@ -525,7 +531,7 @@ export default function MovieDetailPage() {
       </div>
 
       {/* ── Basic Info ── */}
-      <div className="bg-(--panel-solid)/50 border border-(--svf-border) rounded-[12px] backdrop-blur-sm p-6">
+      <div className="bg-(--panel-solid) border border-(--svf-border) rounded-[12px] p-6">
         <SectionTitle icon={Film} title="Basic Information" accent />
         <div className="grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-5">
           {movie.source !== "acquired" && <InfoRow label="Production No" value={currentVersion.production_no} mono />}
@@ -545,7 +551,7 @@ export default function MovieDetailPage() {
       </div>
 
       {/* ── Cast & Crew ── */}
-      <div className="bg-(--panel-solid)/50 border border-(--svf-border) rounded-[12px] backdrop-blur-sm p-6">
+      <div className="bg-(--panel-solid) border border-(--svf-border) rounded-[12px] p-6">
         <SectionTitle icon={Users} title="Cast & Crew" accent />
         <div className="space-y-5">
           <div>
@@ -560,7 +566,7 @@ export default function MovieDetailPage() {
       </div>
 
       {/* ── Rights Info ── */}
-      <div className="bg-(--panel-solid)/50 border border-(--svf-border) rounded-[12px] backdrop-blur-sm p-6">
+      <div className="bg-(--panel-solid) border border-(--svf-border) rounded-[12px] p-6">
         <SectionTitle icon={ShieldCheck} title="Rights Information" accent />
         {movie.source === "home_production" ? (
           <div className="space-y-5">
@@ -619,7 +625,7 @@ export default function MovieDetailPage() {
                     { label: "Negative", flag: currentVersion.negative_rights, classification: undefined, nature: currentVersion.nature_of_negative_rights, start: currentVersion.negative_rights_start_date, end: currentVersion.negative_rights_end_date },
                     { label: "Other", flag: currentVersion.other_rights, classification: undefined, nature: currentVersion.nature_of_other_rights, start: currentVersion.other_rights_start_date, end: currentVersion.other_rights_end_date },
                   ].filter(r => r.flag).map(({ label, flag, classification, nature, start, end }) => (
-                    <div key={label} className="rounded-[12px] border border-(--svf-border) bg-(--bg-deep)/30 p-3 space-y-1.5">
+                    <div key={label} className="rounded-[12px] border border-(--svf-border) bg-(--bg-raise) p-3 space-y-1.5">
                       <div className="flex items-center justify-between gap-2 flex-wrap">
                         <span className="text-xs font-bold text-(--text)">{label}</span>
                         {(() => {
@@ -675,7 +681,7 @@ export default function MovieDetailPage() {
 
       {/* ── Acquisition (acquired only) ── */}
       {movie.source === "acquired" && (
-        <div className="bg-(--panel-solid)/50 border border-(--svf-border) rounded-[12px] backdrop-blur-sm p-6">
+        <div className="bg-(--panel-solid) border border-(--svf-border) rounded-[12px] p-6">
           <SectionTitle icon={Calendar} title="Acquisition Details" accent />
           <div className="grid grid-cols-2 gap-x-8 gap-y-5">
             <InfoRow label="Assignor / Licensor" value={currentVersion.assignor_licensor} />
@@ -712,7 +718,7 @@ export default function MovieDetailPage() {
 
       {/* ── Notes (only when data exists) ── */}
       {(currentVersion.wtp_library || currentVersion.remarks || currentVersion.actionables) && (
-        <div className="bg-(--panel-solid)/50 border border-(--svf-border) rounded-[12px] backdrop-blur-sm p-6">
+        <div className="bg-(--panel-solid) border border-(--svf-border) rounded-[12px] p-6">
           <SectionTitle icon={Info} title="Notes & Additional Information" accent />
           <div className="space-y-5">
             {currentVersion.wtp_library && (
@@ -738,7 +744,7 @@ export default function MovieDetailPage() {
       )}
 
       {/* ── Exploitation Rights ── */}
-      <div className="bg-(--panel-solid)/50 border border-(--svf-border) rounded-[12px] backdrop-blur-sm overflow-hidden">
+      <div className="bg-(--panel-solid) border border-(--svf-border) rounded-[12px] overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-(--svf-border)">
           <div className="flex items-center gap-2.5">
             <div className="p-1.5 rounded-[10px] bg-red-500/10 border border-red-500/20">
@@ -759,7 +765,7 @@ export default function MovieDetailPage() {
       </div>
 
       {/* ── Rights History ── */}
-      <div className="bg-(--panel-solid)/50 border border-(--svf-border) rounded-[12px] backdrop-blur-sm overflow-hidden">
+      <div className="bg-(--panel-solid) border border-(--svf-border) rounded-[12px] overflow-hidden">
         <div className="flex items-center gap-2.5 px-6 py-4 border-b border-(--svf-border)">
           <div className="p-1.5 rounded-[10px] bg-(--bg-raise) border border-(--svf-border)">
             <History className="h-4 w-4 text-(--text-faint)" />
