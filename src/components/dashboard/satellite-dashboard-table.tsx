@@ -143,8 +143,6 @@ export function SatelliteDashboardTable({
   const [certFilter, setCertFilter] = useState<string[]>([])
   const [certOpen, setCertOpen] = useState(false)
   const [sortBy, setSortBy] = useState<SortOption>('title_asc')
-  const [openFrom, setOpenFrom] = useState('')
-  const [openTo, setOpenTo] = useState('')
   const [wtpFilter, setWtpFilter] = useState<'all' | 'wtp' | 'wtp_bd' | 'library'>('all')
   const [showExportDialog, setShowExportDialog] = useState(false)
   const [exportData, setExportData] = useState<Record<string, unknown>[]>([])
@@ -152,7 +150,7 @@ export function SatelliteDashboardTable({
   const [totalCount, setTotalCount] = useState(0)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
-  useEffect(() => { setSelectedIds(new Set()) }, [activeCard, language, expiryFrom, expiryTo, sourceFilter, certFilter, openFrom, openTo, wtpFilter])
+  useEffect(() => { setSelectedIds(new Set()) }, [activeCard, language, expiryFrom, expiryTo, sourceFilter, certFilter, wtpFilter])
 
   useEffect(() => {
     const timer = setTimeout(() => { setDebouncedSearch(search) }, 300)
@@ -171,8 +169,6 @@ export function SatelliteDashboardTable({
 
   useEffect(() => {
     setSortBy(activeCard === 'expiring' ? 'expiry_asc' : 'title_asc')
-    setOpenFrom('')
-    setOpenTo('')
     setWtpFilter('all')
   }, [activeCard])
 
@@ -196,8 +192,6 @@ export function SatelliteDashboardTable({
           sourceFilter,
           sortBy: safeSortBy,
           certification: certFilter.length > 0 ? certFilter : undefined,
-          openFrom: openFrom || undefined,
-          openTo: openTo || undefined,
           wtpFilter: wtpFilter !== 'all' ? wtpFilter : undefined,
           limit,
           offset,
@@ -241,7 +235,7 @@ export function SatelliteDashboardTable({
     } finally {
       if (!forExport) setIsLoading(false)
     }
-  }, [activeCard, debouncedSearch, language, sourceFilter, certFilter, expiryFrom, expiryTo, sortBy, openFrom, openTo, wtpFilter])
+  }, [activeCard, debouncedSearch, language, sourceFilter, certFilter, expiryFrom, expiryTo, sortBy, wtpFilter])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -335,7 +329,7 @@ export function SatelliteDashboardTable({
   const showLicensorCol = activeCard === 'open_titles' && sourceFilter === 'acquired'
   // Expiring card: flat per-right rows (no expand/collapse)
   const flatExpiryRows = activeCard === 'expiring'
-  const colSpan = flatExpiryRows ? 10 : showWtpCol ? (showLicensorCol ? 10 : 9) : 8
+  const colSpan = flatExpiryRows ? 9 : showWtpCol ? (showLicensorCol ? 11 : 10) : 7
 
   // ── row / cell sizing based on mode ──
   const rowCls = fullPage ? 'border-(--svf-border)/30 hover:bg-(--hover)' : 'border-(--svf-border)/30 hover:bg-(--hover)'
@@ -452,22 +446,9 @@ export function SatelliteDashboardTable({
           </>
         )}
 
-        {/* Open titles filters: open date range + WTP */}
+        {/* Open titles filters: WTP */}
         {activeCard === 'open_titles' && (
           <>
-            <div className="flex items-center gap-1 bg-(--bg-raise) border border-(--svf-border) rounded-md px-2 h-9 hover:border-(--svf-border-strong) transition-colors">
-              <span className="text-[10px] font-medium text-(--text-faint) uppercase px-1">Open</span>
-              <DateInput value={openFrom} onChange={(v) => { setOpenFrom(v) }} placeholder="From" />
-              <span className="text-(--svf-border-strong) px-1">|</span>
-              <DateInput value={openTo} onChange={(v) => { setOpenTo(v) }} placeholder="To" />
-              {(openFrom || openTo) && (
-                <button onClick={() => { setOpenFrom(''); setOpenTo('') }}
-                  className="ml-1 p-0.5 text-(--text-faint) hover:text-red-400 transition-colors">
-                  <X className="h-3 w-3" />
-                </button>
-              )}
-            </div>
-
             <Select value={wtpFilter} onValueChange={(v) => { setWtpFilter(v as typeof wtpFilter) }}>
               <SelectTrigger className={`w-32.5 ${selectTriggerCls} ${wtpFilter !== 'all' ? 'border-violet-500/60 text-violet-400 bg-violet-500/5' : ''}`}>
                 <SelectValue placeholder="WTP" />
@@ -568,7 +549,6 @@ export function SatelliteDashboardTable({
                 <TableHead className={headCls}>Expiry</TableHead>
                 <TableHead className={headCls}>Days</TableHead>
                 <TableHead className={headCls}>Territory</TableHead>
-                <TableHead className={`text-right ${headCls}`}>Actions</TableHead>
               </>
             ) : (
               <>
@@ -585,7 +565,8 @@ export function SatelliteDashboardTable({
                 <SortableHeader column="language" label="Language" currentSort={sortConfig} onSort={requestSort} className={headCls} />
                 {showWtpCol && <TableHead className={headCls}>WTP Library</TableHead>}
                 {showLicensorCol && <TableHead className={headCls}>Licensor</TableHead>}
-                <TableHead className={`text-right ${headCls}`}>Actions</TableHead>
+                {activeCard === 'open_titles' && <TableHead className={headCls}>Satellite Rights</TableHead>}
+                {activeCard === 'open_titles' && <TableHead className={headCls}>Sunset Date</TableHead>}
               </>
             )}
           </TableRow>
@@ -602,7 +583,7 @@ export function SatelliteDashboardTable({
           ) : flatExpiryRows ? (
             flatRightRows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="text-center py-10 text-muted-foreground text-sm">
+                <TableCell colSpan={9} className="text-center py-10 text-muted-foreground text-sm">
                   No expiring rights found matching your filters
                 </TableCell>
               </TableRow>
@@ -655,11 +636,6 @@ export function SatelliteDashboardTable({
                   <TableCell className={cn('whitespace-nowrap text-muted-foreground', cellCls)}>
                     {right.territory || 'World'}
                   </TableCell>
-                  <TableCell className={cn('text-right', cellCls)}>
-                    <Button variant="ghost" size="sm" className="h-7 gap-1 hover:text-primary" asChild>
-                      <Link href={`/movies/${movie.id}`}><span className="text-xs">View</span><ChevronRight className="h-3 w-3" /></Link>
-                    </Button>
-                  </TableCell>
                 </TableRow>
               ))
             )
@@ -701,11 +677,24 @@ export function SatelliteDashboardTable({
                     <span className="line-clamp-1 text-xs">{movie.assignor_licensor || '—'}</span>
                   </TableCell>
                 )}
-                <TableCell className={cn('text-right', cellCls)}>
-                  <Button variant="ghost" size="sm" className="h-7 gap-1 hover:text-primary" asChild>
-                    <Link href={`/movies/${movie.id}`}><span className="text-xs">View</span><ChevronRight className="h-3 w-3" /></Link>
-                  </Button>
-                </TableCell>
+                {activeCard === 'open_titles' && (
+                  <TableCell className={cn('whitespace-nowrap text-xs', cellCls)} style={{ color: 'var(--text-faint)' }}>
+                    {movie.satellite_rights_start_date || movie.satellite_rights_end_date ? (
+                      <span>{movie.satellite_rights_start_date ? movie.satellite_rights_start_date.split('-').reverse().join('/') : '—'} → {movie.satellite_rights_end_date ? movie.satellite_rights_end_date.split('-').reverse().join('/') : '∞'}</span>
+                    ) : '—'}
+                  </TableCell>
+                )}
+                {activeCard === 'open_titles' && (
+                  <TableCell className={cn('whitespace-nowrap text-xs', cellCls)}>
+                    {movie.agreement_end_date ? (
+                      <span style={{ color: new Date(movie.agreement_end_date) < new Date() ? 'var(--st-expired)' : 'var(--text-faint)' }}>
+                        {movie.agreement_start_date ? movie.agreement_start_date.split('-').reverse().join('/') + ' → ' : ''}{movie.agreement_end_date.split('-').reverse().join('/')}
+                      </span>
+                    ) : movie.agreement_start_date ? (
+                      <span style={{ color: 'var(--text-faint)' }}>{movie.agreement_start_date.split('-').reverse().join('/')} → ∞</span>
+                    ) : <span style={{ color: 'var(--text-faint)' }}>—</span>}
+                  </TableCell>
+                )}
               </TableRow>
             ))
           )}

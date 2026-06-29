@@ -172,8 +172,6 @@ export function InternetDashboardTable({
   const [certFilter, setCertFilter] = useState<string[]>([])
   const [certOpen, setCertOpen] = useState(false)
   const [sortBy, setSortBy] = useState<SortOption>('title_asc')
-  const [openFrom, setOpenFrom] = useState('')
-  const [openTo, setOpenTo] = useState('')
   const [wtpFilter, setWtpFilter] = useState<'all' | 'wtp' | 'wtp_bd' | 'library'>('all')
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [showExportDialog, setShowExportDialog] = useState(false)
@@ -192,7 +190,7 @@ export function InternetDashboardTable({
   }
 
   // Reset selection on filter changes
-  useEffect(() => { setSelectedIds(new Set()) }, [activeCard, language, expiryFrom, expiryTo, sourceFilter, certFilter, openFrom, openTo, wtpFilter])
+  useEffect(() => { setSelectedIds(new Set()) }, [activeCard, language, expiryFrom, expiryTo, sourceFilter, certFilter, wtpFilter])
 
   // Debounce search
   useEffect(() => {
@@ -204,8 +202,6 @@ export function InternetDashboardTable({
   useEffect(() => {
     setSortBy(activeCard === 'expiring' ? 'expiry_asc' : 'title_asc')
     setExpandedRows(new Set())
-    setOpenFrom('')
-    setOpenTo('')
     setWtpFilter('all')
   }, [activeCard])
 
@@ -226,8 +222,6 @@ export function InternetDashboardTable({
           sourceFilter,
           certification: certParam,
           sortBy: safeSortBy,
-          openFrom: openFrom || undefined,
-          openTo: openTo || undefined,
           wtpFilter: wtpFilter !== 'all' ? wtpFilter : undefined,
           limit,
           offset,
@@ -267,7 +261,7 @@ export function InternetDashboardTable({
     } finally {
       if (!forExport) setIsLoading(false)
     }
-  }, [activeCard, debouncedSearch, language, sourceFilter, certFilter, expiryFrom, expiryTo, sortBy, openFrom, openTo, wtpFilter])
+  }, [activeCard, debouncedSearch, language, sourceFilter, certFilter, expiryFrom, expiryTo, sortBy, wtpFilter])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -382,7 +376,7 @@ export function InternetDashboardTable({
   const showWtpCol = activeCard === 'open_titles'
   const showLicensorCol = activeCard === 'open_titles' && sourceFilter === 'acquired'
   // +1 for checkbox column in each branch
-  const colCount = flatExpiryRows ? 11 : hasSubRows ? 9 : showWtpCol ? (showLicensorCol ? 10 : 9) : 8
+  const colCount = flatExpiryRows ? 10 : hasSubRows ? 8 : showWtpCol ? (showLicensorCol ? 11 : 10) : 7
 
   const exportFields = activeCard === 'open_titles' ? EXPORT_FIELDS_OPEN
     : activeCard === 'expiring' ? EXPORT_FIELDS_EXPIRING
@@ -501,22 +495,9 @@ export function InternetDashboardTable({
           </>
         )}
 
-        {/* Open titles filters: open date range + WTP */}
+        {/* Open titles filters: WTP */}
         {activeCard === 'open_titles' && (
           <>
-            <div className="flex items-center gap-1 bg-(--bg-raise) border border-(--svf-border) rounded-md px-2 h-9 hover:border-(--svf-border-strong) transition-colors">
-              <span className="text-[10px] font-medium text-(--text-faint) uppercase px-1">Open</span>
-              <DateInput value={openFrom} onChange={(v) => { setOpenFrom(v) }} placeholder="From" />
-              <span className="text-(--svf-border-strong) px-1">|</span>
-              <DateInput value={openTo} onChange={(v) => { setOpenTo(v) }} placeholder="To" />
-              {(openFrom || openTo) && (
-                <button onClick={() => { setOpenFrom(''); setOpenTo('') }}
-                  className="ml-1 p-0.5 text-(--text-faint) hover:text-red-400 transition-colors">
-                  <X className="h-3 w-3" />
-                </button>
-              )}
-            </div>
-
             <Select value={wtpFilter} onValueChange={(v) => { setWtpFilter(v as typeof wtpFilter) }}>
               <SelectTrigger className={`w-32.5 ${selectTriggerCls} ${wtpFilter !== 'all' ? 'border-violet-500/60 text-violet-400 bg-violet-500/5' : ''}`}>
                 <SelectValue placeholder="WTP" />
@@ -610,7 +591,6 @@ export function InternetDashboardTable({
                 <TableHead className={headCls}>Expiry</TableHead>
                 <TableHead className={headCls}>Days</TableHead>
                 <TableHead className={headCls}>Territory</TableHead>
-                <TableHead className={cn('text-right', headCls)}>Actions</TableHead>
               </>
             ) : (
               <>
@@ -628,8 +608,9 @@ export function InternetDashboardTable({
                 <TableHead className={headCls}>Language</TableHead>
                 {showWtpCol && <TableHead className={headCls}>WTP Library</TableHead>}
                 {showLicensorCol && <TableHead className={headCls}>Licensor</TableHead>}
+                {activeCard === 'open_titles' && <TableHead className={headCls}>Internet Rights</TableHead>}
+                {activeCard === 'open_titles' && <TableHead className={headCls}>Sunset Date</TableHead>}
                 {activeCard === 'active' && <TableHead className={headCls}>Rights Count</TableHead>}
-                <TableHead className={cn('text-right', headCls)}>Actions</TableHead>
               </>
             )}
           </TableRow>
@@ -646,7 +627,7 @@ export function InternetDashboardTable({
           ) : flatExpiryRows ? (
             flatRightRows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={11} className="text-center py-10 text-muted-foreground text-sm">
+                <TableCell colSpan={10} className="text-center py-10 text-muted-foreground text-sm">
                   No expiring rights found matching your filters
                 </TableCell>
               </TableRow>
@@ -698,11 +679,6 @@ export function InternetDashboardTable({
                   <TableCell className={cellCls}>{getDaysBadge(right.end_date)}</TableCell>
                   <TableCell className={cn('whitespace-nowrap text-muted-foreground', cellCls)}>
                     {right.territory || 'World'}
-                  </TableCell>
-                  <TableCell className={cn('text-right', cellCls)}>
-                    <Button variant="ghost" size="sm" className="h-7 gap-1 hover:text-primary" asChild>
-                      <Link href={`/movies/${movie.id}`}><span className="text-xs">View</span><ChevronRight className="h-3 w-3" /></Link>
-                    </Button>
                   </TableCell>
                 </TableRow>
               ))
@@ -768,6 +744,24 @@ export function InternetDashboardTable({
                         <span className="line-clamp-1 text-xs">{movie.assignor_licensor || '—'}</span>
                       </TableCell>
                     )}
+                    {activeCard === 'open_titles' && (
+                      <TableCell className={cn('whitespace-nowrap text-xs', cellCls)} style={{ color: 'var(--text-faint)' }} onClick={(e) => e.stopPropagation()}>
+                        {movie.internet_rights_start_date || movie.internet_rights_end_date ? (
+                          <span>{movie.internet_rights_start_date ? movie.internet_rights_start_date.split('-').reverse().join('/') : '—'} → {movie.internet_rights_end_date ? movie.internet_rights_end_date.split('-').reverse().join('/') : '∞'}</span>
+                        ) : '—'}
+                      </TableCell>
+                    )}
+                    {activeCard === 'open_titles' && (
+                      <TableCell className={cn('whitespace-nowrap text-xs', cellCls)} onClick={(e) => e.stopPropagation()}>
+                        {movie.agreement_end_date ? (
+                          <span style={{ color: new Date(movie.agreement_end_date) < new Date() ? 'var(--st-expired)' : 'var(--text-faint)' }}>
+                            {movie.agreement_start_date ? movie.agreement_start_date.split('-').reverse().join('/') + ' → ' : ''}{movie.agreement_end_date.split('-').reverse().join('/')}
+                          </span>
+                        ) : movie.agreement_start_date ? (
+                          <span style={{ color: 'var(--text-faint)' }}>{movie.agreement_start_date.split('-').reverse().join('/')} → ∞</span>
+                        ) : <span style={{ color: 'var(--text-faint)' }}>—</span>}
+                      </TableCell>
+                    )}
                     {activeCard === 'active' && (
                       <TableCell className={cellCls}>
                         <Badge variant="outline" className="bg-(--bg-raise)/60 text-(--text-faint) border-(--svf-border) text-xs">
@@ -775,11 +769,6 @@ export function InternetDashboardTable({
                         </Badge>
                       </TableCell>
                     )}
-                    <TableCell className={cn('text-right', cellCls)} onClick={(e) => e.stopPropagation()}>
-                      <Button variant="ghost" size="sm" className="h-7 gap-1 hover:text-primary" asChild>
-                        <Link href={`/movies/${movie.id}`}><span className="text-xs">View</span><ChevronRight className="h-3 w-3" /></Link>
-                      </Button>
-                    </TableCell>
                   </TableRow>
                   {hasSubRows && isExpanded && internetRights.length > 0 && (
                     <TableRow key={`${movie.id}-expanded`} className="bg-(--panel-solid)/50 border-(--svf-border)/30">
