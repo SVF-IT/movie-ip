@@ -71,7 +71,7 @@ CREATE TABLE IF NOT EXISTS notification_settings (
     is_enabled        BOOLEAN NOT NULL DEFAULT TRUE,
     description       TEXT NOT NULL,
     category          TEXT NOT NULL
-                          CHECK (category IN ('alerts', 'activity', 'digest', 'account')),
+                          CHECK (category IN ('alerts', 'activity', 'digest', 'account', 'special_events')),
     -- NULL means "all roles"; otherwise an array of role strings
     role_filters      TEXT[],
     created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -115,14 +115,6 @@ VALUES
 
     ('agreement_created',        TRUE,
      'Notification when a new rights agreement is created',
-     'activity', ARRAY['admin','legal','editor']),
-
-    ('rights_renewed',           TRUE,
-     'Notification when a platform right is renewed',
-     'activity', ARRAY['admin','legal','editor']),
-
-    ('rights_transferred',       TRUE,
-     'Notification when a platform right is transferred',
      'activity', ARRAY['admin','legal','editor']),
 
     ('movie_created',            TRUE,

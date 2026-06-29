@@ -13,6 +13,7 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/contexts/auth-context";
+import { useSidebarCounts } from "@/hooks/use-sidebar-counts";
 import {
   Bell,
   Building2,
@@ -35,7 +36,6 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
-import { useSidebarCounts } from "@/hooks/use-sidebar-counts";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -92,7 +92,7 @@ const NAV_BASE = [
     groupIcon: ShieldCheck,
     roleCheck: "admin",
     items: [
-      { title: "Notifications", icon: Bell, href: "/notifications" },
+      { title: "Notification Setting", icon: Bell, href: "/notifications" },
       { title: "Audit Log", icon: ScrollText, href: "/audit-log" },
     ],
   },
@@ -202,9 +202,12 @@ export function AppSidebar() {
                               fontWeight: active ? 600 : 500,
                               textDecoration: "none",
                               background: active
-                                ? `color-mix(in oklch, ${section.accent} 13%, transparent)`
+                                ? section.accent
                                 : "transparent",
-                              color: active ? section.accent : "var(--text-dim)",
+                              color: active ? "#fff" : "var(--text-dim)",
+                              boxShadow: active
+                                ? `0 2px 10px color-mix(in oklch, ${section.accent} 40%, transparent)`
+                                : "none",
                               transition: "all .18s ease",
                             }}
                             onMouseEnter={(e) => {
@@ -230,7 +233,7 @@ export function AppSidebar() {
                                 width: 3,
                                 borderRadius: 3,
                                 background: section.accent,
-                                boxShadow: `0 0 10px ${section.accent}`,
+                                boxShadow: `0 0 8px ${section.accent}`,
                               }} />
                             )}
                             <item.icon style={{ width: 17, height: 17, flexShrink: 0 }} />
@@ -250,9 +253,9 @@ export function AppSidebar() {
                                 borderRadius: 999,
                                 color: active ? section.accent : "var(--text-faint)",
                                 background: active
-                                  ? `color-mix(in oklch, ${section.accent} 18%, transparent)`
+                                  ? "rgba(255,255,255,0.25)"
                                   : "var(--bg-deep)",
-                                border: `1px solid ${active ? "transparent" : "var(--svf-border)"}`,
+                                border: `1px solid ${active ? "rgba(255,255,255,0.3)" : "var(--svf-border)"}`,
                               }}>
                                 {item.badge}
                               </span>

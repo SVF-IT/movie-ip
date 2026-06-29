@@ -12,11 +12,13 @@ import {
   movieCreatedTemplate,
   dailyDigestTemplate,
   passwordResetTemplate,
+  anniversaryTemplate,
   type RightsExpiringData,
   type UserCreatedData,
   type MovieCreatedData,
   type DailyDigestData,
   type PasswordResetData,
+  type AnniversaryEmailData,
 } from "./templates";
 
 // Re-export types used by API routes
@@ -32,7 +34,7 @@ export type NotificationType =
   | "recensor_reminder"         // Monthly, for A-certified movies with recensor_flag=true
   | "user_created"              // Admin only
   | "password_reset"            // Always sent, cannot be disabled
-  | "anniversary_notification"; // Special events banner on movies page
+  | "anniversary_notification"; // Special events banner + email for upcoming anniversaries
 
 // Global notification settings (admin configurable)
 export interface GlobalNotificationSettings {
@@ -40,7 +42,7 @@ export interface GlobalNotificationSettings {
   notification_type: NotificationType;
   is_enabled: boolean;
   description: string;
-  category: "alerts" | "activity" | "digest" | "account";
+  category: "alerts" | "activity" | "digest" | "account" | "special_events";
   role_filters: string[] | null;
   created_at: string;
   updated_at: string;
@@ -365,18 +367,25 @@ export async function notifyMovieCreated(
 
   if (users.length === 0) return;
 
-  const emails: EmailOptions[] = users.map((user) => {
-    const template = movieCreatedTemplate({
-      ...data,
-      userName: user.full_name || "User",
-    });
-    return {
+  const emails: EmailOptions[] = [];
+  for (const user of users) {
+    const template = movieCreatedTemplate({ ...data, userName: user.full_name || "User" });
+    emails.push({
       to: user.email,
       subject: template.subject,
       html: template.html,
       tags: [{ name: "type", value: "movie_created" }],
-    };
-  });
+    });
+    await createInternalNotification({
+      userId: user.id,
+      title: `New movie added: ${data.movieTitle}`,
+      message: `${data.movieTitle} (${data.source === "home_production" ? "Home Production" : "Acquired"}${data.releaseYear ? `, ${data.releaseYear}` : ""}) was added by ${data.createdBy}.`,
+      type: "movie_created",
+      severity: "info",
+      resourceType: "movie",
+      resourceId: data.movieId,
+    });
+  }
 
   await sendBatchEmails(emails);
 }
@@ -384,14 +393,23 @@ export async function notifyMovieCreated(
 /**
  * Send user created notification (with credentials)
  */
-export async function notifyUserCreated(data: UserCreatedData): Promise<void> {
+export async function notifyUserCreated(data: UserCreatedData & { userId: string }): Promise<void> {
   const template = userCreatedTemplate(data);
-  await sendEmail({
-    to: data.email,
-    subject: template.subject,
-    html: template.html,
-    tags: [{ name: "type", value: "user_created" }],
-  });
+  await Promise.all([
+    sendEmail({
+      to: data.email,
+      subject: template.subject,
+      html: template.html,
+      tags: [{ name: "type", value: "user_created" }],
+    }),
+    createInternalNotification({
+      userId: data.userId,
+      title: `Welcome to Film IP Manager, ${data.userName}!`,
+      message: `Your account has been created by ${data.createdBy}. Please log in and change your temporary password.`,
+      type: "user_created",
+      severity: "info",
+    }),
+  ]);
 }
 
 /**
@@ -602,6 +620,99 @@ export async function sendExpiringRightsAlerts(
       } catch {
         errors++;
       }
+    }
+  }
+
+  return { sent, errors };
+}
+
+/**
+ * Send anniversary email notifications for upcoming milestones.
+ * Checks milestones [1,5,10,15,20,25,30,35,40,45,50,60,75] years within the next 30 days.
+ * Called manually or triggered from the cron.
+ */
+export async function sendAnniversaryNotifications(): Promise<{ sent: number; errors: number }> {
+  const supabase = await createServerClient();
+  let sent = 0;
+  let errors = 0;
+
+  const milestones = [1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 60, 75];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  // Fetch all movies with a release_date
+  const { data: movies, error } = await supabase
+    .from("movies")
+    .select("id, title, release_date, language")
+    .not("release_date", "is", null);
+
+  if (error || !movies || movies.length === 0) return { sent, errors };
+
+  const upcoming: AnniversaryEmailData["anniversaries"] = [];
+
+  for (const movie of movies) {
+    const releaseDate = new Date(movie.release_date);
+    const releaseYear = releaseDate.getFullYear();
+    const currentYear = today.getFullYear();
+
+    for (const milestone of milestones) {
+      const anniversaryYear = releaseYear + milestone;
+      if (anniversaryYear < currentYear) continue;
+
+      const anniversaryDate = new Date(releaseDate);
+      anniversaryDate.setFullYear(anniversaryYear);
+      anniversaryDate.setHours(0, 0, 0, 0);
+
+      const daysUntil = Math.ceil((anniversaryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      if (daysUntil >= 0 && daysUntil <= 30) {
+        upcoming.push({
+          title: movie.title,
+          milestone,
+          releaseYear,
+          anniversaryDate: anniversaryDate.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" }),
+          daysUntil,
+          movieId: movie.id,
+          language: movie.language,
+        });
+      }
+    }
+  }
+
+  if (upcoming.length === 0) return { sent, errors };
+
+  upcoming.sort((a: AnniversaryEmailData["anniversaries"][number], b: AnniversaryEmailData["anniversaries"][number]) => a.daysUntil - b.daysUntil);
+
+  const todayItems = upcoming.filter(a => a.daysUntil === 0);
+  const inAppTitle = todayItems.length > 0
+    ? `🎉 ${todayItems.map(a => a.title).join(", ")} celebrating today!`
+    : `🎬 ${upcoming.length} upcoming movie anniversar${upcoming.length === 1 ? "y" : "ies"} in the next 30 days`;
+  const inAppMessage = upcoming
+    .slice(0, 5)
+    .map(a => `${a.title} — ${a.milestone}yr anniversary${a.daysUntil === 0 ? " (today!)" : ` in ${a.daysUntil} days`}`)
+    .join("\n") + (upcoming.length > 5 ? `\n…and ${upcoming.length - 5} more` : "");
+
+  const users = await getUsersForNotification("anniversary_notification");
+  for (const user of users) {
+    try {
+      const template = anniversaryTemplate({ userName: user.full_name || "User", anniversaries: upcoming });
+      await Promise.all([
+        sendEmail({
+          to: user.email,
+          subject: template.subject,
+          html: template.html,
+          tags: [{ name: "type", value: "anniversary_notification" }],
+        }),
+        createInternalNotification({
+          userId: user.id,
+          title: inAppTitle,
+          message: inAppMessage,
+          type: "anniversary_notification",
+          severity: todayItems.length > 0 ? "warning" : "info",
+        }),
+      ]);
+      sent++;
+    } catch {
+      errors++;
     }
   }
 

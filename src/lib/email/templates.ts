@@ -199,112 +199,103 @@ export function rightsExpiringTemplate(data: RightsExpiringData): { subject: str
   };
 }
 
-export interface RightsRenewedData {
+export interface AnniversaryEmailData {
   userName: string;
-  movieTitle: string;
-  platformName: string;
-  previousEndDate: string;
-  newEndDate: string;
-  rightId: string;
-  renewedBy: string;
+  anniversaries: {
+    title: string;
+    milestone: number;
+    releaseYear: number;
+    anniversaryDate: string;
+    daysUntil: number;
+    movieId: string;
+    language?: string;
+  }[];
 }
 
-export function rightsRenewedTemplate(data: RightsRenewedData): { subject: string; html: string } {
-  const content = `
-    <div style="margin-bottom: 24px;">
-      ${alertBadge("success", "Rights Renewed")}
-    </div>
-    <h2 style="margin: 0 0 16px; font-size: 20px; font-weight: 600; color: ${COLORS.text};">
-      Hi ${data.userName},
-    </h2>
-    <p style="margin: 0 0 24px; font-size: 15px; color: ${COLORS.textMuted}; line-height: 1.6;">
-      Rights have been renewed for the following title:
-    </p>
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border: 1px solid ${COLORS.border}; border-radius: 8px; overflow: hidden; margin-bottom: 24px;">
-      <tr>
-        <td style="padding: 16px; background-color: ${COLORS.background}; width: 140px; font-weight: 600; color: ${COLORS.textMuted};">Movie</td>
-        <td style="padding: 16px; color: ${COLORS.text}; font-weight: 600;">${data.movieTitle}</td>
-      </tr>
-      <tr>
-        <td style="padding: 16px; background-color: ${COLORS.background}; border-top: 1px solid ${COLORS.border}; font-weight: 600; color: ${COLORS.textMuted};">Platform</td>
-        <td style="padding: 16px; border-top: 1px solid ${COLORS.border}; color: ${COLORS.text};">${data.platformName}</td>
-      </tr>
-      <tr>
-        <td style="padding: 16px; background-color: ${COLORS.background}; border-top: 1px solid ${COLORS.border}; font-weight: 600; color: ${COLORS.textMuted};">Previous End Date</td>
-        <td style="padding: 16px; border-top: 1px solid ${COLORS.border}; color: ${COLORS.textMuted}; text-decoration: line-through;">${data.previousEndDate}</td>
-      </tr>
-      <tr>
-        <td style="padding: 16px; background-color: ${COLORS.background}; border-top: 1px solid ${COLORS.border}; font-weight: 600; color: ${COLORS.textMuted};">New End Date</td>
-        <td style="padding: 16px; border-top: 1px solid ${COLORS.border}; color: ${COLORS.success}; font-weight: 600;">${data.newEndDate}</td>
-      </tr>
-      <tr>
-        <td style="padding: 16px; background-color: ${COLORS.background}; border-top: 1px solid ${COLORS.border}; font-weight: 600; color: ${COLORS.textMuted};">Renewed By</td>
-        <td style="padding: 16px; border-top: 1px solid ${COLORS.border}; color: ${COLORS.text};">${data.renewedBy}</td>
-      </tr>
-    </table>
-    <div style="text-align: center;">
-      ${button("View Rights Details", `${APP_URL}/rights`)}
-    </div>
-  `;
+export function anniversaryTemplate(data: AnniversaryEmailData): { subject: string; html: string } {
+  const todayItems = data.anniversaries.filter(a => a.daysUntil === 0);
+  const upcomingItems = data.anniversaries.filter(a => a.daysUntil > 0);
 
-  return {
-    subject: `Rights Renewed: ${data.movieTitle}`,
-    html: baseTemplate(content, `Rights renewed for ${data.movieTitle} until ${data.newEndDate}`),
+  const milestoneLabel = (n: number) =>
+    n === 1 ? "1st Anniversary" :
+    n === 2 ? "2nd Anniversary" :
+    n === 3 ? "3rd Anniversary" :
+    `${n}th Anniversary`;
+
+  const ordinalSuffix = (n: number) =>
+    n === 1 ? "st" : n === 2 ? "nd" : n === 3 ? "rd" : "th";
+
+  const renderRow = (a: AnniversaryEmailData["anniversaries"][number]) => {
+    const badge = a.daysUntil === 0
+      ? alertBadge("success", "Today!")
+      : a.daysUntil <= 7
+      ? alertBadge("danger", `${a.daysUntil}d`)
+      : alertBadge("info", `${a.daysUntil}d`);
+
+    return `
+    <tr>
+      <td style="padding: 12px; border-bottom: 1px solid ${COLORS.border};">
+        <strong style="color: ${COLORS.text};">${a.title}</strong><br>
+        <span style="font-size: 13px; color: ${COLORS.textMuted};">
+          ${a.releaseYear} · ${a.milestone}${ordinalSuffix(a.milestone)} Anniversary
+          ${a.language ? ` · ${a.language}` : ""}
+        </span>
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid ${COLORS.border}; text-align: center; font-size: 13px; color: ${COLORS.textMuted};">
+        ${a.anniversaryDate}
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid ${COLORS.border}; text-align: center;">
+        ${badge}
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid ${COLORS.border}; text-align: right;">
+        <a href="${APP_URL}/movies/${a.movieId}" style="color: ${COLORS.primary}; text-decoration: none; font-size: 13px;">View</a>
+      </td>
+    </tr>`;
   };
-}
 
-export interface RightsTransferredData {
-  userName: string;
-  movieTitle: string;
-  fromPlatform: string;
-  toPlatform: string;
-  newStartDate: string;
-  newEndDate: string;
-  newRightId: string;
-  transferredBy: string;
-}
+  const todaySection = todayItems.length > 0 ? `
+    <div style="background-color: #d1fae5; border: 1px solid #10b981; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
+      <p style="margin: 0; font-size: 14px; color: #065f46; font-weight: 600;">
+        🎉 ${todayItems.length} movie anniversary happening today!
+      </p>
+      <p style="margin: 8px 0 0; font-size: 13px; color: #047857;">
+        ${todayItems.map(a => `${a.title} — ${a.milestone}${ordinalSuffix(a.milestone)} Anniversary`).join(", ")}
+      </p>
+    </div>
+  ` : "";
 
-export function rightsTransferredTemplate(data: RightsTransferredData): { subject: string; html: string } {
   const content = `
     <div style="margin-bottom: 24px;">
-      ${alertBadge("info", "Rights Transferred")}
+      ${alertBadge("info", "Special Events")}
     </div>
     <h2 style="margin: 0 0 16px; font-size: 20px; font-weight: 600; color: ${COLORS.text};">
       Hi ${data.userName},
     </h2>
     <p style="margin: 0 0 24px; font-size: 15px; color: ${COLORS.textMuted}; line-height: 1.6;">
-      Rights have been transferred for the following title:
+      Here are the upcoming movie anniversary milestones in the next 30 days:
     </p>
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border: 1px solid ${COLORS.border}; border-radius: 8px; overflow: hidden; margin-bottom: 24px;">
-      <tr>
-        <td style="padding: 16px; background-color: ${COLORS.background}; width: 140px; font-weight: 600; color: ${COLORS.textMuted};">Movie</td>
-        <td style="padding: 16px; color: ${COLORS.text}; font-weight: 600;">${data.movieTitle}</td>
+    ${todaySection}
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border: 1px solid ${COLORS.border}; border-radius: 8px; overflow: hidden;">
+      <tr style="background-color: ${COLORS.background};">
+        <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; color: ${COLORS.textMuted}; text-transform: uppercase;">Movie</th>
+        <th style="padding: 12px; text-align: center; font-size: 12px; font-weight: 600; color: ${COLORS.textMuted}; text-transform: uppercase;">Date</th>
+        <th style="padding: 12px; text-align: center; font-size: 12px; font-weight: 600; color: ${COLORS.textMuted}; text-transform: uppercase;">Days Away</th>
+        <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: ${COLORS.textMuted}; text-transform: uppercase;">Action</th>
       </tr>
-      <tr>
-        <td style="padding: 16px; background-color: ${COLORS.background}; border-top: 1px solid ${COLORS.border}; font-weight: 600; color: ${COLORS.textMuted};">From Platform</td>
-        <td style="padding: 16px; border-top: 1px solid ${COLORS.border}; color: ${COLORS.textMuted};">${data.fromPlatform}</td>
-      </tr>
-      <tr>
-        <td style="padding: 16px; background-color: ${COLORS.background}; border-top: 1px solid ${COLORS.border}; font-weight: 600; color: ${COLORS.textMuted};">To Platform</td>
-        <td style="padding: 16px; border-top: 1px solid ${COLORS.border}; color: ${COLORS.success}; font-weight: 600;">${data.toPlatform}</td>
-      </tr>
-      <tr>
-        <td style="padding: 16px; background-color: ${COLORS.background}; border-top: 1px solid ${COLORS.border}; font-weight: 600; color: ${COLORS.textMuted};">New Period</td>
-        <td style="padding: 16px; border-top: 1px solid ${COLORS.border}; color: ${COLORS.text};">${data.newStartDate} to ${data.newEndDate}</td>
-      </tr>
-      <tr>
-        <td style="padding: 16px; background-color: ${COLORS.background}; border-top: 1px solid ${COLORS.border}; font-weight: 600; color: ${COLORS.textMuted};">Transferred By</td>
-        <td style="padding: 16px; border-top: 1px solid ${COLORS.border}; color: ${COLORS.text};">${data.transferredBy}</td>
-      </tr>
+      ${data.anniversaries.map(renderRow).join("")}
     </table>
-    <div style="text-align: center;">
-      ${button("View New Rights", `${APP_URL}/rights`)}
+    <div style="margin-top: 32px; text-align: center;">
+      ${button("View Movies", `${APP_URL}/movies`)}
     </div>
   `;
 
+  const subjectParts: string[] = [];
+  if (todayItems.length > 0) subjectParts.push(`${todayItems.length} today`);
+  if (upcomingItems.length > 0) subjectParts.push(`${upcomingItems.length} upcoming`);
+
   return {
-    subject: `Rights Transferred: ${data.movieTitle} to ${data.toPlatform}`,
-    html: baseTemplate(content, `Rights for ${data.movieTitle} transferred from ${data.fromPlatform} to ${data.toPlatform}`),
+    subject: `🎬 Movie Anniversaries: ${subjectParts.join(", ")}`,
+    html: baseTemplate(content, `${data.anniversaries.length} upcoming movie anniversary milestones`),
   };
 }
 
