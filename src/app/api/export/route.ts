@@ -16,7 +16,6 @@ const HOME_COLUMNS: Record<string, string> = {
   trailer_link: 'YT Trailer Link',
   certification: 'Censor',
   nature_of_rights: 'Nature of Right',
-  holdbacks: 'Holdbacks',
   remarks: 'Remarks',
   actionables: 'Actionable',
   jointly_exploitation_rights: 'Joint Exploitation Rights',
@@ -25,6 +24,7 @@ const HOME_COLUMNS: Record<string, string> = {
   wtp_library: 'WTP / Library',
 }
 
+// Base acquired movie columns (no flat rights — those come from movie_rights rows)
 const ACQUIRED_COLUMNS: Record<string, string> = {
   title: 'Movie Name',
   cast_names: 'Cast Details',
@@ -41,37 +41,19 @@ const ACQUIRED_COLUMNS: Record<string, string> = {
   agreement_date: 'Agreement Date',
   agreement_start_date: 'Agreement Start Date',
   agreement_end_date: 'Agreement End Date',
-  satellite_rights: 'Satellite Rights',
-  satellite_rights_start_date: 'Satellite Rights Start Date',
-  satellite_rights_end_date: 'Satellite Rights End Date',
-  satellite_rights_classification: 'Satellite Rights Classification',
-  nature_of_satellite_rights: 'Nature of Satellite Rights',
-  internet_rights: 'Internet Rights',
-  internet_rights_start_date: 'Internet Rights Start Date',
-  internet_rights_end_date: 'Internet Rights End Date',
-  internet_rights_classification: 'Internet Rights Classification',
-  nature_of_internet_rights: 'Nature of Internet Rights',
-  syndication_internet_rights: 'Syndication Internet Rights',
-  negative_rights: 'Negative Rights',
-  negative_rights_start_date: 'Negative Rights Start Date',
-  negative_rights_end_date: 'Negative Rights End Date',
-  nature_of_negative_rights: 'Nature of Negative Rights',
-  other_rights: 'Other Rights',
-  other_rights_start_date: 'Other Rights Start Date',
-  other_rights_end_date: 'Other Rights End Date',
-  nature_of_other_rights: 'Nature of Other Rights',
   clip_rights: 'Clip Rights',
   clip_rights_duration: 'Clip Rights Duration',
-  holdbacks: 'Holdbacks',
   prequel_sequel_rights: 'Prequel / Sequel Rights',
   character_rights: 'Character Rights',
   subtitling_rights: 'Subtitling Rights',
   dubbing_rights: 'Dubbing Rights',
-  nature_of_rights: 'Nature of Rights',
   wtp_library: 'WTP / Library',
   remarks: 'Remarks',
   actionables: 'Actionable',
 }
+
+// Right-type labels and their column prefixes in the export
+const RIGHT_TYPE_EXPORT_ORDER = ['Satellite', 'Internet', 'Negative', 'Other', 'Airborne', 'Ship']
 
 export async function GET(request: Request) {
   try {
@@ -100,7 +82,6 @@ export async function GET(request: Request) {
     let csvString = ''
 
     if (entity === 'movies' || entity === 'all') {
-      // Build source filter
       let query = serverClient.from('movies_with_details').select('*').order('title')
 
       if (movieFormat === 'home') {
@@ -112,21 +93,74 @@ export async function GET(request: Request) {
       const { data: movies, error } = await query
       if (error) throw error
 
-      const columnDef = movieFormat === 'acquired' ? ACQUIRED_COLUMNS : HOME_COLUMNS
+      const isAcquiredExport = movieFormat === 'acquired'
+      const columnDef = isAcquiredExport ? ACQUIRED_COLUMNS : HOME_COLUMNS
 
-      // Determine which fields to include
       let fieldKeys = Object.keys(columnDef)
       if (columnsParam) {
         const requested = new Set(columnsParam.split(',').map((s) => s.trim()))
         fieldKeys = fieldKeys.filter((k) => requested.has(k))
       }
 
+      // For acquired exports, fetch all movie_rights rows and group by movie_id
+      let movieRightsMap = new Map<string, Record<string, unknown>[]>()
+      if (isAcquiredExport && (movies || []).length > 0) {
+        const movieIds = (movies || []).map((m: Record<string, unknown>) => m.id as string)
+        // Chunk to avoid URL limits
+        const CHUNK = 200
+        const allRightsRows: Record<string, unknown>[] = []
+        for (let i = 0; i < movieIds.length; i += CHUNK) {
+          const { data: chunk } = await serverClient
+            .from('movie_rights')
+            .select('movie_id, right_type, nature, classification, territory, start_date, end_date, syndication, holdbacks')
+            .in('movie_id', movieIds.slice(i, i + CHUNK))
+            .order('right_type')
+          if (chunk) allRightsRows.push(...chunk)
+        }
+        for (const r of allRightsRows) {
+          const mid = r.movie_id as string
+          if (!movieRightsMap.has(mid)) movieRightsMap.set(mid, [])
+          movieRightsMap.get(mid)!.push(r)
+        }
+      }
+
       const moviesFlat = (movies || []).map((m: Record<string, unknown>) => {
         const row: Record<string, unknown> = {}
         for (const key of fieldKeys) {
-          const label = columnDef[key]
-          row[label] = m[key] ?? ''
+          row[columnDef[key]] = m[key] ?? ''
         }
+
+        if (isAcquiredExport) {
+          const rights = movieRightsMap.get(m.id as string) || []
+          // Group by right_type, emit columns per type; multiple entries = semicolon-separated
+          for (const rt of RIGHT_TYPE_EXPORT_ORDER) {
+            const rows = rights.filter((r) => r.right_type === rt)
+            if (rows.length === 0) {
+              row[`${rt} Rights`] = ''
+              row[`${rt} Nature`] = ''
+              row[`${rt} Classification`] = ''
+              row[`${rt} Territory`] = ''
+              row[`${rt} Start Date`] = ''
+              row[`${rt} End Date`] = ''
+              if (rt === 'Internet') {
+                row['Syndication'] = ''
+                row['Holdbacks'] = ''
+              }
+            } else {
+              row[`${rt} Rights`] = 'Yes'
+              row[`${rt} Nature`] = rows.map((r) => r.nature ?? '').join('; ')
+              row[`${rt} Classification`] = rows.map((r) => r.classification ?? '').filter(Boolean).join('; ')
+              row[`${rt} Territory`] = rows.map((r) => r.territory ?? '').filter(Boolean).join('; ')
+              row[`${rt} Start Date`] = rows.map((r) => r.start_date ?? '').filter(Boolean).join('; ')
+              row[`${rt} End Date`] = rows.map((r) => r.end_date ?? '').filter(Boolean).join('; ')
+              if (rt === 'Internet') {
+                row['Syndication'] = rows.map((r) => r.syndication ?? '').filter(Boolean).join('; ')
+                row['Holdbacks'] = rows.map((r) => r.holdbacks ?? '').filter(Boolean).join('; ')
+              }
+            }
+          }
+        }
+
         return row
       })
 

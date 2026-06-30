@@ -503,6 +503,16 @@ class CacheStore {
     await this.supabase.from('platform_rights').delete().eq('movie_id', movieId)
   }
 
+  async clearMovieRights(movieId: string): Promise<void> {
+    await this.supabase.from('movie_rights').delete().eq('movie_id', movieId)
+  }
+
+  async insertMovieRightsRows(rows: Record<string, unknown>[]): Promise<void> {
+    if (rows.length === 0) return
+    const { error } = await this.supabase.from('movie_rights').insert(rows)
+    if (error) console.error(`Warning: Could not insert movie_rights: ${error.message}`)
+  }
+
   async insertPlatformRights(rightsData: Record<string, unknown>): Promise<string | null> {
     if (!rightsData.movie_id) return null
 
@@ -1174,7 +1184,6 @@ async function processHomeRow(
     nature_of_rights: natureOfRights,
     remarks: cleanString(row['Remarks']),
     actionables: cleanString(row['Actionable']),
-    holdbacks: parseHoldbacks(row['Holdbacks'] ?? row['Holdback']),
     territory: 'World',
     // Jointly owned extras
     jointly_exploitation_rights: jointExploitKey ? preserveRawText(row[jointExploitKey]) : null,
@@ -1281,6 +1290,131 @@ function parseYesNoDefault(value: string | null | undefined): string {
   return v
 }
 
+interface MovieRightsPayload {
+  [key: string]: unknown
+  movie_id: string
+  right_type: string
+  nature: string | null
+  classification: string | null
+  territory: string | null
+  start_date: string | null
+  end_date: string | null
+  syndication: string | null
+  holdbacks: string | null
+}
+
+function buildMovieRightsRows(
+  movieId: string,
+  row: Record<string, string>,
+  keys: string[],
+  col: (row: Record<string, string>, key: string | null) => string | undefined,
+): MovieRightsPayload[] {
+  const rows: MovieRightsPayload[] = []
+
+  const satRightsKey = findColumnByPattern(keys, ['Satellite Rights'])
+  const intRightsKey = findColumnByPattern(keys, ['Internet Rights'])
+  const negRightsKey = findColumnByPattern(keys, ['Negative Rights'])
+  const othRightsKey = findColumnByPattern(keys, ['Other Rights', 'Others'])
+
+  const satVal = parseYesNoDefault(col(row, satRightsKey))
+  const intVal = parseYesNoDefault(col(row, intRightsKey))
+  const negVal = parseYesNoDefault(col(row, negRightsKey))
+  const othVal = parseYesNoDefault(col(row, othRightsKey))
+
+  const satClassKey = findColumnByPattern(keys, ['Satellite Rights Classification', 'Satellite Classification'])
+  const intClassKey = findColumnByPattern(keys, ['Internet Classification', 'Internet Rights - Classification', 'Internet Rights Classification'])
+  const syndicationKey = findColumnByPattern(keys, ['Syndication- Internet Rights', 'Syndication - Internet Rights', 'Syndication'])
+  const hbKey = findColumnByPattern(keys, ['Holdbacks', 'Holdback'])
+  let holdbacksRaw: string | null = hbKey ? cleanString(row[hbKey]) : null
+  if (!holdbacksRaw && intClassKey) {
+    const idx = keys.indexOf(intClassKey)
+    const candidate = idx + 1 < keys.length ? cleanString(row[keys[idx + 1]]) : null
+    if (candidate && candidate.toLowerCase().startsWith('on ')) holdbacksRaw = candidate
+  }
+  const holdbacksVal = parseHoldbacks(holdbacksRaw)
+
+  const natSatKey = findColumnByPattern(keys, ['Nature of Satellite Rights', 'Nature of Satellite'])
+  const natIntKey = findColumnByPattern(keys, ['Nature of Internet Rights', 'Nature of Internet'])
+  const natNegKey = findColumnByPattern(keys, ['Nature of Negative Rights', 'Nature of Negative'])
+  const natOthKey = findColumnByPattern(keys, ['Nature of Other Rights', 'Nature of Other'])
+
+  const satStartKey = findColumnByPattern(keys, ['Satellite Rights Start Date', 'Satellite Start Date'])
+  const satEndKey   = findColumnByPattern(keys, ['Satellite Rights End Date',   'Satellite End Date'])
+  const intStartKey = findColumnByPattern(keys, ['Internet Rights Start Date',  'Internet Start Date'])
+  const intEndKey   = findColumnByPattern(keys, ['Internet Rights End Date',    'Internet End Date'])
+  const negStartKey = findColumnByPattern(keys, ['Negative Rights Start Date',  'Negative Start Date'])
+  const negEndKey   = findColumnByPattern(keys, ['Negative Rights End Date',    'Negative End Date'])
+  const othStartKey = findColumnByPattern(keys, ['Other Rights Start Date',     'Other Start Date'])
+  const othEndKey   = findColumnByPattern(keys, ['Other Rights End Date',       'Other End Date'])
+
+  const territoryKey = findColumnByPattern(keys, ['Territory'])
+  const defaultTerritory = cleanString(col(row, territoryKey)) ?? null
+
+  const satNature = preserveRawText(col(row, natSatKey))
+  const intNature = preserveRawText(col(row, natIntKey))
+  const negNature = preserveRawText(col(row, natNegKey))
+  const othNature = preserveRawText(col(row, natOthKey))
+
+  if (satVal === 'Yes' || satNature || parseDate(col(row, satStartKey)) || parseDate(col(row, satEndKey))) {
+    rows.push({
+      movie_id: movieId,
+      right_type: 'Satellite',
+      nature: satNature,
+      classification: cleanString(col(row, satClassKey)),
+      territory: defaultTerritory,
+      start_date: parseDate(col(row, satStartKey)),
+      end_date: parseDate(col(row, satEndKey)),
+      syndication: null,
+      holdbacks: holdbacksVal,
+    })
+  }
+
+  if (intVal === 'Yes' || intNature || parseDate(col(row, intStartKey)) || parseDate(col(row, intEndKey))) {
+    rows.push({
+      movie_id: movieId,
+      right_type: 'Internet',
+      nature: intNature,
+      classification: cleanString(col(row, intClassKey)),
+      territory: defaultTerritory,
+      start_date: parseDate(col(row, intStartKey)),
+      end_date: parseDate(col(row, intEndKey)),
+      syndication: preserveRawText(col(row, syndicationKey)),
+      holdbacks: holdbacksVal,
+    })
+  }
+
+  if (negVal === 'Yes' || negNature || parseDate(col(row, negStartKey)) || parseDate(col(row, negEndKey))) {
+    rows.push({
+      movie_id: movieId,
+      right_type: 'Negative',
+      nature: negNature,
+      classification: null,
+      territory: defaultTerritory,
+      start_date: parseDate(col(row, negStartKey)),
+      end_date: parseDate(col(row, negEndKey)),
+      syndication: null,
+      holdbacks: null,
+    })
+  }
+
+  // "Other Rights" may hold a name like "Cable TV" — store it as classification
+  if (othVal && othVal !== 'No') {
+    rows.push({
+      movie_id: movieId,
+      right_type: 'Other',
+      nature: othNature,
+      classification: othVal !== 'Yes' ? othVal : null,
+      territory: defaultTerritory,
+      start_date: parseDate(col(row, othStartKey)),
+      end_date: parseDate(col(row, othEndKey)),
+      syndication: null,
+      holdbacks: null,
+    })
+  }
+
+  return rows
+}
+
 async function processAcquiredRow(
   row: Record<string, string>,
   keys: string[],
@@ -1354,48 +1488,9 @@ async function processAcquiredRow(
   const certKey = findColumnByPattern(keys, ['Certification', 'Certif'])
   const colorKey = findColumnByPattern(keys, ['Color/B/W', 'Color / B/W', 'Colour'])
 
-  // ── Primary Rights Yes/No flags ──────────────────────────
-  // Blank cell = 'No' (not licensed). Other Rights may also contain a name (e.g. "Cable TV") — store as-is.
-  const satRightsKey = findColumnByPattern(keys, ['Satellite Rights'])
-  const intRightsKey = findColumnByPattern(keys, ['Internet Rights'])
-  const negRightsKey = findColumnByPattern(keys, ['Negative Rights'])
-  const othRightsKey = findColumnByPattern(keys, ['Other Rights', 'Others'])
-
-  // ── Rights sub-classifications ───────────────────────────
-  const satClassKey = findColumnByPattern(keys, ['Satellite Rights Classification', 'Satellite Classification'])
-  const internetClassKey = findColumnByPattern(keys, ['Internet Classification', 'Internet Rights - Classification', 'Internet Rights Classification'])
-
-  // ── Holdbacks: explicit column first, then positional fallback after Internet Classification ──
-  const hbKey = findColumnByPattern(keys, ['Holdbacks', 'Holdback'])
-  let holdbacksRaw: string | null = hbKey ? cleanString(row[hbKey]) : null
-  if (!holdbacksRaw && internetClassKey) {
-    const idx = keys.indexOf(internetClassKey)
-    const candidate = idx + 1 < keys.length ? cleanString(row[keys[idx + 1]]) : null
-    if (candidate && candidate.toLowerCase().startsWith('on ')) holdbacksRaw = candidate
-  }
-
-  // ── Nature per right type — store raw text, null for blank/n/a ──
-  const natSatKey = findColumnByPattern(keys, ['Nature of Satellite Rights', 'Nature of Satellite'])
-  const natIntKey = findColumnByPattern(keys, ['Nature of Internet Rights', 'Nature of Internet'])
-  const natNegKey = findColumnByPattern(keys, ['Nature of Negative Rights', 'Nature of Negative'])
-  const natOthKey = findColumnByPattern(keys, ['Nature of Other Rights', 'Nature of Other'])
-
-  // ── Per-right date ranges ────────────────────────────────
-  const satStartKey = findColumnByPattern(keys, ['Satellite Rights Start Date', 'Satellite Start Date'])
-  const satEndKey = findColumnByPattern(keys, ['Satellite Rights End Date', 'Satellite End Date'])
-  const intStartKey = findColumnByPattern(keys, ['Internet Rights Start Date', 'Internet Start Date'])
-  const intEndKey = findColumnByPattern(keys, ['Internet Rights End Date', 'Internet End Date'])
-  const negStartKey = findColumnByPattern(keys, ['Negative Rights Start Date', 'Negative Start Date'])
-  const negEndKey = findColumnByPattern(keys, ['Negative Rights End Date', 'Negative End Date'])
-  const othStartKey = findColumnByPattern(keys, ['Other Rights Start Date', 'Other Start Date'])
-  const othEndKey = findColumnByPattern(keys, ['Other Rights End Date', 'Other End Date'])
-
   // ── Clip rights ──────────────────────────────────────────
   const clipRightsKey = findColumnByPattern(keys, ['Clip Rights'])
   const clipDurKey = findColumnByPattern(keys, ['Duration', 'Clip Rights Duration'])
-
-  // ── Syndication ──────────────────────────────────────────
-  const syndicationKey = findColumnByPattern(keys, ['Syndication- Internet Rights', 'Syndication - Internet Rights', 'Syndication'])
 
   // ── Derivative / secondary ───────────────────────────────
   const preqSeqKey = findColumnByPattern(keys, ['Prequel/ Sequel Rights', 'Prequel/Sequel Rights', 'Prequel Sequel'])
@@ -1410,7 +1505,7 @@ async function processAcquiredRow(
   const castKey = findColumnByPattern(keys, ['Cast Details', 'Cast'])
   const directorKey = findColumnByPattern(keys, ['Director'])
 
-  // ── Build movie record ───────────────────────────────────
+  // ── Build movie record (no flat rights columns — they live in movie_rights) ─
   const movieData: Record<string, unknown> = {
     title,
     source: 'acquired',
@@ -1425,41 +1520,14 @@ async function processAcquiredRow(
     agreement_date: parseDate(col(row, agrmtDateKey)),
     agreement_start_date: parseDate(col(row, agrmtStartKey)),
     agreement_end_date: parseDate(col(row, agrmtEndKey)),
-    // Primary Rights flags — blank = 'No' (not licensed); Other Rights may hold a name
-    satellite_rights: parseYesNoDefault(col(row, satRightsKey)),
-    internet_rights: parseYesNoDefault(col(row, intRightsKey)),
-    negative_rights: parseYesNoDefault(col(row, negRightsKey)),
-    other_rights: parseYesNoDefault(col(row, othRightsKey)),
-    // Sub-classifications
-    satellite_rights_classification: cleanString(col(row, satClassKey)),
-    internet_rights_classification: cleanString(col(row, internetClassKey)),
-    // Nature per type
-    nature_of_satellite_rights: preserveRawText(col(row, natSatKey)),
-    nature_of_internet_rights: preserveRawText(col(row, natIntKey)),
-    nature_of_negative_rights: preserveRawText(col(row, natNegKey)),
-    nature_of_other_rights: preserveRawText(col(row, natOthKey)),
-    // Date ranges
-    satellite_rights_start_date: parseDate(col(row, satStartKey)),
-    satellite_rights_end_date: parseDate(col(row, satEndKey)),
-    internet_rights_start_date: parseDate(col(row, intStartKey)),
-    internet_rights_end_date: parseDate(col(row, intEndKey)),
-    negative_rights_start_date: parseDate(col(row, negStartKey)),
-    negative_rights_end_date: parseDate(col(row, negEndKey)),
-    other_rights_start_date: parseDate(col(row, othStartKey)),
-    other_rights_end_date: parseDate(col(row, othEndKey)),
-    // Clip rights
+    // Clip rights (standalone — no nature/territory)
     clip_rights: parseYesNoDefault(col(row, clipRightsKey)),
     clip_rights_duration: cleanString(col(row, clipDurKey)),
-    // Holdbacks
-    holdbacks: parseHoldbacks(holdbacksRaw),
-    // Syndication
-    syndication_internet_rights: preserveRawText(col(row, syndicationKey)),
     // Derivative / secondary
     prequel_sequel_rights: preserveRawText(col(row, preqSeqKey)),
     character_rights: preserveRawText(col(row, charRightsKey)),
     subtitling_rights: preserveRawText(col(row, subtitleKey)),
     dubbing_rights: preserveRawText(col(row, dubbingKey)),
-    // Other
     nature_of_rights: null,
     territory: cleanString(col(row, territoryKey)),
     remarks: cleanString(col(row, remarksKey)),
@@ -1470,6 +1538,11 @@ async function processAcquiredRow(
   if (existingId && resolution === 'update') {
     await cache.updateMovie(existingId, movieData)
     await relinkPeople(row, cache, existingId, castKey, directorKey)
+    // Sync movie_rights
+    await cache.clearMovieRights(existingId)
+    const mrRows = buildMovieRightsRows(existingId, row, keys, col)
+    await cache.insertMovieRightsRows(mrRows)
+    // Sync platform_rights
     if (platformSlots) {
       await cache.clearMoviePlatformRights(existingId)
       await extractAcquiredPlatformRights(rawDataCols, platformSlots, cache, existingId, slotErrors)
@@ -1484,6 +1557,10 @@ async function processAcquiredRow(
   cache.movies.set(titleKey, movieId)
 
   await relinkPeople(row, cache, movieId, castKey, directorKey)
+  // Insert movie_rights rows
+  const mrRows = buildMovieRightsRows(movieId, row, keys, col)
+  await cache.insertMovieRightsRows(mrRows)
+  // Insert platform_rights rows
   if (platformSlots) {
     await extractAcquiredPlatformRights(rawDataCols, platformSlots, cache, movieId, slotErrors)
   }

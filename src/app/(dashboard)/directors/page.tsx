@@ -26,8 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getDirectorsWithMovies, type DirectorWithMovies } from "@/lib/api/directors";
-import { createPerson } from "@/lib/api/people";
+import { createPerson, getPeopleWithStats, type PersonWithStats } from "@/lib/api/people";
 import {
   AlertTriangle,
   ArrowUpDown,
@@ -50,7 +49,7 @@ const DIRECTOR_EXPORT_FIELDS: ExportFieldDef[] = [
 type SortOption = "name_asc" | "name_desc" | "movies_desc" | "movies_asc";
 
 export default function DirectorsPage() {
-  const [directors, setDirectors] = useState<DirectorWithMovies[]>([]);
+  const [directors, setDirectors] = useState<PersonWithStats[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("name_asc");
@@ -82,29 +81,8 @@ export default function DirectorsPage() {
     try {
       setLoading(true);
   
-      const { data, count } = await getDirectorsWithMovies({
-        limit: 10000,
-      });
-
-      // Map DirectorWithMovies to PersonWithStats for PersonCard
-      const normalize = (t: string) => t.replace(/\s*\([^)]*\)/g, "").trim();
-      const mappedDirectors = data.map(director => {
-        const seen = new Set<string>();
-        const deduped = director.movies.filter(m => {
-          const key = normalize(m.movie_title);
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
-        return {
-          ...director,
-          movies: deduped,
-          role: (director as any).role || 'director',
-          movies_as_director: director.movies_count,
-        };
-      }) as any;
-
-      setDirectors(mappedDirectors);
+      const { data, count } = await getPeopleWithStats({ role: "director", limit: 10000 });
+      setDirectors(data);
       setTotalCount(count);
     } catch (err) {
       console.error("Error fetching directors:", err);

@@ -152,21 +152,18 @@ export default function PersonDetailPage() {
     return person.name.split(" ").map((n) => n[0]).join("").toUpperCase().substring(0, 2);
   }, [person?.name]);
 
-  // Same deduplication as the filmography grid: collapse "(version)" suffix variants
   const normalizeTitle = (title: string) => title.replace(/\s*\([^)]*\)/g, "").trim();
 
-  // Match actors/directors API logic: unique movie_ids per role → unique normalized titles
+  // Deduplicate by normalized title only — same logic as getPeopleWithStats in the API.
+  // Each version (dubbed, multi-language) is a separate movie_id but the same film.
   const { directorCount, actorCount, uniqueFilmCount } = useMemo(() => {
-    // Step 1: unique movie_id → title map per role (mirrors API Set<movie_id> dedup)
-    const directorIdTitles = new Map<string, string>();
-    const actorIdTitles = new Map<string, string>();
+    const directorTitles = new Set<string>();
+    const actorTitles = new Set<string>();
     movies.forEach((m) => {
-      if (m.role === "director") directorIdTitles.set(m.movie_id, m.movie_title);
-      else actorIdTitles.set(m.movie_id, m.movie_title);
+      const norm = normalizeTitle(m.movie_title);
+      if (m.role === "director") directorTitles.add(norm);
+      else actorTitles.add(norm);
     });
-    // Step 2: normalize titles (mirrors API normalizeTitle dedup)
-    const directorTitles = new Set(Array.from(directorIdTitles.values()).map(normalizeTitle));
-    const actorTitles = new Set(Array.from(actorIdTitles.values()).map(normalizeTitle));
     const allTitles = new Set([...directorTitles, ...actorTitles]);
     return { directorCount: directorTitles.size, actorCount: actorTitles.size, uniqueFilmCount: allTitles.size };
   }, [movies]);

@@ -494,7 +494,7 @@ export async function removeMovieDirector(id: string): Promise<void> {
  * Each group contains all language versions of the same movie
  */
 export async function getGroupedMovies(options?: {
-  source?: "home_production" | "acquired" | "expired" | "bangladeshi";
+  source?: "home_production" | "acquired" | "expired" | "bangladeshi" | "sold";
   search?: string;
   language?: string;
   certification?: string[];
@@ -527,6 +527,9 @@ export async function getGroupedMovies(options?: {
   } else if (options?.source === 'bangladeshi') {
     // BANGLADESHI: all movies flagged as bangladeshi — no agreement date filtering
     query = query.eq("is_bangladeshi", true);
+  } else if (options?.source === 'sold') {
+    // SOLD: home prod movies with "Sold" in nature_of_rights
+    query = query.eq("source", "home_production").ilike("nature_of_rights", "%Sold%");
   } else {
     // ALL: home (not explicitly sold) + acquired (not expired)
     query = query.or(

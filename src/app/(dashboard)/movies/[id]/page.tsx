@@ -28,10 +28,11 @@ import {
 } from "@/components/ui/table";
 import { useAuth } from "@/contexts/auth-context";
 import { useAppToast } from "@/hooks/use-app-toast";
+import { getMovieRightsOwned } from "@/lib/api/movie-rights";
 import { deleteMovie, getMovieById, getMovieExpiredRights, getMovieRights, getMovieVersions } from "@/lib/api/movies";
 import { submitRightChange } from "@/lib/api/pending-changes";
 import { deleteRight } from "@/lib/api/rights";
-import type { MovieLanguageVersion, MovieWithDetails, PlatformRight } from "@/lib/types/database";
+import type { MovieLanguageVersion, MovieRight, MovieWithDetails, PlatformRight } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import {
@@ -155,6 +156,7 @@ export default function MovieDetailPage() {
   const [selectedVersionId, setSelectedVersionId] = useState<string>(movieId);
   const [rights, setRights] = useState<RightWithDetails[]>([]);
   const [expiredRights, setExpiredRights] = useState<RightWithDetails[]>([]);
+  const [ownedRights, setOwnedRights] = useState<MovieRight[]>([]);
   const [loading, setLoading] = useState(true);
   const toast = useAppToast();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -219,12 +221,14 @@ export default function MovieDetailPage() {
         } else {
           setLanguageVersions([]);
         }
-        const [rightsData, expiredData] = await Promise.all([
+        const [rightsData, expiredData, ownedData] = await Promise.all([
           getMovieRights(movieId),
           getMovieExpiredRights(movieId),
+          movieData?.source === "acquired" ? getMovieRightsOwned(movieId) : Promise.resolve([] as MovieRight[]),
         ]);
         setRights(rightsData as RightWithDetails[]);
         setExpiredRights(expiredData as RightWithDetails[]);
+        setOwnedRights(ownedData);
       } catch (err) {
         console.error("Error fetching movie data:", err);
         toast.error(err instanceof Error ? err.message : "Failed to load movie");
@@ -585,27 +589,11 @@ export default function MovieDetailPage() {
                 <div className="flex items-center gap-1.5 text-(--text) text-sm"><Globe className="h-3.5 w-3.5 text-(--text-faint)" />{currentVersion.territory || "World"}</div>
               </div>
             </div>
-            <div className="pt-4 border-t border-(--svf-border)">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2.5">Rights Owned</span>
-              <div className="flex flex-wrap gap-2">
-                {["Satellite", "Internet", "Negative", "Other", "Prequel/Sequel", "Character", "Sub-Titling", "Dubbing"].map(r => (
-                  <span key={r} className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/8 border border-emerald-500/20 text-emerald-400">
-                    <CheckCircle2 className="h-3 w-3" />{r}
-                  </span>
-                ))}
-              </div>
-              <p className="text-[10px] text-(--text-faint) mt-2">All rights exclusively owned — Yes by default for home production</p>
-            </div>
             {currentVersion.nature_of_rights?.toLowerCase().includes("jointly") && (
               <div className="pt-4 border-t border-(--svf-border) grid grid-cols-2 gap-8">
                 <InfoRow label="Revenue Share" value={currentVersion.revenue_share} />
                 <InfoRow label="Buy-Back Opening Date" value={formatDate(currentVersion.joint_prod_buy_back_date)} />
                 {currentVersion.jointly_exploitation_rights && <div className="col-span-2"><InfoRow label="Exploitation Rights Held By" value={currentVersion.jointly_exploitation_rights} /></div>}
-              </div>
-            )}
-            {currentVersion.holdbacks && (
-              <div className="pt-4 border-t border-(--svf-border)">
-                <HoldbacksBlock value={currentVersion.holdbacks} />
               </div>
             )}
           </div>
@@ -615,39 +603,22 @@ export default function MovieDetailPage() {
               <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2">Territory</span>
               <div className="flex items-center gap-1.5 text-(--text) text-sm"><Globe className="h-3.5 w-3.5 text-(--text-faint)" />{currentVersion.territory || "World"}</div>
             </div>
-            {(currentVersion.satellite_rights || currentVersion.internet_rights || currentVersion.negative_rights || currentVersion.other_rights) && (
+            {ownedRights.length > 0 && (
               <div className="pt-4 border-t border-(--svf-border)">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-3">Primary Rights</span>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { label: "Satellite", flag: currentVersion.satellite_rights, classification: currentVersion.satellite_rights_classification, nature: currentVersion.nature_of_satellite_rights, start: currentVersion.satellite_rights_start_date, end: currentVersion.satellite_rights_end_date },
-                    { label: "Internet", flag: currentVersion.internet_rights, classification: currentVersion.internet_rights_classification, nature: currentVersion.nature_of_internet_rights, start: currentVersion.internet_rights_start_date, end: currentVersion.internet_rights_end_date },
-                    { label: "Negative", flag: currentVersion.negative_rights, classification: undefined, nature: currentVersion.nature_of_negative_rights, start: currentVersion.negative_rights_start_date, end: currentVersion.negative_rights_end_date },
-                    { label: "Other", flag: currentVersion.other_rights, classification: undefined, nature: currentVersion.nature_of_other_rights, start: currentVersion.other_rights_start_date, end: currentVersion.other_rights_end_date },
-                  ].filter(r => r.flag).map(({ label, flag, classification, nature, start, end }) => (
-                    <div key={label} className="rounded-[12px] border border-(--svf-border) bg-(--bg-raise) p-3 space-y-1.5">
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <span className="text-xs font-bold text-(--text)">{label}</span>
-                        {(() => {
-                          const parsed = parseOtherRights(flag || "");
-                          if (parsed.isYes && parsed.types.length === 0) {
-                            return <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/10 text-emerald-400 border-emerald-500/25">Yes</Badge>;
-                          }
-                          if (parsed.isYes && parsed.types.length > 0) {
-                            return (
-                              <div className="flex flex-wrap gap-1">
-                                {parsed.types.map(s => (
-                                  <span key={s} className="text-[10px] px-1.5 py-0 rounded-full bg-emerald-500/10 text-emerald-400 border-emerald-500/25 font-semibold">{s}</span>
-                                ))}
-                              </div>
-                            );
-                          }
-                          return <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 bg-(--bg-raise) text-(--text-faint) border-(--svf-border)">{flag || "No"}</Badge>;
-                        })()}
+                <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-3">Rights We Own</span>
+                <div className="space-y-2">
+                  {ownedRights.map(r => (
+                    <div key={r.id} className="rounded-[12px] border border-(--svf-border) bg-(--bg-raise) p-3 space-y-1.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-bold text-(--text)">{r.right_type}</span>
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/10 text-emerald-400 border-emerald-500/25">{r.nature}</Badge>
+                        {r.classification && <span className="text-[10px] text-(--text-faint)">{r.classification}</span>}
+                        {r.territory && <span className="text-[10px] text-(--text-faint)">{r.territory}</span>}
                       </div>
-                      {classification && <p className="text-xs text-(--text)">{classification}</p>}
-                      {nature && <p className="text-xs text-(--text-faint) italic">{nature}</p>}
-                      {(start || end) && <p className="text-[10px] text-(--text-faint) font-mono">{formatDate(start)} → {formatDate(end)}</p>}
+                      {(r.start_date || r.end_date) && (
+                        <p className="text-[10px] text-(--text-faint) font-mono">{formatDate(r.start_date)} → {formatDate(r.end_date) || "Perpetual"}</p>
+                      )}
+                      {r.holdbacks && <p className="text-[10px] text-amber-400">Holdbacks: {r.holdbacks}</p>}
                     </div>
                   ))}
                 </div>
@@ -659,13 +630,7 @@ export default function MovieDetailPage() {
                 {currentVersion.clip_rights_duration && <InfoRow label="Clip Duration" value={currentVersion.clip_rights_duration} />}
               </div>
             )}
-            {currentVersion.holdbacks && (
-              <div className="pt-4 border-t border-(--svf-border)">
-                <HoldbacksBlock value={currentVersion.holdbacks} />
-              </div>
-            )}
             {[
-              { label: "Syndication – Internet Rights", value: currentVersion.syndication_internet_rights },
               { label: "Prequel / Sequel Rights", value: currentVersion.prequel_sequel_rights },
               { label: "Character Rights", value: currentVersion.character_rights },
               { label: "Sub-Titling Rights", value: currentVersion.subtitling_rights },
@@ -693,25 +658,6 @@ export default function MovieDetailPage() {
                 {formatDate(currentVersion.agreement_start_date)} <span className="text-(--text-faint) mx-1">→</span> {formatDate(currentVersion.agreement_end_date)}
               </span>
             </div>
-            {(currentVersion.satellite_rights_start_date || currentVersion.satellite_rights_end_date) && (
-              <div className="col-span-2">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-1.5">Satellite Rights Period</span>
-                <span className="text-sm text-(--text) font-mono tracking-tight">
-                  {formatDate(currentVersion.satellite_rights_start_date)} <span className="text-(--text-faint) mx-1">→</span> {formatDate(currentVersion.satellite_rights_end_date)}
-                </span>
-              </div>
-            )}
-            {(currentVersion.internet_rights_start_date || currentVersion.internet_rights_end_date) && (
-              <div className="col-span-2">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-1.5">Internet Rights Period</span>
-                <span className="text-sm text-(--text) font-mono tracking-tight">
-                  {formatDate(currentVersion.internet_rights_start_date)} <span className="text-(--text-faint) mx-1">→</span> {formatDate(currentVersion.internet_rights_end_date)}
-                </span>
-              </div>
-            )}
-            {currentVersion.syndication_internet_rights && (
-              <div className="col-span-2"><InfoRow label="Syndication – Internet Rights" value={currentVersion.syndication_internet_rights} /></div>
-            )}
           </div>
         </div>
       )}

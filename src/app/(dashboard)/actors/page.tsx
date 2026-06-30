@@ -26,8 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getActorsWithMovies, type ActorWithMovies } from "@/lib/api/actors";
-import { createPerson } from "@/lib/api/people";
+import { createPerson, getPeopleWithStats, type PersonWithStats } from "@/lib/api/people";
 import {
   AlertTriangle,
   ArrowUpDown,
@@ -50,7 +49,7 @@ const ACTOR_EXPORT_FIELDS: ExportFieldDef[] = [
 type SortOption = "name_asc" | "name_desc" | "movies_desc" | "movies_asc";
 
 export default function ActorsPage() {
-  const [actors, setActors] = useState<ActorWithMovies[]>([]);
+  const [actors, setActors] = useState<PersonWithStats[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortOption>("name_asc");
@@ -83,33 +82,8 @@ export default function ActorsPage() {
     try {
       setLoading(true);
   
-      const { data, count } = await getActorsWithMovies({
-        limit: 10000,
-      });
-
-      // Map ActorWithMovies to PersonWithStats for PersonCard
-      // ActorWithMovies has movies: any[], movies_count: number
-      // PersonWithStats is Person + role, movies_count, etc.
-      const normalize = (t: string) => t.replace(/\s*\([^)]*\)/g, "").trim();
-      const prosenjit = data.find(a => a.name.includes("Prosenjit"));
-      if (prosenjit) console.log("[ActorsAPI] Prosenjit raw movies array length:", prosenjit.movies.length, "| movies_count:", prosenjit.movies_count);
-      const mappedActors = data.map(actor => {
-        const seen = new Set<string>();
-        const deduped = actor.movies.filter(m => {
-          const key = normalize(m.movie_title);
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
-        return {
-          ...actor,
-          movies: deduped,
-          role: (actor as any).role || 'actor',
-          movies_as_actor: actor.movies_count,
-        };
-      }) as any;
-
-      setActors(mappedActors);
+      const { data, count } = await getPeopleWithStats({ role: "actor", limit: 10000 });
+      setActors(data);
       setTotalCount(count);
     } catch (err) {
       console.error("Error fetching actors:", err);

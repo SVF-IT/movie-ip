@@ -18,43 +18,23 @@ export interface Movie {
   color_or_bw?: string
   trailer_link?: string
   poster_url?: string
+  // Acquisition info
   assignor_licensor?: string
   licensee?: string
   agreement_date?: string
   agreement_start_date?: string
   agreement_end_date?: string
-  satellite_rights_start_date?: string
-  satellite_rights_end_date?: string
-  internet_rights_start_date?: string
-  internet_rights_end_date?: string
-  syndication_internet_rights?: string
-  internet_rights_classification?: string
-  // Primary Rights Yes/No flags
-  satellite_rights?: string
-  internet_rights?: string
-  negative_rights?: string
-  other_rights?: string
-  // Rights sub-classifications (comma-separated)
-  satellite_rights_classification?: string
-  // Clip Rights
+  // Clip rights (standalone — no nature/territory breakdown)
   clip_rights?: string
   clip_rights_duration?: string
-  holdbacks?: string
-  // Nature per right type
-  nature_of_satellite_rights?: string
-  nature_of_internet_rights?: string
-  nature_of_negative_rights?: string
-  nature_of_other_rights?: string
-  // Per-right-type date ranges (negative & other; satellite/internet dates already above)
-  negative_rights_start_date?: string
-  negative_rights_end_date?: string
-  other_rights_start_date?: string
-  other_rights_end_date?: string
+  // Derivative / ancillary rights
   prequel_sequel_rights?: string
   character_rights?: string
   subtitling_rights?: string
   dubbing_rights?: string
+  // Home production rights description (untouched by phase 2 refactor)
   nature_of_rights?: RightNature
+  // Movie-level default territory
   territory?: string
   remarks?: string
   actionables?: string
@@ -146,15 +126,39 @@ export interface RightsNatureType {
   updated_at?: string
 }
 
+export type MovieRightType = 'Satellite' | 'Internet' | 'Negative' | 'Airborne' | 'Ship' | 'Other'
+export type MovieRightNature = 'Exclusive' | 'Non-Exclusive' | 'Shared Exclusive' | string
+
+export interface MovieRight {
+  id: string
+  movie_id: string
+  right_type: MovieRightType | string
+  classification?: string
+  nature: MovieRightNature
+  territory?: string
+  start_date?: string
+  end_date?: string
+  syndication?: string
+  holdbacks?: string
+  created_at?: string
+  updated_at?: string
+  created_by?: string
+  updated_by?: string
+  // joined
+  movie?: Pick<Movie, 'id' | 'title' | 'source'>
+}
+
 export interface PlatformRight {
   id: string
   movie_id: string
   platform_id?: string
+  category?: string
   nature?: RightNature
   start_date?: string
   end_date?: string
   territory?: string
   is_current?: boolean
+  holdbacks?: string
   remarks?: string
   created_at?: string
   updated_at?: string

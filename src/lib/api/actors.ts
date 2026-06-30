@@ -98,7 +98,7 @@ export async function getActorsWithMovies(options?: {
         if (m) actorMovies.push(m);
       }
       actorMovies.sort((a, b) => (parseInt(b.release_year || "0") || 0) - (parseInt(a.release_year || "0") || 0));
-      const uniqueKeys = new Set(actorMovies.map((m) => m.production_no?.trim() || normalizeTitle(m.movie_title)));
+      const uniqueKeys = new Set(actorMovies.map((m) => normalizeTitle(m.movie_title)));
       return { id: person.id, name: person.name, movies: actorMovies, movies_count: uniqueKeys.size };
     });
 
@@ -153,7 +153,7 @@ export async function getActorById(id: string): Promise<ActorWithMovies | null> 
     }));
 
     actorMovies.sort((a, b) => (parseInt(b.release_year || "0") || 0) - (parseInt(a.release_year || "0") || 0));
-    const uniqueKeys = new Set(actorMovies.map((m) => m.production_no?.trim() || normalizeTitle(m.movie_title)));
+    const uniqueKeys = new Set(actorMovies.map((m) => normalizeTitle(m.movie_title)));
     return { id: person.id, name: person.name, movies: actorMovies, movies_count: uniqueKeys.size };
   } catch (error) {
     console.error("Error fetching actor:", error);
