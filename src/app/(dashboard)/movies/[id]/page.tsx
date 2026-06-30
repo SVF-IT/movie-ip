@@ -606,40 +606,98 @@ export default function MovieDetailPage() {
             {ownedRights.length > 0 && (
               <div className="pt-4 border-t border-(--svf-border)">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-3">Rights We Own</span>
-                <div className="space-y-2">
-                  {ownedRights.map(r => (
-                    <div key={r.id} className="rounded-[12px] border border-(--svf-border) bg-(--bg-raise) p-3 space-y-1.5">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-bold text-(--text)">{r.right_type}</span>
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/10 text-emerald-400 border-emerald-500/25">{r.nature}</Badge>
-                        {r.classification && <span className="text-[10px] text-(--text-faint)">{r.classification}</span>}
-                        {r.territory && <span className="text-[10px] text-(--text-faint)">{r.territory}</span>}
+                {/* Group by right_type */}
+                {(() => {
+                  const groups = new Map<string, typeof ownedRights>();
+                  ownedRights.forEach(r => {
+                    if (!groups.has(r.right_type)) groups.set(r.right_type, []);
+                    groups.get(r.right_type)!.push(r);
+                  });
+                  const natureColor = (n: string) => {
+                    const l = n.toLowerCase();
+                    if (l.includes("exclusive") && !l.includes("non") && !l.includes("shared")) return "bg-emerald-500/10 text-emerald-400 border-emerald-500/25";
+                    if (l.includes("shared")) return "bg-blue-500/10 text-blue-400 border-blue-500/25";
+                    return "bg-(--bg-deep) text-(--text-faint) border-(--svf-border)";
+                  };
+                  return Array.from(groups.entries()).map(([type, rows]) => (
+                    <div key={type} className="mb-4 last:mb-0">
+                      {/* Group header */}
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">{type}</span>
+                        <div className="flex-1 h-px bg-(--svf-border)" />
+                        <span className="text-[10px] text-(--text-faint)">{rows.length} right{rows.length > 1 ? "s" : ""}</span>
                       </div>
-                      {(r.start_date || r.end_date) && (
-                        <p className="text-[10px] text-(--text-faint) font-mono">{formatDate(r.start_date)} → {formatDate(r.end_date) || "Perpetual"}</p>
-                      )}
-                      {r.holdbacks && <p className="text-[10px] text-amber-400">Holdbacks: {r.holdbacks}</p>}
+                      <div className="space-y-2 pl-1">
+                        {rows.map(r => (
+                          <div key={r.id} className="rounded-[10px] border border-(--svf-border) bg-(--bg-raise)/60 p-3.5">
+                            {/* Row 1: nature badge + classification */}
+                            <div className="flex items-center gap-2 flex-wrap mb-2">
+                              <Badge variant="outline" className={`text-[10px] font-semibold px-2 py-0.5 ${natureColor(r.nature)}`}>{r.nature}</Badge>
+                              {r.classification && (
+                                <span className="text-[10px] font-medium text-(--text-faint) bg-(--bg-deep) border border-(--svf-border) rounded px-1.5 py-0.5">{r.classification}</span>
+                              )}
+                            </div>
+                            {/* Row 2: Territory + dates in a mini grid */}
+                            <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
+                              {r.territory && (
+                                <div>
+                                  <span className="text-[9px] font-bold uppercase tracking-widest text-(--text-faint) block mb-0.5">Territory</span>
+                                  <div className="flex items-center gap-1 text-xs text-(--text)">
+                                    <Globe className="h-3 w-3 text-(--text-faint) shrink-0" />
+                                    {r.territory}
+                                  </div>
+                                </div>
+                              )}
+                              {(r.start_date || r.end_date) && (
+                                <div>
+                                  <span className="text-[9px] font-bold uppercase tracking-widest text-(--text-faint) block mb-0.5">Period</span>
+                                  <span className="text-xs font-mono text-(--text-faint)">
+                                    {formatDate(r.start_date) || "—"} <span className="opacity-50">→</span> {formatDate(r.end_date) || "Perpetual"}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                            {r.holdbacks && (
+                              <div className="mt-2 pt-2 border-t border-(--svf-border)">
+                                <span className="text-[9px] font-bold uppercase tracking-widest text-amber-500/70 block mb-0.5">Holdbacks</span>
+                                <span className="text-xs text-amber-400">{r.holdbacks}</span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ));
+                })()}
+              </div>
+            )}
+
+            {/* Derivative Rights group */}
+            {(currentVersion.clip_rights || currentVersion.clip_rights_duration ||
+              currentVersion.prequel_sequel_rights || currentVersion.character_rights ||
+              currentVersion.subtitling_rights || currentVersion.dubbing_rights) && (
+              <div className="pt-4 border-t border-(--svf-border)">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Derivative Rights</span>
+                  <div className="flex-1 h-px bg-(--svf-border)" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { label: "Clip Rights", value: currentVersion.clip_rights },
+                    { label: "Clip Duration", value: currentVersion.clip_rights_duration },
+                    { label: "Prequel / Sequel", value: currentVersion.prequel_sequel_rights },
+                    { label: "Character Rights", value: currentVersion.character_rights },
+                    { label: "Sub-Titling", value: currentVersion.subtitling_rights },
+                    { label: "Dubbing Rights", value: currentVersion.dubbing_rights },
+                  ].filter(f => f.value).map(({ label, value }) => (
+                    <div key={label} className="rounded-[10px] border border-(--svf-border) bg-(--bg-raise)/60 px-3.5 py-2.5">
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-(--text-faint) block mb-1">{label}</span>
+                      <span className="text-sm text-(--text) font-medium">{value}</span>
                     </div>
                   ))}
                 </div>
               </div>
             )}
-            {(currentVersion.clip_rights || currentVersion.clip_rights_duration) && (
-              <div className="pt-4 border-t border-(--svf-border) grid grid-cols-2 gap-8">
-                {currentVersion.clip_rights && <InfoRow label="Clip Rights" value={currentVersion.clip_rights} />}
-                {currentVersion.clip_rights_duration && <InfoRow label="Clip Duration" value={currentVersion.clip_rights_duration} />}
-              </div>
-            )}
-            {[
-              { label: "Prequel / Sequel Rights", value: currentVersion.prequel_sequel_rights },
-              { label: "Character Rights", value: currentVersion.character_rights },
-              { label: "Sub-Titling Rights", value: currentVersion.subtitling_rights },
-              { label: "Dubbing Rights", value: currentVersion.dubbing_rights },
-            ].filter(f => f.value).map(({ label, value }) => (
-              <div key={label} className="pt-4 border-t border-(--svf-border)">
-                <InfoRow label={label} value={value ?? undefined} />
-              </div>
-            ))}
           </div>
         )}
       </div>
@@ -663,24 +721,34 @@ export default function MovieDetailPage() {
       )}
 
       {/* ── Notes (only when data exists) ── */}
-      {(currentVersion.wtp_library || currentVersion.remarks || currentVersion.actionables) && (
+      {(currentVersion.wtp_library || currentVersion.remarks || currentVersion.actionables || movie.is_bangladeshi != null) && (
         <div className="bg-(--panel-solid) border border-(--svf-border) rounded-[12px] p-6">
           <SectionTitle icon={Info} title="Notes & Additional Information" accent />
           <div className="space-y-5">
-            {currentVersion.wtp_library && (
+            {movie.is_bangladeshi != null && (
               <div>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2">Bangladeshi Film</span>
+                <Badge variant="outline" className={movie.is_bangladeshi
+                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25 text-xs font-semibold"
+                  : "bg-(--bg-raise) text-(--text-faint) border-(--svf-border) text-xs font-semibold"}>
+                  {movie.is_bangladeshi ? "Yes" : "No"}
+                </Badge>
+              </div>
+            )}
+            {currentVersion.wtp_library && (
+              <div className={movie.is_bangladeshi != null ? "pt-4 border-t border-(--svf-border)" : ""}>
                 <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2">WTP / Library</span>
                 <p className="text-sm text-(--text) bg-(--bg-raise) border border-(--svf-border) px-4 py-3 rounded-[12px]">{currentVersion.wtp_library}</p>
               </div>
             )}
             {currentVersion.remarks && (
-              <div className={currentVersion.wtp_library ? "pt-4 border-t border-(--svf-border)" : ""}>
+              <div className={(movie.is_bangladeshi != null || currentVersion.wtp_library) ? "pt-4 border-t border-(--svf-border)" : ""}>
                 <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2">Remarks</span>
                 <p className="text-sm text-(--text) bg-(--bg-raise) border border-(--svf-border) px-4 py-3 rounded-[12px] leading-relaxed">{currentVersion.remarks}</p>
               </div>
             )}
             {currentVersion.actionables && (
-              <div className={(currentVersion.wtp_library || currentVersion.remarks) ? "pt-4 border-t border-(--svf-border)" : ""}>
+              <div className={(movie.is_bangladeshi != null || currentVersion.wtp_library || currentVersion.remarks) ? "pt-4 border-t border-(--svf-border)" : ""}>
                 <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2">Actionables</span>
                 <p className="text-sm text-(--text) bg-amber-500/5 border border-amber-500/20 px-4 py-3 rounded-[12px] leading-relaxed">{currentVersion.actionables}</p>
               </div>
