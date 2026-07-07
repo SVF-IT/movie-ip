@@ -6,7 +6,6 @@ export type ApprovalStatus = 'pending' | 'approved' | 'rejected'
 
 export interface Movie {
   id: string
-  code?: string
   title: string
   production_no?: string
   source: MovieSource
@@ -17,7 +16,6 @@ export interface Movie {
   production_house_name?: string
   color_or_bw?: string
   trailer_link?: string
-  poster_url?: string
   // Acquisition info
   assignor_licensor?: string
   licensee?: string
@@ -32,10 +30,8 @@ export interface Movie {
   character_rights?: string
   subtitling_rights?: string
   dubbing_rights?: string
-  // Home production rights description (untouched by phase 2 refactor)
-  nature_of_rights?: RightNature
-  // Movie-level default territory
-  territory?: string
+  // Home production joint ownership
+  jointly_owned?: boolean
   remarks?: string
   actionables?: string
   wtp_library?: string
@@ -75,13 +71,11 @@ export interface GroupedMovie {
   title: string // Base title without language suffix
   source: MovieSource
   release_year?: string
-  poster_url?: string
   trailer_link?: string
   production_house_name?: string
   cast_names?: string
   director_names?: string
   certification?: CertificationType
-  nature_of_rights?: RightNature
   versions: MovieLanguageVersion[] // All language versions
   primary_version?: MovieLanguageVersion // The primary/original version
   total_versions: number

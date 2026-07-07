@@ -6,21 +6,21 @@ import Papa from 'papaparse'
 
 const HOME_COLUMNS: Record<string, string> = {
   production_no: 'Production No',
-  title: 'Title',
-  cast_names: 'Cast',
+  title: 'Movie Name',
+  cast_names: 'Cast Details',
   director_names: 'Director',
-  language: 'Language',
   production_house_name: 'Production House',
-  release_date: 'Theatrical Release Date',
+  language: 'Language',
   release_year: 'Release Year',
   trailer_link: 'YT Trailer Link',
-  certification: 'Censor',
-  nature_of_rights: 'Nature of Right',
-  remarks: 'Remarks',
-  actionables: 'Actionable',
-  jointly_exploitation_rights: 'Joint Exploitation Rights',
+  certification: 'Certification',
+  color_or_bw: 'Color/B/W',
+  jointly_owned: 'Jointly Owned',
+  jointly_exploitation_rights: 'Jointly Owned by',
   revenue_share: 'Revenue Share',
-  joint_prod_buy_back_date: 'Joint Buy Back Date',
+  joint_prod_buy_back_date: 'Joint Buy Back date',
+  remarks: 'Remarks',
+  actionables: 'Actionables',
   wtp_library: 'WTP / Library',
 }
 
@@ -35,7 +35,6 @@ const ACQUIRED_COLUMNS: Record<string, string> = {
   release_date: 'Release Date',
   release_year: 'Release Year',
   certification: 'Certification',
-  territory: 'Territory',
   assignor_licensor: 'Assignor / Licensor',
   licensee: 'Licensee',
   agreement_date: 'Agreement Date',
@@ -127,7 +126,8 @@ export async function GET(request: Request) {
       const moviesFlat = (movies || []).map((m: Record<string, unknown>) => {
         const row: Record<string, unknown> = {}
         for (const key of fieldKeys) {
-          row[columnDef[key]] = m[key] ?? ''
+          const val = m[key]
+          row[columnDef[key]] = typeof val === 'boolean' ? (val ? 'Yes' : 'No') : (val ?? '')
         }
 
         if (isAcquiredExport) {

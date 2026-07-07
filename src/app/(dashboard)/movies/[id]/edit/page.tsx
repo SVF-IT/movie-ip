@@ -49,7 +49,6 @@ import type {
   MovieWithDetails,
   Person,
   ProductionHouse,
-  RightNature,
 } from "@/lib/types/database";
 import { AlertTriangle, ArrowLeft, CheckCircle, Clock, Film, GitPullRequest, Loader2, Plus, RotateCcw, Search, X, XCircle } from "lucide-react";
 import Link from "next/link";
@@ -58,11 +57,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const CERTIFICATIONS = ["U", "UA", "U/A", "UA 7+", "UA 13+", "UA 16+", "A", "S", "V/U", "V/UA", "UNCENSORED", "TBD"];
 
-const HOME_NATURE_OPTIONS = [
-  { value: "Exclusive", label: "Exclusively Owned" },
-  { value: "Jointly Owned", label: "Jointly Owned" },
-  { value: "Sold/Expired", label: "Sold / Expired" },
-];
 
 
 const inputCls = "bg-(--bg-raise) border-(--svf-border) text-(--text) placeholder:text-(--text-faint) focus-visible:border-(--svf-border-strong) focus-visible:ring-0 h-10";
@@ -275,8 +269,7 @@ export default function EditMoviePage() {
   const [subtitlingLang, setSubtitlingLang] = useState("");
   const [dubbingRights, setDubbingRights] = useState("");
   const [dubbingLang, setDubbingLang] = useState("");
-  const [natureOfRights, setNatureOfRights] = useState("");
-  const [territory, setTerritory] = useState("");
+  const [jointlyOwned, setJointlyOwned] = useState(false);
   const [remarks, setRemarks] = useState("");
   const [actionables, setActionables] = useState("");
   const [jointProdBuyBackDate, setJointProdBuyBackDate] = useState("");
@@ -364,8 +357,7 @@ export default function EditMoviePage() {
         } else if (dubRaw.includes(":")) {
           setDubbingRights("Yes"); setDubbingLang(dubRaw.split(":").slice(1).join(":").trim());
         } else { setDubbingRights(dubRaw); setDubbingLang(""); }
-        setNatureOfRights(movie.nature_of_rights || "");
-        setTerritory(movie.territory || "");
+        setJointlyOwned(movie.jointly_owned ?? (!!movie.jointly_exploitation_rights));
         setRemarks(movie.remarks || "");
         setActionables(movie.actionables || "");
         setWtpLibrary(movie.wtp_library || "");
@@ -403,8 +395,7 @@ export default function EditMoviePage() {
           character_rights: movie.character_rights || "",
           subtitling_rights: movie.subtitling_rights || "",
           dubbing_rights: movie.dubbing_rights || "",
-          nature_of_rights: movie.nature_of_rights || "",
-          territory: movie.territory || "",
+          jointly_owned: movie.jointly_owned ?? (!!movie.jointly_exploitation_rights),
           remarks: movie.remarks || "",
           actionables: movie.actionables || "",
           wtp_library: movie.wtp_library || "",
@@ -523,7 +514,7 @@ export default function EditMoviePage() {
   };
 
   const isHomeProd = source === "home_production";
-  const isJointlyOwned = natureOfRights === "Jointly Owned";
+  const isJointlyOwned = jointlyOwned;
 
   const handleSave = async () => {
     if (!title.trim()) { toast.error("Title is required"); return; }
@@ -558,10 +549,9 @@ export default function EditMoviePage() {
         agreement_end_date: agreementEndDate || "",
         prequel_sequel_rights: prequelSequelRights || "",
         character_rights: characterRights || "",
-        subtitling_rights: subtitlingLang ? `${subtitlingRights}(${subtitlingLang})` : subtitlingRights || "",
-        dubbing_rights: dubbingLang ? `${dubbingRights}(${dubbingLang})` : dubbingRights || "",
-        nature_of_rights: source === "acquired" ? "" : (natureOfRights || ""),
-        territory: territory || "",
+        subtitling_rights: isHomeProd ? "Yes" : (subtitlingLang ? `${subtitlingRights}(${subtitlingLang})` : subtitlingRights || ""),
+        dubbing_rights: isHomeProd ? "Yes" : (dubbingLang ? `${dubbingRights}(${dubbingLang})` : dubbingRights || ""),
+        jointly_owned: isHomeProd ? jointlyOwned : false,
         remarks: remarks || "",
         actionables: actionables || "",
         wtp_library: wtpLibrary || "",
@@ -600,19 +590,20 @@ export default function EditMoviePage() {
         assignor_licensor: assignorLicensor || undefined,
         licensee: licensee || undefined, agreement_date: agreementDate || undefined,
         agreement_start_date: agreementStartDate || undefined, agreement_end_date: agreementEndDate || undefined,
-        prequel_sequel_rights: prequelSequelRights || undefined, character_rights: characterRights || undefined,
-        subtitling_rights: (subtitlingLang ? `${subtitlingRights}(${subtitlingLang})` : subtitlingRights) || undefined,
-        dubbing_rights: (dubbingLang ? `${dubbingRights}(${dubbingLang})` : dubbingRights) || undefined,
-        nature_of_rights: isHomeProd ? (natureOfRights as RightNature) || undefined : undefined,
-        territory: territory || undefined, remarks: remarks || undefined,
+        prequel_sequel_rights: isHomeProd ? "Yes" : prequelSequelRights || undefined,
+        character_rights: isHomeProd ? "Yes" : characterRights || undefined,
+        subtitling_rights: isHomeProd ? "Yes" : (subtitlingLang ? `${subtitlingRights}(${subtitlingLang})` : subtitlingRights) || undefined,
+        dubbing_rights: isHomeProd ? "Yes" : (dubbingLang ? `${dubbingRights}(${dubbingLang})` : dubbingRights) || undefined,
+        clip_rights: isHomeProd ? "Yes" : clipRights || undefined,
+        remarks: remarks || undefined,
         actionables: actionables || undefined,
         wtp_library: wtpLibrary || undefined,
-        revenue_share: isJointlyOwned ? revenueShare : undefined,
-        joint_prod_buy_back_date: isJointlyOwned ? jointProdBuyBackDate : undefined,
-        jointly_exploitation_rights: isJointlyOwned ? jointlyExploitationRights : undefined,
+        jointly_owned: isHomeProd ? jointlyOwned : undefined,
+        revenue_share: isHomeProd && isJointlyOwned ? revenueShare : undefined,
+        joint_prod_buy_back_date: isHomeProd && isJointlyOwned ? jointProdBuyBackDate : undefined,
+        jointly_exploitation_rights: isHomeProd && isJointlyOwned ? jointlyExploitationRights : undefined,
         recensor_flag: recensorFlag,
-        clip_rights: clipRights || undefined,
-        clip_rights_duration: clipRightsDuration || undefined,
+        clip_rights_duration: isHomeProd ? undefined : clipRightsDuration || undefined,
       };
       await updateMovie(movieId, movieData);
       if (source === "acquired") {
@@ -771,7 +762,7 @@ export default function EditMoviePage() {
                         const sel = source === opt.value;
                         return (
                           <button key={opt.value} type="button"
-                            onClick={() => { setSource(opt.value as MovieSource); if (opt.value === 'home_production' && natureOfRights === 'Non-Exclusive') setNatureOfRights(''); }}
+                            onClick={() => { setSource(opt.value as MovieSource); if (opt.value === 'acquired') setJointlyOwned(false); }}
                             className={["text-left p-4 rounded-[10px] border-[1.5px] transition-all duration-150 cursor-pointer",
                               sel ? "border-amber-500/70 bg-amber-500/10 shadow-[0_0_0_1px] shadow-amber-500/30"
                                 : "border-(--svf-border) bg-(--bg-raise) hover:border-amber-500/30 hover:bg-amber-500/5",
@@ -785,38 +776,23 @@ export default function EditMoviePage() {
                   </FormField>
                 </div>
 
-                {/* Nature of Rights — pill options */}
+                {/* Jointly Owned toggle — only for home production */}
                 {isHomeProd && (
                   <div className="md:col-span-2">
-                    <FormField label="Nature of Rights">
-                      <div className="flex flex-wrap gap-2 mt-1">
-                        {HOME_NATURE_OPTIONS.map((opt) => {
-                          const sel = natureOfRights === opt.value;
-                          return (
-                            <button key={opt.value} type="button"
-                              onClick={() => {
-                                const newVal = sel ? "" : opt.value;
-                                setNatureOfRights(newVal);
-                                const jointly = newVal === "Jointly Owned";
-                                const svfId = productionHouses.find(h => h.name.toLowerCase() === 'svf')?.id ?? null;
-                                if (jointly && svfId) {
-                                  setSelectedHouseIds(ids => {
-                                    const rest = ids.filter(id => id !== svfId && id !== "");
-                                    return [svfId, ...rest];
-                                  });
-                                } else if (!jointly) {
-                                  setSelectedHouseIds(ids => [ids[0] === svfId ? "" : (ids[0] || "")]);
-                                }
-                              }}
-                              className={["px-4 py-2 rounded-full border text-[12.5px] font-semibold transition-all duration-120 select-none",
-                                sel ? "bg-amber-500/12 border-amber-500/60 text-amber-700 dark:text-amber-400"
-                                  : "bg-(--bg-raise) border-(--svf-border) text-(--text-faint) hover:text-(--text)",
-                              ].join(" ")}>
-                              {opt.label}
-                            </button>
-                          );
-                        })}
-                      </div>
+                    <FormField label="Jointly Owned">
+                      <TogglePill value={jointlyOwned ? "Yes" : "No"} onChange={v => {
+                        const isJoint = v === "Yes";
+                        setJointlyOwned(isJoint);
+                        const svfId = productionHouses.find(h => h.name.toLowerCase() === 'svf')?.id ?? null;
+                        if (isJoint && svfId) {
+                          setSelectedHouseIds(ids => {
+                            const rest = ids.filter(id => id !== svfId && id !== "");
+                            return [svfId, ...rest];
+                          });
+                        } else if (!isJoint) {
+                          setSelectedHouseIds(ids => [ids[0] === svfId ? "" : (ids[0] || "")]);
+                        }
+                      }} />
                     </FormField>
                   </div>
                 )}
@@ -919,6 +895,18 @@ export default function EditMoviePage() {
 
               </div>
             </SectionCard>
+
+            {/* Subtitling/Dubbing — shown for home production on the basic tab (rights tab is disabled for home) */}
+            {isHomeProd && (
+              <SectionCard title="Derivative Rights">
+                <div>
+                  <InlineRightsRow label="Sub-Titling Rights" value={subtitlingRights} onChange={(v) => { setSubtitlingRights(v); if (v !== "Yes" && v !== "No") setSubtitlingLang(""); }}
+                    langValue={subtitlingLang} onLangChange={setSubtitlingLang} />
+                  <InlineRightsRow label="Dubbing Rights" value={dubbingRights} onChange={(v) => { setDubbingRights(v); if (v !== "Yes" && v !== "No") setDubbingLang(""); }}
+                    langValue={dubbingLang} onLangChange={setDubbingLang} />
+                </div>
+              </SectionCard>
+            )}
           </div>}
 
           {activeTab === "acquired" && <div className="space-y-4">

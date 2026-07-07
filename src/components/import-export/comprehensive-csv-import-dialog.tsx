@@ -54,17 +54,18 @@ type Step = "select" | "conflicts" | "importing" | "done";
 
 // Exact expected headers per format (label, whether required, how it's matched)
 const HOME_COLUMNS: { label: string; required: boolean; match: (h: string) => boolean }[] = [
-  { label: "Title",                    required: true,  match: (h) => h === "title" },
+  { label: "Movie Name / Title",       required: true,  match: (h) => h === "movie name" || h === "title" },
   { label: "Production No",            required: false, match: (h) => h.includes("production no") },
-  { label: "Cast",                     required: false, match: (h) => h.includes("cast") },
-  { label: "Directors",                required: false, match: (h) => h.includes("director") },
-  { label: "Language",                 required: false, match: (h) => h.includes("language") },
+  { label: "Cast Details",             required: false, match: (h) => h.includes("cast") },
+  { label: "Director",                 required: false, match: (h) => h.includes("director") },
   { label: "Production House",         required: false, match: (h) => h.includes("production house") },
-  { label: "Theatrical Release Date",  required: false, match: (h) => h.includes("theatrical release date") },
-  { label: "Censor",                   required: false, match: (h) => h === "censor" },
-  { label: "Nature of Right",          required: false, match: (h) => h.includes("nature of right") },
-  { label: "Holdback / Holdbacks",     required: false, match: (h) => h.includes("holdback") },
-  { label: "YT Trailer Link",          required: false, match: (h) => h.includes("yt trailer") || h.includes("youtube") },
+  { label: "Language",                 required: false, match: (h) => h.includes("language") },
+  { label: "Release Year",             required: false, match: (h) => h.includes("release year") || h.includes("theatrical release") },
+  { label: "YT Trailer Link",          required: false, match: (h) => h.includes("yt trailer") || h.includes("trailer link") },
+  { label: "Certification / Censor",   required: false, match: (h) => h === "censor" || h.includes("certif") },
+  { label: "Color/B/W",                required: false, match: (h) => h.includes("color") || h.includes("colour") },
+  { label: "Jointly Owned",            required: false, match: (h) => h.includes("jointly owned") },
+  { label: "Revenue Share",            required: false, match: (h) => h.includes("revenue share") },
   { label: "Remarks",                  required: false, match: (h) => h.includes("remarks") },
   { label: "Actionable",               required: false, match: (h) => h.includes("actionable") },
 ];
@@ -80,7 +81,6 @@ const ACQUIRED_COLUMNS: { label: string; required: boolean; match: (h: string) =
   { label: "Movie Name",                      required: true,  match: (h) => h === "movie name" || h === "movie title" || h === "title" },
   { label: "Assignor / Licensor",             required: false, match: (h) => h.includes("assignor") || h.includes("licensor") },
   { label: "Licensee",                        required: false, match: (h) => h.includes("licensee") },
-  { label: "Date of Agreement",               required: false, match: (h) => h.includes("date of agreement") || h.includes("agreement date") },
   // ── Primary Rights (sub-row cells) ─────────────────────────────────────────
   { label: "Satellite Rights",                required: false, match: (h) => h === "satellite rights" },
   { label: "Internet Rights",                 required: false, match: (h) => h === "internet rights" },
@@ -131,10 +131,14 @@ const FORMAT_MATCH_THRESHOLD = 0.35;
 
 function detectFormatFromHeaders(headers: string[]): "home" | "acquired" | "unknown" {
   const lower = headers.map((h) => h.toLowerCase().trim());
-  if (lower.includes("title")) return "home";
-  if (lower.includes("movie name")) return "acquired";
-  if (lower.some((h) => h.includes("production no"))) return "home";
+  // Home format uniquely has "jointly owned" column
+  if (lower.some((h) => h.includes("jointly owned"))) return "home";
+  // Acquired format uniquely has assignor/licensor
   if (lower.some((h) => h.includes("assignor") || h.includes("licensor"))) return "acquired";
+  // Legacy home had "Title"; new home uses "Movie Name" but without assignor
+  if (lower.includes("title")) return "home";
+  if (lower.some((h) => h.includes("production no"))) return "home";
+  if (lower.includes("movie name")) return "acquired";
   return "unknown";
 }
 
@@ -391,7 +395,7 @@ export function ComprehensiveCSVImportDialog({
 
   const previewColumns =
     detectedFormat === "home"
-      ? ["Title", "Cast ", "Directors", "Language", "Production House", "Censor"]
+      ? ["Movie Name", "Cast Details", "Director", "Language", "Production House", "Certification"]
       : detectedFormat === "acquired"
         ? ["Movie Name", "Cast Details", "Director", "Release Year", "Nature of Rights", "Territory"]
         : columns.slice(0, 6);

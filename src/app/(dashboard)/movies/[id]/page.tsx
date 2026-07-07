@@ -550,7 +550,6 @@ export default function MovieDetailPage() {
           </div>
           <InfoRow label="Color / B&W" value={currentVersion.color_or_bw} />
           {movie.source !== "acquired" && <InfoRow label="Production House" value={currentVersion.production_house_name} />}
-          {currentVersion.territory && <InfoRow label="Territory" value={currentVersion.territory} />}
         </div>
       </div>
 
@@ -574,35 +573,33 @@ export default function MovieDetailPage() {
         <SectionTitle icon={ShieldCheck} title="Rights Information" accent />
         {movie.source === "home_production" ? (
           <div className="space-y-5">
-            <div className="grid grid-cols-2 gap-8">
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2">Nature of Rights</span>
-                {currentVersion.nature_of_rights
-                  ? <Badge variant="outline" className={cn("text-xs font-semibold px-2 py-0.5",
-                    currentVersion.nature_of_rights.toLowerCase().includes("exclusive") ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
-                      : currentVersion.nature_of_rights.toLowerCase().includes("jointly") ? "bg-amber-500/10 text-amber-400 border-amber-500/25"
-                        : "bg-(--bg-raise) text-(--text) border-(--svf-border)")}>{currentVersion.nature_of_rights}</Badge>
-                  : <span className="text-(--text-faint) text-sm">—</span>}
-              </div>
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2">Territory</span>
-                <div className="flex items-center gap-1.5 text-(--text) text-sm"><Globe className="h-3.5 w-3.5 text-(--text-faint)" />{currentVersion.territory || "World"}</div>
+            {/* Static read-only Rights Owned section — all rights owned by default for home production */}
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-3">Rights Owned</span>
+              <div className="flex flex-wrap gap-2">
+                {["Satellite", "Internet", "Negative", "Airborne", "Ship", "Other", "Clip", "Derivative", "Ancillary"].map(right => (
+                  <Badge key={right} variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/25 text-xs font-semibold px-2 py-0.5">
+                    {right}
+                  </Badge>
+                ))}
               </div>
             </div>
-            {currentVersion.nature_of_rights?.toLowerCase().includes("jointly") && (
-              <div className="pt-4 border-t border-(--svf-border) grid grid-cols-2 gap-8">
-                <InfoRow label="Revenue Share" value={currentVersion.revenue_share} />
-                <InfoRow label="Buy-Back Opening Date" value={formatDate(currentVersion.joint_prod_buy_back_date)} />
-                {currentVersion.jointly_exploitation_rights && <div className="col-span-2"><InfoRow label="Exploitation Rights Held By" value={currentVersion.jointly_exploitation_rights} /></div>}
+            {/* Jointly Owned info */}
+            {(currentVersion.jointly_owned || currentVersion.jointly_exploitation_rights) && (
+              <div className="pt-4 border-t border-(--svf-border)">
+                <div className="flex items-center gap-2 mb-3">
+                  <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/25 text-xs font-semibold">Jointly Owned</Badge>
+                </div>
+                <div className="grid grid-cols-2 gap-8">
+                  <InfoRow label="Revenue Share" value={currentVersion.revenue_share} />
+                  <InfoRow label="Buy-Back Opening Date" value={formatDate(currentVersion.joint_prod_buy_back_date)} />
+                  {currentVersion.jointly_exploitation_rights && <div className="col-span-2"><InfoRow label="Exploitation Rights Held By" value={currentVersion.jointly_exploitation_rights} /></div>}
+                </div>
               </div>
             )}
           </div>
         ) : (
           <div className="space-y-5">
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2">Territory</span>
-              <div className="flex items-center gap-1.5 text-(--text) text-sm"><Globe className="h-3.5 w-3.5 text-(--text-faint)" />{currentVersion.territory || "World"}</div>
-            </div>
             {ownedRights.length > 0 && (
               <div className="pt-4 border-t border-(--svf-border)">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-3">Rights We Own</span>

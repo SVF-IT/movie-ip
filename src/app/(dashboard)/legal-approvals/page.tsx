@@ -234,13 +234,19 @@ function MovieCard({ movie, onApprove, onReject, isLegalOrAdmin }: MovieCardProp
           <MovieDetailRow label="Release Year" value={movie.release_year} />
           <MovieDetailRow label="Certification" value={movie.certification} />
           <MovieDetailRow label="Production House" value={movie.production_house_name} />
-          <MovieDetailRow label="Nature of Rights" value={movie.nature_of_rights} />
-          <MovieDetailRow label="Territory" value={movie.territory} />
-          {movie.nature_of_rights?.toLowerCase().includes("jointly") && (
+          {movie.source === 'acquired' && (
+            <></>
+          )}
+          {movie.source === 'home_production' && (
             <>
-              <MovieDetailRow label="Revenue Share" value={movie.revenue_share} />
-              <MovieDetailRow label="Buy-Back Date" value={movie.joint_prod_buy_back_date} />
-              <MovieDetailRow label="Exploitation Rights Held By" value={movie.jointly_exploitation_rights} />
+              <MovieDetailRow label="Jointly Owned" value={movie.jointly_owned ? 'Yes' : 'No'} />
+              {movie.jointly_owned && (
+                <>
+                  <MovieDetailRow label="Jointly Owned By" value={movie.jointly_exploitation_rights} />
+                  <MovieDetailRow label="Revenue Share" value={movie.revenue_share} />
+                  <MovieDetailRow label="Buy-Back Date" value={movie.joint_prod_buy_back_date} />
+                </>
+              )}
             </>
           )}
         </div>

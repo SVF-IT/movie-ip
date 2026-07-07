@@ -25,7 +25,6 @@ import type {
   MovieWithDetails,
   Person,
   ProductionHouse,
-  RightNature,
 } from "@/lib/types/database";
 import {
   ArrowLeft,
@@ -47,12 +46,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const CERTIFICATIONS = ["U", "UA", "U/A", "UA 7+", "UA 13+", "UA 16+", "A", "S", "V/U", "V/UA", "UNCENSORED", "TBD"];
 
-// Nature of rights only applies to home production
-const HOME_NATURE_OPTIONS = [
-  { value: "Exclusively Owned", label: "Exclusively Owned" },
-  { value: "Jointly Owned",     label: "Jointly Owned" },
-  { value: "Sold/Expired",      label: "Sold / Expired" },
-];
 
 
 // ── Shared style strings ─────────────────────────────────────────────────────
@@ -318,11 +311,8 @@ export default function NewMoviePage() {
   const [subtitlingLang, setSubtitlingLang] = useState("");
   const [dubbingRights, setDubbingRights] = useState("Yes");
   const [dubbingLang, setDubbingLang] = useState("");
-  // For home production only; null/empty for acquired
-  const [natureOfRights, setNatureOfRights] = useState("Exclusively Owned");
-  const [territory, setTerritory] = useState("World");
-  const [territoryCustom, setTerritoryCustom] = useState("");
-  const [showTerritoryCustom, setShowTerritoryCustom] = useState(false);
+  // Home production: jointly owned toggle (replaces nature_of_rights)
+  const [jointlyOwned, setJointlyOwned] = useState(false);
   // Clip rights (standalone — no nature/territory breakdown)
   const [clipRights, setClipRights] = useState("");
   const [clipRightsDuration, setClipRightsDuration] = useState("");
@@ -400,10 +390,7 @@ export default function NewMoviePage() {
         ? selectedHouses.map(h => h.name).join(", ")
         : undefined;
 
-      const isJointly = natureOfRights.toLowerCase().includes("jointly");
-      // For acquired, nature_of_rights is null
-      const finalNatureOfRights = source === "acquired" ? undefined : (natureOfRights as RightNature) || undefined;
-      const finalTerritory = showTerritoryCustom ? territoryCustom : territory;
+      const isHomeProdSave = source === "home_production";
 
       const movieData: Partial<MovieWithDetails> = {
         title: title.trim(),
@@ -422,20 +409,21 @@ export default function NewMoviePage() {
         agreement_date: agreementDate || undefined,
         agreement_start_date: agreementStartDate || undefined,
         agreement_end_date: agreementEndDate || undefined,
-        prequel_sequel_rights: prequelSequelRights || undefined,
-        character_rights: characterRights || undefined,
-        subtitling_rights: (subtitlingLang ? `${subtitlingRights}(${subtitlingLang})` : subtitlingRights) || undefined,
-        dubbing_rights: (dubbingLang ? `${dubbingRights}(${dubbingLang})` : dubbingRights) || undefined,
-        nature_of_rights: finalNatureOfRights,
-        territory: finalTerritory || undefined,
+        // Home production: auto-set derivative rights; acquired: use form values
+        prequel_sequel_rights: isHomeProdSave ? "Yes" : prequelSequelRights || undefined,
+        character_rights: isHomeProdSave ? "Yes" : characterRights || undefined,
+        subtitling_rights: isHomeProdSave ? "Yes" : (subtitlingLang ? `${subtitlingRights}(${subtitlingLang})` : subtitlingRights) || undefined,
+        dubbing_rights: isHomeProdSave ? "Yes" : (dubbingLang ? `${dubbingRights}(${dubbingLang})` : dubbingRights) || undefined,
+        clip_rights: isHomeProdSave ? "Yes" : clipRights || undefined,
+        clip_rights_duration: isHomeProdSave ? undefined : clipRightsDuration || undefined,
         remarks: remarks || undefined,
         actionables: actionables || undefined,
         wtp_library: wtpLibrary || undefined,
-        revenue_share: isJointly ? revenueShare : undefined,
-        joint_prod_buy_back_date: isJointly ? jointProdBuyBackDate : undefined,
-        jointly_exploitation_rights: isJointly ? jointlyExploitationRights : undefined,
-        clip_rights: clipRights || undefined,
-        clip_rights_duration: clipRightsDuration || undefined,
+        // Home production joint ownership
+        jointly_owned: isHomeProdSave ? jointlyOwned : undefined,
+        revenue_share: isHomeProdSave && jointlyOwned ? revenueShare : undefined,
+        joint_prod_buy_back_date: isHomeProdSave && jointlyOwned ? jointProdBuyBackDate : undefined,
+        jointly_exploitation_rights: isHomeProdSave && jointlyOwned ? jointlyExploitationRights : undefined,
       };
       const createdMovie = await createMovie(movieData);
 
@@ -471,7 +459,6 @@ export default function NewMoviePage() {
     );
   }
 
-  const isJointly = natureOfRights.toLowerCase().includes("jointly");
   const isHomeProd = source === "home_production";
   const svfId = productionHouses.find(h => h.name.toLowerCase() === "svf")?.id ?? null;
   const currentStepIndex = STEPS.findIndex(s => s.id === activeTab);
@@ -550,12 +537,11 @@ export default function NewMoviePage() {
                         setSource(opt.value as MovieSource);
                         if (opt.value === "home_production") {
                           setWtpLibrary("WTP");
-                          setTerritory("World");
-                          setNatureOfRights("Exclusively Owned");
+                          setJointlyOwned(false);
                           setRightsOwned([]);
                         } else {
                           setWtpLibrary("");
-                          setNatureOfRights(""); // null for acquired
+                          setJointlyOwned(false);
                           setRightsOwned([newDraftRight("", "Satellite")]);
                         }
                       }}
@@ -643,69 +629,36 @@ export default function NewMoviePage() {
                   placeholder="YouTube URL" className={inputCls} />
               </FormField>
 
-              {/* Territory — always in basic info; default World for home */}
-              <FormField label="Territory">
-                <Select value={showTerritoryCustom ? "Custom" : territory}
-                  onValueChange={v => { setShowTerritoryCustom(v === "Custom"); if (v !== "Custom") setTerritory(v); }}>
-                  <SelectTrigger className={selectTriggerCls}><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="World">World</SelectItem>
-                    <SelectItem value="India">India</SelectItem>
-                    <SelectItem value="South Asia">South Asia</SelectItem>
-                    <SelectItem value="Custom">Custom…</SelectItem>
-                  </SelectContent>
-                </Select>
-                {showTerritoryCustom && (
-                  <Input value={territoryCustom} onChange={e => setTerritoryCustom(e.target.value)}
-                    placeholder="Enter territory…" className={`${inputCls} mt-2`} />
-                )}
-              </FormField>
-
-              {/* Nature of Rights — ONLY for home production */}
+              {/* Jointly Owned — ONLY for home production */}
               {isHomeProd && (
                 <div className="md:col-span-2">
-                  <FormField label="Nature of Rights">
-                    <div className="flex flex-wrap gap-2 mt-0.5">
-                      {HOME_NATURE_OPTIONS.map(opt => {
-                        const sel = natureOfRights === opt.value;
-                        return (
-                          <button key={opt.value} type="button"
-                            onClick={() => {
-                              const newVal = sel ? "Exclusively Owned" : opt.value; // can't deselect entirely for home
-                              setNatureOfRights(newVal);
-                              const isJoint = newVal.toLowerCase().includes("jointly");
-                              if (isJoint && svfId) {
-                                setSelectedHouseIds(ids => {
-                                  const rest = ids.filter(id => id !== svfId && id !== "");
-                                  return [svfId, ...rest];
-                                });
-                              } else if (!isJoint) {
-                                setSelectedHouseIds(ids => [ids[0] === svfId ? (svfId ?? "") : (ids[0] || "")]);
-                              }
-                            }}
-                            className={["px-4 py-1.5 rounded-full border text-[12.5px] font-semibold transition-all duration-120 select-none",
-                              sel ? "bg-red-500/12 border-red-500/60 text-red-400"
-                                  : "bg-(--bg-raise) border-(--svf-border) text-(--text-faint) hover:text-(--text)",
-                            ].join(" ")}>
-                            {opt.label}
-                          </button>
-                        );
-                      })}
-                    </div>
+                  <FormField label="Jointly Owned">
+                    <TogglePill value={jointlyOwned ? "Yes" : "No"} onChange={v => {
+                      const isJoint = v === "Yes";
+                      setJointlyOwned(isJoint);
+                      if (isJoint && svfId) {
+                        setSelectedHouseIds(ids => {
+                          const rest = ids.filter(id => id !== svfId && id !== "");
+                          return [svfId, ...rest];
+                        });
+                      } else if (!isJoint) {
+                        setSelectedHouseIds(ids => [ids[0] === svfId ? (svfId ?? "") : (ids[0] || "")]);
+                      }
+                    }} />
                   </FormField>
                 </div>
               )}
 
               {/* Production House(s) — only for home production */}
               {isHomeProd && selectedHouseIds.map((houseId, index) => {
-                const isSvfLocked = isJointly && index === 0 && svfId !== null && houseId === svfId;
+                const isSvfLocked = jointlyOwned && index === 0 && svfId !== null && houseId === svfId;
                 return (
                   <div key={index} className="space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
                     <div className="flex items-center justify-between">
                       <label className="text-[11px] font-bold uppercase tracking-widest text-(--text-faint)">
-                        Production House {isJointly ? index + 1 : ""}
+                        Production House {jointlyOwned ? index + 1 : ""}
                       </label>
-                      {isJointly && !isSvfLocked && index > 0 && (
+                      {jointlyOwned && !isSvfLocked && index > 0 && (
                         <Button variant="ghost" size="sm" className="h-6 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10"
                           onClick={() => setSelectedHouseIds(ids => ids.filter((_, i) => i !== index))}>
                           Remove
@@ -722,7 +675,7 @@ export default function NewMoviePage() {
                         <SelectTrigger className={selectTriggerCls}><SelectValue placeholder="Select…" /></SelectTrigger>
                         <SelectContent>
                           {productionHouses
-                            .filter(h => (!selectedHouseIds.includes(h.id) || h.id === houseId) && !(isJointly && h.id === svfId))
+                            .filter(h => (!selectedHouseIds.includes(h.id) || h.id === houseId) && !(jointlyOwned && h.id === svfId))
                             .map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}
                         </SelectContent>
                       </Select>
@@ -731,7 +684,7 @@ export default function NewMoviePage() {
                 );
               })}
 
-              {isHomeProd && isJointly && (
+              {isHomeProd && jointlyOwned && (
                 <div className="md:col-span-2 pt-1">
                   <Button variant="outline" size="sm" onClick={() => setSelectedHouseIds(ids => [...ids, ""])}
                     className="w-full border-dashed border-(--svf-border) bg-transparent text-(--text-faint) hover:text-(--text) hover:bg-(--hover) hover:border-(--svf-border-strong)">
@@ -740,7 +693,7 @@ export default function NewMoviePage() {
                 </div>
               )}
 
-              {isHomeProd && isJointly && (
+              {isHomeProd && jointlyOwned && (
                 <>
                   <FormField label="Revenue Share">
                     <Input placeholder="e.g., 50-50" value={revenueShare} onChange={e => setRevenueShare(e.target.value)} className={inputCls} />

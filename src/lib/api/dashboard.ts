@@ -301,14 +301,14 @@ export async function getRightsFocusedStats(): Promise<RightsFocusedStats> {
     // Get all movies that are NOT expired and NOT "Sold to Grassroot"
     // A movie is expired if its agreement_end_date is in the past
     // Movies sold to grassroot (remapped to Sold/Expired) should not be part of any open titles or WTP count
-    const moviesQuery = supabase.from('movies').select('id, agreement_end_date, nature_of_rights').eq('approval_status', 'approved')
+    const moviesQuery = supabase.from('movies').select('id, source, agreement_end_date, jointly_exploitation_rights').eq('approval_status', 'approved')
     const { data: allMovies } = await moviesQuery
     const allMovieIds = new Set(
       (allMovies || [])
-        .filter((m: { id: string; source?: string; agreement_end_date?: string | null; nature_of_rights?: string | null }) => {
+        .filter((m: { id: string; source?: string; agreement_end_date?: string | null; jointly_exploitation_rights?: string | null }) => {
           if (m.source === 'home_production') {
-            const nature = (m.nature_of_rights || '').toLowerCase()
-            return !nature.includes('sold') && !nature.includes('grassroot')
+            const jer = (m.jointly_exploitation_rights || '').toLowerCase()
+            return !jer.startsWith('sold')
           }
           if (!m.agreement_end_date) return true
           return m.agreement_end_date >= today
@@ -371,15 +371,15 @@ export async function getRightsModeStats(mode: RightsMode, language?: string): P
     // Fetch all approved movies (language-filtered) — no flat rights columns needed
     let moviesQuery = supabase
       .from('movies')
-      .select('id, source, certification, nature_of_rights, agreement_end_date, wtp_library')
+      .select('id, source, certification, jointly_exploitation_rights, agreement_end_date, wtp_library')
       .eq('approval_status', 'approved')
     if (language) moviesQuery = moviesQuery.eq('language', language)
     const { data: allMovies } = await moviesQuery
 
     const validMovies = (allMovies || []).filter((m: any) => {
       if (m.source === 'home_production') {
-        const nature = (m.nature_of_rights || '').toLowerCase()
-        return !nature.includes('sold') && !nature.includes('grassroot')
+        const jer = (m.jointly_exploitation_rights || '').toLowerCase()
+        return !jer.startsWith('sold')
       }
       return true
     })
@@ -590,8 +590,8 @@ export async function getOpenTitlesForMode(
     // Filter valid home movies: exclude sold/grassroot
     const validMovies = ((movies || []) as any[]).filter((m: any) => {
       if (m.source !== 'home_production') return true
-      const nature = (m.nature_of_rights || '').toLowerCase()
-      return !nature.includes('sold') && !nature.includes('grassroot')
+      const jer = (m.jointly_exploitation_rights || '').toLowerCase()
+      return !jer.startsWith('sold')
     })
 
     let openTitles: any[] = []
@@ -794,8 +794,8 @@ export async function getExpiringSatelliteTitles(options?: {
 
     const validMovies = allMovies.filter((m: any) => {
       if (m.source === 'home_production') {
-        const nature = (m.nature_of_rights || '').toLowerCase()
-        return !nature.includes('sold') && !nature.includes('grassroot')
+        const jer = (m.jointly_exploitation_rights || '').toLowerCase()
+        return !jer.startsWith('sold')
       }
       if (!m.agreement_end_date) return true
       return m.agreement_end_date >= today
@@ -947,8 +947,8 @@ export async function getExpiringInternetTitles(options?: {
     }))
     const validMovies = allMovies.filter((m: any) => {
       if (m.source === 'home_production') {
-        const nature = (m.nature_of_rights || '').toLowerCase()
-        return !nature.includes('sold') && !nature.includes('grassroot')
+        const jer = (m.jointly_exploitation_rights || '').toLowerCase()
+        return !jer.startsWith('sold')
       }
       if (!m.agreement_end_date) return true
       return m.agreement_end_date >= today
@@ -1057,8 +1057,8 @@ export async function getActiveInternetTitles(options?: {
     }))
     const validMovies = allMovies.filter((m: any) => {
       if (m.source !== 'home_production') return true
-      const nature = (m.nature_of_rights || '').toLowerCase()
-      return !nature.includes('sold') && !nature.includes('grassroot')
+      const jer = (m.jointly_exploitation_rights || '').toLowerCase()
+      return !jer.startsWith('sold')
     })
 
     let filteredMovies = validMovies
@@ -1128,15 +1128,15 @@ export async function getActiveInternetTitlesCount(language?: string): Promise<{
     // Fetch all approved movies (language-filtered) — no flat rights columns needed
     let moviesQuery = supabase
       .from('movies')
-      .select('id, source, nature_of_rights, agreement_end_date')
+      .select('id, source, jointly_exploitation_rights, agreement_end_date')
       .eq('approval_status', 'approved')
     if (language) moviesQuery = moviesQuery.eq('language', language)
     const { data: allMovies } = await moviesQuery
 
     const validMovies = (allMovies || []).filter((m: any) => {
       if (m.source === 'home_production') {
-        const nature = (m.nature_of_rights || '').toLowerCase()
-        return !nature.includes('sold') && !nature.includes('grassroot')
+        const jer = (m.jointly_exploitation_rights || '').toLowerCase()
+        return !jer.startsWith('sold')
       }
       return true
     })
@@ -1251,9 +1251,8 @@ export async function getMoviesForDashboard(options?: {
       query = query.in('wtp_library', ['WTP', 'WTP/BD'])
     }
 
-    // "Sold to Grassroot" (now Sold/Expired) can be filtered directly on the nature_of_rights column
     if (options?.rightsStatus === 'sold_to_grassroot') {
-      query = query.or('nature_of_rights.ilike.%Sold to Grassroot%,nature_of_rights.ilike.%Sold/Expired%,nature_of_rights.ilike.%Sold%')
+      query = query.ilike('jointly_exploitation_rights', '%Sold%')
     }
 
     // Applying sorting at SQL level when possible
@@ -1326,10 +1325,10 @@ export async function getMoviesForDashboard(options?: {
     // For special categories (open_titles, wtp), filter the movies
     if (options?.category === 'open_titles') {
       // Exclude expired movies (agreement_end_date < today) and "Sold to Grassroot" movies
-      filteredMovies = filteredMovies.filter((m: { source?: string; nature_of_rights?: string; agreement_end_date?: string }) => {
+      filteredMovies = filteredMovies.filter((m: { source?: string; jointly_exploitation_rights?: string; agreement_end_date?: string }) => {
         if (m.source === 'home_production') {
-          const nature = (m.nature_of_rights || '').toLowerCase()
-          return !nature.includes('sold') && !nature.includes('grassroot')
+          const jer = (m.jointly_exploitation_rights || '').toLowerCase()
+          return !jer.startsWith('sold')
         }
         // Acquired: exclude if agreement_end_date is in the past
         if (m.agreement_end_date && m.agreement_end_date < today) return false

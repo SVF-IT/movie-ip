@@ -169,13 +169,13 @@ export async function getCatalogHealth(): Promise<CatalogHealth> {
     // Calculate metadata completeness (sample check for key fields)
     const { data: sampleMovies } = await supabase
       .from("movies")
-      .select("title, release_year, certification, language, production_house_name, territory")
+      .select("title, release_year, certification, language, production_house_name")
       .limit(200);
 
     let filledFields = 0;
     let totalFields = 0;
     sampleMovies?.forEach((m: Record<string, unknown>) => {
-      const fields = ["title", "release_year", "certification", "language", "production_house_name", "territory"];
+      const fields = ["title", "release_year", "certification", "language", "production_house_name"];
       fields.forEach((f) => {
         totalFields++;
         if (m[f] != null && m[f] !== "") filledFields++;

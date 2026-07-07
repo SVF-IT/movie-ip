@@ -306,7 +306,7 @@ export async function getReportData(
     case "world_premiere": {
       // Find movies that have NEVER had any rights assigned (zero records in platform_rights)
       const [moviesRes, rightsRes] = await Promise.all([
-        supabase.from("movies_with_details").select("id, title, release_year, source, language_name, certification, poster_url"),
+        supabase.from("movies_with_details").select("id, title, release_year, source, language_name, certification"),
         supabase.from("platform_rights").select("movie_id"),
       ]);
 

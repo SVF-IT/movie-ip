@@ -128,7 +128,6 @@ export default function MoviesPage() {
         certification: certificationFilter.length > 0 ? certificationFilter : undefined,
         yearFrom: yearFrom ? new Date(yearFrom).getFullYear() : undefined,
         yearTo: yearTo ? new Date(yearTo).getFullYear() : undefined,
-        territory: territoryFilter || undefined,
         sortBy,
         approvalStatus: canFilterByApproval ? approvalFilter : "approved",
       };
@@ -338,7 +337,7 @@ export default function MoviesPage() {
         groupRow = Array(metaCount).fill(null);
         const metaGroupSpans: [string, string, string][] = [
           ["Agreement", "agreement_date", "agreement_end_date"],
-          ["Film Details", "territory", "color_or_bw"],
+          ["Film Details", "color_or_bw", "color_or_bw"],
           ["Clip Rights", "clip_rights", "clip_rights_duration"],
           ["Derivative Rights", "prequel_sequel_rights", "dubbing_rights"],
         ];
@@ -863,7 +862,9 @@ export default function MoviesPage() {
                     {movies.map((movie, idx) => {
                       const pv = movie.primary_version || movie.versions[0];
                       const movieId = pv?.id;
-                      const isSold = movie.nature_of_rights?.toLowerCase().includes("sold");
+                      // Home production movies shown in the "expired" tab that have no agreement_end_date
+                      // are sold movies (returned by the "sold" source query in getGroupedMovies).
+                      const isSold = sourceFilter === "expired" && movie.source === "home_production";
                       const isAcquired = movie.source === "acquired" && !isSold;
                       const isExpiredAgreement = pv?.agreement_end_date && new Date(pv.agreement_end_date) < new Date();
                       const isExpired = isExpiredAgreement || isSold;
@@ -911,10 +912,10 @@ export default function MoviesPage() {
                             <div className="flex flex-col gap-1">
                               <Badge variant="outline" className={cn("text-[10px] w-fit font-semibold px-2 py-0.5",
                                 movie.source === "acquired" ? "bg-violet-500/10 text-violet-400 border-violet-500/25"
-                                  : (movie.nature_of_rights === "Jointly Owned") ? "bg-amber-500/10 text-amber-400 border-amber-500/25"
+                                  : (movie.primary_version as any)?.jointly_owned ? "bg-amber-500/10 text-amber-400 border-amber-500/25"
                                     : "bg-indigo-500/10 text-indigo-400 border-indigo-500/25"
                               )}>
-                                {movie.source === "acquired" ? "Acquired" : (movie.nature_of_rights === "Jointly Owned") ? "Jointly Owned" : "Home"}
+                                {movie.source === "acquired" ? "Acquired" : (movie.primary_version as any)?.jointly_owned ? "Jointly Owned" : "Home"}
                               </Badge>
                               {isExpired && <Badge variant="destructive" className="text-[10px] w-fit font-semibold px-2 py-0.5">Expired</Badge>}
                               {canFilterByApproval && (movie as any).approval_status === "pending" && <Badge variant="warning" className="text-[10px] w-fit font-semibold px-2 py-0.5">Pending</Badge>}
@@ -1092,7 +1093,7 @@ const HOME_EXPORT_FIELDS: ExportFieldDef[] = [
   { key: "release_date", label: "Theatrical Release Date" },
   { key: "trailer_link", label: "YT Trailer Link" },
   { key: "certification", label: "Censor" },
-  { key: "nature_of_rights", label: "Nature of Right" },
+  { key: "jointly_owned", label: "Jointly Owned" },
   { key: "holdbacks", label: "Holdbacks" },
   { key: "remarks", label: "Remarks" },
   { key: "actionables", label: "Actionable" },
@@ -1109,7 +1110,6 @@ const ACQUIRED_META_FIELDS: ExportFieldDef[] = [
   { key: "agreement_date", label: "Date of Agreement" },
   { key: "agreement_start_date", label: "Agreement Start Date" },
   { key: "agreement_end_date", label: "Agreement End Date" },
-  { key: "territory", label: "Territory" },
   { key: "cast_names", label: "Cast Details" },
   { key: "director_names", label: "Director" },
   { key: "release_year", label: "Release Year" },

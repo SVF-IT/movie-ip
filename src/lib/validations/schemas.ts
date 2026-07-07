@@ -47,7 +47,6 @@ export const movieSchema = z.object({
   synopsis: z.string().max(5000).optional(),
   duration: z.number().int().positive().optional(),
   trailer_url: urlSchema,
-  poster_url: urlSchema,
 });
 
 // --- Rights ---

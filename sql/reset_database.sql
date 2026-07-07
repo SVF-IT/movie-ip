@@ -19,6 +19,7 @@ DELETE FROM movie_approvals;
 
 -- 3. Rights data (dependent on movies and platforms)
 DELETE FROM platform_rights;
+DELETE FROM movie_rights;
 
 -- 4. Movie relationships
 DELETE FROM movie_people;
@@ -45,6 +46,8 @@ SELECT 'movie_pending_changes',                     COUNT(*) FROM movie_pending_
 UNION ALL
 SELECT 'platform_rights',                           COUNT(*) FROM platform_rights
 UNION ALL
+SELECT 'movie_rights',                              COUNT(*) FROM movie_rights
+UNION ALL
 SELECT 'audit_logs',                                COUNT(*) FROM audit_logs
 UNION ALL
 SELECT 'notifications',                             COUNT(*) FROM notifications
@@ -65,6 +68,7 @@ SELECT 'production_houses',                         COUNT(*) FROM production_hou
 -- movie_approvals:               0
 -- movie_pending_changes:         0
 -- platform_rights:               0
+-- movie_rights:                  0
 -- audit_logs:                    0
 -- notifications:                 0
 -- notification_settings:         0  (re-seeded when 16_notifications.sql runs)
