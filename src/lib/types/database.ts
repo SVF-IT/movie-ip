@@ -30,11 +30,10 @@ export interface Movie {
   character_rights?: string
   subtitling_rights?: string
   dubbing_rights?: string
-  // Home production joint ownership
-  jointly_owned?: boolean
   remarks?: string
   actionables?: string
   wtp_library?: string
+  jointly_owned?: boolean
   joint_prod_buy_back_date?: string
   revenue_share?: string
   jointly_exploitation_rights?: string

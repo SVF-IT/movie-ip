@@ -846,11 +846,11 @@ async function processHomeRow(
   keys: string[],
   cache: CacheStore,
   userId: string,
-  userRole: string,
   resolution: 'skip' | 'update' | null,
   platformSlots: PlatformSlot[] | null,
   rawDataCols: string[],
   slotErrors: PlatformRightsRowError[],
+  continuationColArrays?: string[][],
 ): Promise<'created' | 'skipped' | 'updated'> {
   // New home sheet uses "Movie Name" at col 1 (not "Title")
   const titleKey_col = findColumnByPattern(keys, ['Movie Name', 'Title'])
@@ -897,14 +897,19 @@ async function processHomeRow(
   const releaseYearKey = findColumnByPattern(keys, ['Release Year'])
   const rawDate = cleanString(releaseDateKey ? row[releaseDateKey] : null)
   const rawYear = cleanString(releaseYearKey ? row[releaseYearKey] : null)
+  // Release Year column may hold a plain year ("2022") or a full date ("10-May-96").
+  // Plain year → release_year only, no release_date.
+  // Full date  → both release_date and release_year (extracted).
   const parsedDate = rawDate ? parseDate(rawDate) : null
-  const releaseDate = parsedDate ?? rawDate ?? null
+  const isPlainYear = rawYear && /^\d{4}$/.test(rawYear.trim())
+  const parsedFromRawYear = !isPlainYear && rawYear ? parseDate(rawYear) : null
+  const releaseDate = parsedDate ?? parsedFromRawYear ?? rawDate ?? null
   const releaseYear = parsedDate
     ? parsedDate.split('-')[0]
-    : rawYear && /^\d{4}$/.test(rawYear.trim())
-    ? rawYear.trim()
-    : rawDate && /^\d{4}$/.test(rawDate.trim())
-    ? rawDate.trim()
+    : parsedFromRawYear
+    ? parsedFromRawYear.split('-')[0]
+    : isPlainYear
+    ? rawYear!.trim()
     : null
 
   // ── Certification ─────────────────────────────────────────────
@@ -928,8 +933,8 @@ async function processHomeRow(
   // "Sold to Grassroot" (or similar) in the Jointly Owned column — store as a note in jointly_exploitation_rights
   const isSoldEntry = jointlyOwnedRaw && !isJointlyOwned && jointlyOwnedRaw.toLowerCase().startsWith('sold')
 
-  // ── Approval status based on uploader role ───────────────────
-  const approvalStatus = userRole === 'admin' ? 'approved' : 'pending'
+  // Home productions always require legal approval — never auto-approve on import
+  const approvalStatus = 'pending'
 
   const movieData: Record<string, unknown> = {
     title,
@@ -945,45 +950,18 @@ async function processHomeRow(
     trailer_link: cleanString(row['YT Trailer Link'] ?? row['YT Link']),
     remarks: cleanString(row['Remarks']),
     actionables: cleanString(row['Actionables'] ?? row['Actionable']),
-    // Jointly owned fields — only populate when Jointly Owned = Yes
-    // "Sold to Grassroot" in the Jointly Owned column → store the sold note in jointly_exploitation_rights
     jointly_owned: isJointlyOwned,
+    // "Sold to Grassroot" in the Jointly Owned column → store the sold note here
     jointly_exploitation_rights: isJointlyOwned && jointlyOwnedByKey
       ? preserveRawText(row[jointlyOwnedByKey])
       : isSoldEntry ? jointlyOwnedRaw : null,
     revenue_share: isJointlyOwned && revenueShareKey ? preserveRawText(row[revenueShareKey]) : null,
     joint_prod_buy_back_date: isJointlyOwned && buyBackKey ? parseDate(row[buyBackKey]) : null,
-    // Default rights for home production — always Yes, never from movie_rights table
-    satellite_rights: 'Yes',
-    internet_rights: 'Yes',
-    negative_rights: 'Yes',
-    other_rights: 'Yes',
-    nature_of_satellite_rights: 'Exclusive',
-    nature_of_internet_rights: 'Exclusive',
-    nature_of_negative_rights: 'Exclusive',
-    nature_of_other_rights: 'Exclusive',
     clip_rights: 'Yes',
     character_rights: 'Yes',
     prequel_sequel_rights: 'Yes',
     subtitling_rights: 'Yes',
     dubbing_rights: 'Yes',
-    // Fields not applicable to home production — store as null
-    assignor_licensor: null,
-    licensee: null,
-    agreement_date: null,
-    agreement_start_date: null,
-    agreement_end_date: null,
-    satellite_rights_start_date: null,
-    satellite_rights_end_date: null,
-    internet_rights_start_date: null,
-    internet_rights_end_date: null,
-    negative_rights_start_date: null,
-    negative_rights_end_date: null,
-    other_rights_start_date: null,
-    other_rights_end_date: null,
-    syndication_internet_rights: null,
-    satellite_rights_classification: null,
-    internet_rights_classification: null,
     wtp_library: null,
     approval_status: approvalStatus,
     created_by: userId,
@@ -998,7 +976,7 @@ async function processHomeRow(
     await relinkPeople(row, cache, movieId, castKey, directorKey)
     if (platformSlots) {
       await cache.clearMoviePlatformRights(movieId)
-      await extractPlatformRights(rawDataCols, platformSlots, cache, movieId, slotErrors, true)
+      await extractPlatformRights(rawDataCols, platformSlots, cache, movieId, slotErrors, true, continuationColArrays)
     }
     return 'updated'
   }
@@ -1010,7 +988,7 @@ async function processHomeRow(
 
   await relinkPeople(row, cache, movieId, castKey, directorKey)
   if (platformSlots) {
-    await extractPlatformRights(rawDataCols, platformSlots, cache, movieId, slotErrors, true)
+    await extractPlatformRights(rawDataCols, platformSlots, cache, movieId, slotErrors, true, continuationColArrays)
   }
   return 'created'
 }
@@ -1758,39 +1736,43 @@ export async function POST(request: Request) {
     const resolutionsRaw = formData.get('resolutions') as string | null
     const resolutions: Record<string, 'skip' | 'update'> = resolutionsRaw ? JSON.parse(resolutionsRaw) : {}
 
-    // 9a. For acquired format, group rows: a continuation row has no movie name and
-    //     belongs to the most recent primary row. Group them so each primary row carries
-    //     its continuation rows into processAcquiredRow.
+    // 9a. Group rows: a continuation row has no movie name and belongs to the most
+    //     recent primary row. Both acquired and home formats use continuation rows for
+    //     additional platform natures (e.g. DTH with two nature entries).
     //
     // A continuation row is defined as: Movie Name cell is blank/null AND at least one
-    // rights-related cell (nature, territory, start date, end date) is non-empty.
-    // Home format rows are always 1:1 with movies — no grouping needed.
+    // data cell is non-empty.
 
     interface AcquiredGroup {
       primaryIndex: number              // index into rows[] for the primary row
       continuationIndexes: number[]     // indexes of following continuation rows
     }
 
-    let acquiredGroups: AcquiredGroup[] = []
-    const movieNameKey = detectedFormat === 'acquired'
-      ? findColumnByPattern(headers, ['Movie Name', 'Movie Title', 'Title'])
-      : null
+    const movieNameKey = findColumnByPattern(headers, ['Movie Name', 'Movie Title', 'Title'])
 
-    if (detectedFormat === 'acquired' && movieNameKey) {
+    const buildGroups = (): AcquiredGroup[] => {
+      const groups: AcquiredGroup[] = []
       let currentGroup: AcquiredGroup | null = null
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i] as Record<string, string>
-        const title = cleanString(col(row, movieNameKey) ?? row[movieNameKey ?? ''])
+        const title = cleanString(col(row, movieNameKey) ?? (movieNameKey ? row[movieNameKey] : undefined))
         if (title) {
-          // Primary row — start a new group
           currentGroup = { primaryIndex: i, continuationIndexes: [] }
-          acquiredGroups.push(currentGroup)
+          groups.push(currentGroup)
         } else if (currentGroup) {
-          // No movie name — continuation row; attach to current group
           currentGroup.continuationIndexes.push(i)
         }
-        // If no current group and no title, it's a stray blank row — skip
       }
+      return groups
+    }
+
+    let acquiredGroups: AcquiredGroup[] = []
+    let homeGroups: AcquiredGroup[] = []
+
+    if (detectedFormat === 'acquired') {
+      acquiredGroups = buildGroups()
+    } else {
+      homeGroups = buildGroups()
     }
 
     // 9b. First pass: detect unresolved conflicts before writing anything
@@ -1798,15 +1780,14 @@ export async function POST(request: Request) {
       const unresolvedConflicts: ConflictRow[] = []
 
       if (detectedFormat === 'home') {
-        // Home: conflict = same title already in DB (prod no is not unique — dubbed versions share it)
-        const homeTitleKey = findColumnByPattern(headers, ['Movie Name', 'Title'])
-        for (let i = 0; i < rows.length; i++) {
-          const row = rows[i] as Record<string, string>
-          const title = cleanString(homeTitleKey ? row[homeTitleKey] : row['Movie Name'] ?? row['Title'])
+        // Home: check only primary rows (continuation rows belong to the same movie)
+        for (const group of homeGroups) {
+          const row = rows[group.primaryIndex] as Record<string, string>
+          const title = cleanString(movieNameKey ? row[movieNameKey] : row['Movie Name'] ?? row['Title'])
           if (!title) continue
           const existingId = cache.movies.get(title.toLowerCase().trim()) ?? null
           if (existingId && !(title in resolutions)) {
-            unresolvedConflicts.push({ row: i + 2, title, existingId })
+            unresolvedConflicts.push({ row: group.primaryIndex + 2, title, existingId })
           }
         }
       } else {
@@ -1836,18 +1817,19 @@ export async function POST(request: Request) {
 
     const dataStartRowIndex = subHeaderRowIndex !== null ? subHeaderRowIndex + 1 : effectiveDataStartRow
 
-    const homeTitleKey = detectedFormat === 'home' ? findColumnByPattern(headers, ['Movie Name', 'Title']) : null
-
     if (detectedFormat === 'home') {
-      for (let i = 0; i < rows.length; i++) {
+      // Iterate over pre-grouped primary rows, passing continuation raw col arrays along
+      for (const group of homeGroups) {
+        const i = group.primaryIndex
         const row = rows[i] as Record<string, string>
         const rowNum = i + dataStartRowIndex + 1
+        const contRawCols = group.continuationIndexes.map((ci) => rawCols[ci] ?? [])
 
         try {
-          const homeTitle = cleanString(homeTitleKey ? row[homeTitleKey] : row['Movie Name'] ?? row['Title']) || ''
+          const homeTitle = cleanString(movieNameKey ? row[movieNameKey] : row['Movie Name'] ?? row['Title']) || ''
           const homeResolution = homeTitle ? (resolutions[homeTitle] ?? null) : null
           const homeSlotErrors: PlatformRightsRowError[] = []
-          const result = await processHomeRow(row, headers, cache, user.id, profile.role, homeResolution, homePlatformSlots, rawCols[i] ?? [], homeSlotErrors)
+          const result = await processHomeRow(row, headers, cache, user.id, homeResolution, homePlatformSlots, rawCols[i] ?? [], homeSlotErrors, contRawCols)
           for (const se of homeSlotErrors) {
             errors.push({
               row: rowNum,
@@ -1913,8 +1895,8 @@ export async function POST(request: Request) {
       skipped,
       updated,
       errors,
-      // For acquired, total = number of primary movie rows (continuation rows don't count as separate movies)
-      total: detectedFormat === 'acquired' ? acquiredGroups.length : rows.length,
+      // Total = primary movie rows only (continuation rows don't count as separate movies)
+      total: detectedFormat === 'acquired' ? acquiredGroups.length : homeGroups.length,
       detectedFormat,
       stats: cache.stats,
       warnings: warningMsg,
