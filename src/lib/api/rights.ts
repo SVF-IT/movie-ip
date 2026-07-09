@@ -9,6 +9,7 @@ export async function getAllRights(options?: {
   platformId?: string
   platformNameContains?: string
   platformTypeCategory?: 'satellite' | 'internet' | 'other'
+  platformTypeExact?: string
   isExpired?: boolean
   nature?: string
   territory?: string
@@ -35,7 +36,7 @@ export async function getAllRights(options?: {
 
   if (options?.platformId) {
     filteredPlatformIds = [options.platformId]
-  } else if (options?.platformNameContains || options?.platformTypeCategory) {
+  } else if (options?.platformNameContains || options?.platformTypeCategory || options?.platformTypeExact) {
     let platQuery = supabase.from('platforms').select('id, platform_type')
     if (options.platformNameContains) {
       platQuery = platQuery.ilike('name', `%${options.platformNameContains}%`)
@@ -45,12 +46,14 @@ export async function getAllRights(options?: {
 
     let candidates = matchedPlatforms || []
 
-    // If a type category is requested, filter platforms by their platform_type
-    if (options.platformTypeCategory) {
+    if (options.platformTypeExact) {
+      const exact = options.platformTypeExact.toLowerCase()
+      candidates = candidates.filter((p: { platform_type?: string }) => (p.platform_type || '').toLowerCase() === exact)
+    } else if (options.platformTypeCategory) {
       const cat = options.platformTypeCategory
       candidates = candidates.filter((p: { platform_type?: string }) => {
         const pt = (p.platform_type || '').toLowerCase()
-        const isSat = pt.includes('satellite') || pt.includes('dth') || pt.includes('terrestrial')
+        const isSat = pt.includes('satellite') || pt.includes('dth') || pt.includes('terrestrial') || pt.includes('cable')
         const isNet = pt.includes('svod') || pt.includes('tvod') || pt.includes('avod') || pt.includes('fvod') || pt.includes('nvod') || pt.includes('iptv')
         if (cat === 'satellite') return isSat
         if (cat === 'internet') return isNet

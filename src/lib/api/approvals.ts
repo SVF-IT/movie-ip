@@ -16,8 +16,7 @@ export interface PendingMovieForApproval {
   production_house_name?: string;
   cast_names?: string;
   director_names?: string;
-  nature_of_rights?: string;
-  territory?: string;
+  jointly_owned?: boolean;
   revenue_share?: string;
   joint_prod_buy_back_date?: string;
   jointly_exploitation_rights?: string;

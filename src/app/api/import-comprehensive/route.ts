@@ -234,11 +234,7 @@ function normalizeCertification(cert: string | null | undefined): string | null 
 }
 
 // For platform rights nature — store raw value as-is so nothing is lost
-function normalizeNature(nature: string | null | undefined): string | null {
-  return cleanString(nature)
-}
-
-// For movie-level nature_of_rights - preserve raw text as-is
+// For movie-level text fields — preserve raw text as-is
 function preserveRawText(value: string | null | undefined): string | null {
   if (!value) return null
   const v = String(value).trim()
@@ -503,6 +499,21 @@ class CacheStore {
     await this.supabase.from('platform_rights').delete().eq('movie_id', movieId)
   }
 
+  async clearMovieRights(movieId: string): Promise<void> {
+    await this.supabase.from('movie_rights').delete().eq('movie_id', movieId)
+  }
+
+  async insertMovieRightsRows(rows: Record<string, unknown>[]): Promise<void> {
+    for (const row of rows) {
+      // Skip rows where nature is null/empty — the movie_rights.nature column
+      // is NOT NULL in the base schema (relaxed only after migration 27).
+      // Rather than fail the whole movie, skip unpopulated rights rows.
+      if (!row.nature) continue
+      const { error } = await this.supabase.from('movie_rights').insert(row)
+      if (error) throw new Error(`Could not insert movie_rights (${row.right_type}): ${error.message}`)
+    }
+  }
+
   async insertPlatformRights(rightsData: Record<string, unknown>): Promise<string | null> {
     if (!rightsData.movie_id) return null
 
@@ -531,352 +542,23 @@ class CacheStore {
 }
 
 // ============================================
-// Platform Rights Extraction Functions
-// ============================================
-
-async function extractSatelliteRights(row: Record<string, string>, keys: string[], cache: CacheStore, movieId: string): Promise<void> {
-  const satLicenseKey = findColumnByPattern(keys, ['Satellite TV License'])
-  if (!satLicenseKey) return
-
-  const satLicense = cleanString(row[satLicenseKey])
-  const hasCurrentSatellite = satLicense && !['open', 'qc issue'].includes(satLicense.toLowerCase())
-
-  if (hasCurrentSatellite) {
-    const platformId = await cache.getOrCreatePlatform(satLicense!, 'Satellite')
-    if (!platformId) return
-
-    const satLicenseIdx = keys.indexOf(satLicenseKey)
-    let categoryVal: string | null = null
-    let startDateVal: string | null = null
-    let endDateVal: string | null = null
-    let territoryVal: string | null = null
-    let natureVal: string | null = null
-
-    for (let i = satLicenseIdx + 1; i < Math.min(keys.length, satLicenseIdx + 7); i++) {
-      const colName = keys[i].toLowerCase().trim()
-      const val = row[keys[i]]
-      if (colName.includes('previous')) break
-      if ((colName.includes('category') || colName.includes('categorization')) && !categoryVal) categoryVal = val
-      else if (colName.includes('start') && colName.includes('date') && !startDateVal) startDateVal = val
-      else if (colName.includes('end') && colName.includes('date') && !endDateVal) endDateVal = val
-      else if (colName.includes('territory') && !territoryVal) territoryVal = val
-      else if (colName.includes('nature') && !natureVal) natureVal = val
-    }
-
-    const startDate = parseDate(startDateVal)
-    const endDate = parseDate(endDateVal)
-
-    if (startDate || endDate || satLicense) {
-      await cache.insertPlatformRights({
-        movie_id: movieId,
-        platform_id: platformId,
-        category: cleanString(categoryVal),
-        nature: normalizeNature(natureVal),
-        start_date: startDate,
-        end_date: endDate,
-        territory: cleanString(territoryVal) || 'World',
-        is_current: true,
-      })
-    }
-  }
-}
-
-async function extractDthRights(row: Record<string, string>, keys: string[], cache: CacheStore, movieId: string): Promise<void> {
-  const dthKey = findColumnByPattern(keys, ['DTH VOD License'])
-  if (!dthKey) return
-
-  const dthLicense = cleanString(row[dthKey])
-  if (!dthLicense || ['open', 'no', 'n/a', 'na'].includes(dthLicense.toLowerCase())) return
-
-  const platformId = await cache.getOrCreatePlatform(dthLicense, 'DTH')
-  if (!platformId) return
-
-  await cache.insertPlatformRights({
-    movie_id: movieId,
-    platform_id: platformId,
-    nature: normalizeNature(row['Nature of DTH VOD License']),
-    start_date: parseDate(row['DTH VOD Start Date']),
-    end_date: parseDate(row['DTH VOD End Date']),
-    territory: cleanString(row['DTH VOD Territory']) || 'World',
-    is_current: true,
-  })
-}
-
-async function extractTerrestrialRights(row: Record<string, string>, keys: string[], cache: CacheStore, movieId: string): Promise<void> {
-  const terrKey = findColumnByPattern(keys, ['Terrestrial TV License'])
-  if (!terrKey) return
-
-  const terrLicense = cleanString(row[terrKey])
-  if (!terrLicense || ['open', 'no', 'n/a', 'na'].includes(terrLicense.toLowerCase())) return
-
-  const platformId = await cache.getOrCreatePlatform(terrLicense, 'Terrestrial')
-  if (!platformId) return
-
-  const startKey = findColumnByPattern(keys, ['Terrestrial Tv [Holdback]', 'Terrestrial TV Holdback Start'])
-  const endKey = findColumnByPattern(keys, ['Terrestrial TV\n[Holdback]\nEnd Date', 'Terrestrial TV Holdback End', 'Terrestrial TV [Holdback] End'])
-
-  await cache.insertPlatformRights({
-    movie_id: movieId,
-    platform_id: platformId,
-    nature: normalizeNature(row['Nature of Terrestrial TV Rights']),
-    start_date: startKey ? parseDate(row[startKey]) : null,
-    end_date: endKey ? parseDate(row[endKey]) : null,
-    territory: cleanString(row['Terrestrial TV Territory']) || 'World',
-    is_current: true,
-  })
-}
-
-async function extractSvodRightsPositional(row: Record<string, string>, keys: string[], cache: CacheStore, movieId: string, anchorPatterns: string[], platformName: string): Promise<void> {
-  const anchorKey = findColumnByPattern(keys, anchorPatterns)
-  if (!anchorKey) return
-
-  const anchorVal = cleanString(row[anchorKey])
-  if (!anchorVal || ['no', 'open', 'n/a', 'na'].includes(anchorVal.toLowerCase())) return
-
-  const platformId = await cache.getOrCreatePlatform(platformName, 'SVOD')
-  if (!platformId) return
-
-  const anchorIdx = keys.indexOf(anchorKey)
-  let natureVal: string | null = null
-  let startDateVal: string | null = null
-  let endDateVal: string | null = null
-  let territoryVal: string | null = null
-  let categoryVal: string | null = null
-
-  for (let i = anchorIdx + 1; i < Math.min(keys.length, anchorIdx + 7); i++) {
-    const colName = keys[i].toLowerCase()
-    const val = row[keys[i]]
-
-    if (
-      colName.includes('hotstar') ||
-      colName.includes('hoichoi') ||
-      colName.includes('hungama') ||
-      colName.includes('prime') ||
-      colName.includes('viacom') ||
-      colName.includes('viacon') ||
-      colName.includes('tvod') ||
-      colName.includes('avod') ||
-      colName.includes('fvod') ||
-      colName.includes('yt') ||
-      colName.includes('others') ||
-      colName.includes('rights granted') ||
-      colName.includes('remarks') ||
-      colName.includes('actionable')
-    ) {
-      break
-    }
-
-    if (colName.includes('nature') && !natureVal) {
-      natureVal = val
-    } else if (colName.includes('category') && !categoryVal) {
-      categoryVal = val
-    } else if (colName.includes('start') && colName.includes('date') && !startDateVal) {
-      startDateVal = val
-    } else if (colName.includes('end') && colName.includes('date') && !endDateVal) {
-      endDateVal = val
-    } else if (colName.includes('territory') && !territoryVal) {
-      territoryVal = val
-    }
-  }
-
-  await cache.insertPlatformRights({
-    movie_id: movieId,
-    platform_id: platformId,
-    category: cleanString(categoryVal),
-    nature: normalizeNature(natureVal),
-    start_date: parseDate(startDateVal),
-    end_date: parseDate(endDateVal),
-    territory: cleanString(territoryVal) || 'World',
-    is_current: true,
-  })
-}
-
-async function extractHoichoiRights(row: Record<string, string>, keys: string[], cache: CacheStore, movieId: string): Promise<void> {
-  const anchorKey = findColumnByPattern(keys, ['Hoichoi'])
-  if (!anchorKey) return
-
-  const anchorVal = cleanString(row[anchorKey])
-  if (!anchorVal || ['no', 'open', 'n/a', 'na'].includes(anchorVal.toLowerCase())) return
-
-  const platformId = await cache.getOrCreatePlatform('Hoichoi', 'SVOD')
-  if (!platformId) return
-
-  const anchorIdx = keys.indexOf(anchorKey)
-  const startDateVal = anchorIdx + 1 < keys.length ? row[keys[anchorIdx + 1]] : null
-  const endDateVal = anchorIdx + 2 < keys.length ? row[keys[anchorIdx + 2]] : null
-  const territoryVal = anchorIdx + 3 < keys.length ? row[keys[anchorIdx + 3]] : null
-
-  await cache.insertPlatformRights({
-    movie_id: movieId,
-    platform_id: platformId,
-    start_date: parseDate(startDateVal),
-    end_date: parseDate(endDateVal),
-    territory: cleanString(territoryVal) || 'World',
-    is_current: true,
-  })
-}
-
-async function extractHungamaRights(row: Record<string, string>, keys: string[], cache: CacheStore, movieId: string): Promise<void> {
-  const anchorKey = findColumnByPattern(keys, ['Hungama'])
-  if (!anchorKey) return
-
-  const anchorVal = cleanString(row[anchorKey])
-  if (!anchorVal || ['no', 'open', 'n/a', 'na'].includes(anchorVal.toLowerCase())) return
-
-  const platformId = await cache.getOrCreatePlatform('Hungama', 'SVOD')
-  if (!platformId) return
-
-  const anchorIdx = keys.indexOf(anchorKey)
-  const startDateVal = anchorIdx + 1 < keys.length ? row[keys[anchorIdx + 1]] : null
-  const endDateVal = anchorIdx + 2 < keys.length ? row[keys[anchorIdx + 2]] : null
-  const territoryVal = anchorIdx + 3 < keys.length ? row[keys[anchorIdx + 3]] : null
-
-  await cache.insertPlatformRights({
-    movie_id: movieId,
-    platform_id: platformId,
-    start_date: parseDate(startDateVal),
-    end_date: parseDate(endDateVal),
-    territory: cleanString(territoryVal) || 'World',
-    is_current: true,
-  })
-}
-
-async function extractTvodRights(row: Record<string, string>, keys: string[], cache: CacheStore, movieId: string): Promise<void> {
-  const tvodKey = findColumnByPattern(keys, ['TVOD\nLicense', 'TVOD License'])
-  if (!tvodKey) return
-
-  const tvod = cleanString(row[tvodKey])
-  if (!tvod || ['no', 'open', 'n/a', 'na'].includes(tvod.toLowerCase())) return
-
-  await cache.insertPlatformRights({
-    movie_id: movieId,
-    start_date: parseDate(row['TVOD Start Date']),
-    end_date: parseDate(row['TVOD End Date']),
-    territory: cleanString(row['TVOD Territory']) || 'World',
-    is_current: true,
-  })
-}
-
-async function extractAvodRights(row: Record<string, string>, keys: string[], cache: CacheStore, movieId: string): Promise<void> {
-  const avodKey = findColumnByPattern(keys, ['AVOD License'])
-  if (!avodKey) return
-
-  const avod = cleanString(row[avodKey])
-  if (!avod || ['no', 'open', 'n/a', 'na'].includes(avod.toLowerCase())) return
-
-  await cache.insertPlatformRights({
-    movie_id: movieId,
-    start_date: parseDate(row['AVOD Start Date']),
-    end_date: parseDate(row['AVOD End Date']),
-    territory: cleanString(row['AVOD Territory']) || 'World',
-    is_current: true,
-  })
-}
-
-async function extractYoutubeRights(row: Record<string, string>, keys: string[], cache: CacheStore, movieId: string): Promise<void> {
-  const ytKey = findColumnByPattern(keys, ['YT'])
-  if (!ytKey) return
-
-  const yt = cleanString(row[ytKey])
-  if (!yt || ['no', 'open', 'n/a', 'na'].includes(yt.toLowerCase())) return
-
-  const platformId = await cache.getOrCreatePlatform('YouTube', 'AVOD')
-  if (!platformId) return
-
-  await cache.insertPlatformRights({
-    movie_id: movieId,
-    platform_id: platformId,
-    territory: 'World',
-    is_current: true,
-  })
-}
-
-async function extractOtherRights(row: Record<string, string>, keys: string[], cache: CacheStore, movieId: string): Promise<void> {
-  const othersKey = findColumnByPattern(keys, ['Others'])
-  const rightsGrantedKey = findColumnByPattern(keys, ['Rights Granted'])
-
-  if (othersKey) {
-    const others = cleanString(row[othersKey])
-    if (others && !['no', 'open', 'n/a', 'na'].includes(others.toLowerCase())) {
-      const platformId = await cache.getOrCreatePlatform(others)
-      if (platformId) {
-        await cache.insertPlatformRights({
-          movie_id: movieId,
-          platform_id: platformId,
-          territory: 'World',
-          is_current: true,
-        })
-      }
-    }
-  }
-
-  if (rightsGrantedKey) {
-    const rightsGranted = cleanString(row[rightsGrantedKey])
-    if (rightsGranted && !['no', 'open', 'n/a', 'na'].includes(rightsGranted.toLowerCase())) {
-      const rgIdx = keys.indexOf(rightsGrantedKey)
-      let natureVal: string | null = null
-      let startDateVal: string | null = null
-      let endDateVal: string | null = null
-      let territoryVal: string | null = null
-
-      for (let i = rgIdx + 1; i < Math.min(keys.length, rgIdx + 6); i++) {
-        const colName = keys[i].toLowerCase()
-        const val = row[keys[i]]
-        if (colName.includes('nature') && !natureVal) natureVal = val
-        else if (colName.includes('start date') && !startDateVal) startDateVal = val
-        else if (colName.includes('end date') && !endDateVal) endDateVal = val
-        else if (colName.includes('territory') && !territoryVal) territoryVal = val
-      }
-
-      const platformId = await cache.getOrCreatePlatform(rightsGranted)
-      if (platformId) {
-        await cache.insertPlatformRights({
-          movie_id: movieId,
-          platform_id: platformId,
-          nature: normalizeNature(natureVal),
-          start_date: parseDate(startDateVal),
-          end_date: parseDate(endDateVal),
-          territory: cleanString(territoryVal) || 'World',
-          is_current: true,
-        })
-      }
-    }
-  }
-}
-
-// Call all 12 extraction functions for a row (currently unused — platform rights import disabled for acquired)
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function extractAllPlatformRights(row: Record<string, string>, keys: string[], cache: CacheStore, movieId: string): Promise<void> {
-  await extractSatelliteRights(row, keys, cache, movieId)
-  await extractDthRights(row, keys, cache, movieId)
-  await extractTerrestrialRights(row, keys, cache, movieId)
-
-  // SVOD platforms using positional column finding
-  await extractSvodRightsPositional(row, keys, cache, movieId, ['Viacon 18', 'Viacom 18'], 'Viacom 18')
-  await extractSvodRightsPositional(row, keys, cache, movieId, ['Prime Videos', 'Prime Video'], 'Prime Video')
-  await extractSvodRightsPositional(row, keys, cache, movieId, ['Hotstar'], 'Hotstar')
-
-  await extractHoichoiRights(row, keys, cache, movieId)
-  await extractHungamaRights(row, keys, cache, movieId)
-  await extractTvodRights(row, keys, cache, movieId)
-  await extractAvodRights(row, keys, cache, movieId)
-  await extractYoutubeRights(row, keys, cache, movieId)
-  await extractOtherRights(row, keys, cache, movieId)
-}
-
-// ============================================
 // Acquired Sheet — 3-row header platform rights parser
 // ============================================
 
 /**
- * Maps a Row-2 label to a canonical platform_type stored in the DB.
+ * Maps a typeRow label to a canonical platform_type stored in the DB.
  * Returns [dbType, isHistory].
+ *
+ * Generic: unknown labels pass through as-is (title-cased) so future
+ * types added to the sheet work without code changes.
  */
 function resolvePlatformType(row2Label: string): [string, boolean] {
   const label = row2Label.trim()
   const isHistory = /history/i.test(label)
+  // Strip "history" suffix for the base type lookup
   const base = label.replace(/\s*history\s*/i, '').trim().toLowerCase()
 
+  // Known canonical aliases — anything not in this map passes through title-cased
   const typeMap: Record<string, string> = {
     'satellite tv': 'Satellite TV',
     'satellite': 'Satellite TV',
@@ -887,12 +569,13 @@ function resolvePlatformType(row2Label: string): [string, boolean] {
     'svod': 'SVOD',
     'tvod': 'TVOD',
     'avod': 'AVOD',
+    'fvod': 'FVOD',
+    'nvod': 'NVOD',
+    'iptv': 'IPTV',
   }
 
+  // Pass through unknown types title-cased so new sheet types work automatically
   const dbType = typeMap[base] ?? label.replace(/\s*history\s*/i, '').trim()
-  if (!(base in typeMap)) {
-    console.warn(`[import] Unknown Row-2 platform label: "${label}" — using "${dbType}"`)
-  }
   return [dbType, isHistory]
 }
 
@@ -912,59 +595,91 @@ interface PlatformSlot {
 }
 
 /**
- * Parses the 3 preamble header rows of an Acquired CSV into a list of 6-column platform slots.
+ * Parses the 3 preamble header rows of an Acquired CSV into a list of platform slots.
  *
- * Row 0 (bannerRow): sparse section labels — "SATELLITE RIGHTS", "INTERNET RIGHTS", etc.
- *   We scan for non-empty cells and record their column range until the next non-empty cell.
- * Row 1 (typeRow): platform_type labels within each section — "Satellite TV", "SVOD", etc.
- *   Each label may span multiple 6-column slots.
- * Row 2 (fieldRow): field headers — exactly 6 per slot:
- *   Platform/License (or "Platform - <Name>") | Category | Start Date | End Date | Territory | Nature Of Rights
+ * Layout (for the acquired sheet):
+ *   bannerRow  — sparse section labels: "SATELLITE RIGHTS", "INTERNET RIGHTS", "OTHERS" (any text is fine)
+ *   typeRow    — platform_type labels: "Satellite TV", "Satellite TV History", "DTH VOD",
+ *                "Terrestrial TV", "SVOD", "TVOD", "AVOD", "Airborne Rights", ...
+ *                Each label spans 6 columns until the next label appears.
+ *   fieldRow   — 6-column slot headers starting with Platform/License or Platform - <Name> or Type - <Name>:
+ *                [0] Platform/License  (or "Platform - Name" or "Type - TypeName")
+ *                [1] Category
+ *                [2] Nature Of Rights
+ *                [3] Start Date
+ *                [4] End Date
+ *                [5] Territory
  *
- * Returns null if the rows don't look like an Acquired 3-row header.
+ * Generic design: no platform names or right types are hardcoded. Any typeRow label
+ * that isn't in the canonical alias map passes through as-is so future sheet additions
+ * work without code changes.
+ *
+ * Returns null if the rows don't look like a platform-rights section (no Platform/License headers).
  */
 function parsePlatformRightsSections(
-  bannerRow: string[],
   typeRow: string[],
   fieldRow: string[],
 ): PlatformSlot[] | null {
-  // Detect known section banners (case-insensitive)
-  const knownSections = ['satellite rights', 'internet rights']
-  const hasBanner = bannerRow.some((c) => knownSections.some((s) => c.toLowerCase().trim().includes(s)))
-  if (!hasBanner) return null
+  // Detection: need at least one slot-anchor header in fieldRow.
+  // We accept any fieldRow with a "Platform/License", "Platform - X", or "Type - X" cell.
+  // Also accept if bannerRow/typeRow has any known rights keyword.
+  const hasSlotAnchor = fieldRow.some((c) => {
+    const cl = (c || '').toLowerCase().trim()
+    return (
+      cl === 'platform/license' ||
+      cl === 'platform / license' ||
+      cl.startsWith('platform -') ||
+      cl.startsWith('platform–') ||
+      cl.startsWith('type -') ||
+      cl.startsWith('type–') ||
+      cl === 'youtube'
+    )
+  })
+  // Also check typeRow for any of our known type labels as a secondary signal
+  const hasTypeLabel = typeRow.some((c) => {
+    const cl = (c || '').toLowerCase().trim()
+    return cl.includes('satellite') || cl.includes('internet') || cl.includes('svod') ||
+      cl.includes('tvod') || cl.includes('avod') || cl.includes('dth') || cl.includes('terrestrial')
+  })
+  if (!hasSlotAnchor && !hasTypeLabel) return null
 
   const slots: PlatformSlot[] = []
 
-  // Walk fieldRow looking for "Platform/License" or "Platform - <Name>" headers.
-  // Each found position starts a 6-column slot.
+  // Walk fieldRow looking for slot anchors — each marks the start of a 6-column slot.
   for (let col = 0; col < fieldRow.length; col++) {
     const field = (fieldRow[col] || '').trim()
     const fieldLower = field.toLowerCase()
 
-    const isTypeHeader = fieldLower.startsWith('type -') || fieldLower.startsWith('type–')
-    const isPlatformHeader =
-      fieldLower === 'platform/license' ||
-      fieldLower === 'platform / license' ||
-      fieldLower.startsWith('platform -') ||
-      fieldLower.startsWith('platform–') ||
-      isTypeHeader
+    // Normalize: strip leading/trailing spaces and internal unicode dashes
+    const isTypeHeader = fieldLower.startsWith('type -') || fieldLower.startsWith('type–') || fieldLower.startsWith('type –')
+    const isPlatformHardcoded = fieldLower.startsWith('platform -') || fieldLower.startsWith('platform–') || fieldLower.startsWith('platform –')
+    const isPlatformGeneric = fieldLower === 'platform/license' || fieldLower === 'platform / license' || fieldLower === 'platform/ license'
+    // Bare "Youtube" (or "YouTube") in the row-1 type label row is a known slot anchor —
+    // the data cell carries the platform name (e.g. "SVF YouTube") like a generic slot.
+    const isYoutubeAnchor = fieldLower === 'youtube'
 
-    if (!isPlatformHeader) continue
+    if (!isTypeHeader && !isPlatformHardcoded && !isPlatformGeneric && !isYoutubeAnchor) continue
 
-    // "Platform - <Name>" slots: platform name is hardcoded in the header, data cell is a presence marker.
-    // "Type - <Name>" slots: the text after "Type -" is the platform_type; data cell is the actual platform name.
-    // Generic "Platform/License" slots: data cell is the platform name; type comes from row2Label.
+    // Resolve platform name override and type override from the field header cell
     let hardcodedName: string | null = null
     let typeOverride: string | null = null
-    if (fieldLower.startsWith('platform -') || fieldLower.startsWith('platform–')) {
-      const sep = field.indexOf('-')
-      hardcodedName = field.slice(sep + 1).trim() || null
-    } else if (isTypeHeader) {
-      const sep = field.indexOf('-')
-      typeOverride = field.slice(sep + 1).trim() || null
-    }
 
-    // Walk back through typeRow to find the nearest non-empty cell at or before col
+    if (isPlatformHardcoded) {
+      // "Platform - Viacom 18" → hardcoded platform name; data cell is Yes/No presence marker
+      const sep = field.indexOf('-')
+      hardcodedName = sep >= 0 ? field.slice(sep + 1).trim() || null : null
+    } else if (isTypeHeader) {
+      // "Type - Air Rights" → the platform_type is what follows the hyphen;
+      // data cell is the actual platform name (generic Platform/License style)
+      const sep = field.indexOf('-')
+      typeOverride = sep >= 0 ? field.slice(sep + 1).trim() || null : null
+    } else if (isYoutubeAnchor) {
+      // Bare "Youtube" column header — data cell is the platform name; force type to "YouTube"
+      typeOverride = 'YouTube'
+    }
+    // Generic "Platform/License" → data cell is the platform name; type from typeRow
+
+    // Walk back through typeRow to find the nearest non-empty label at or before this col
     let row2Label = ''
     for (let t = col; t >= 0; t--) {
       const cell = (typeRow[t] || '').trim()
@@ -973,12 +688,15 @@ function parsePlatformRightsSections(
         break
       }
     }
-    if (!row2Label && !typeOverride) continue // no type label found — skip this slot
+
+    // Skip slots with no type label at all (shouldn't happen in well-formed sheets)
+    if (!row2Label && !typeOverride) continue
 
     const [resolvedType, isHistory] = row2Label ? resolvePlatformType(row2Label) : ['Other', false]
+    // typeOverride wins when set (e.g. "Type - Air Rights" overrides the "Airborne Rights" typeRow label)
     const platformType = typeOverride ?? resolvedType
 
-    // Count which slot this is within its Row-2 group
+    // Slot index within its typeRow group (for error reporting)
     const slotIndex = slots.filter((s) => s.row2Label === row2Label).length
 
     slots.push({
@@ -1002,24 +720,29 @@ interface PlatformRightsRowError {
 }
 
 /**
- * For a single data row, iterate every slot in the slot map and insert
- * platform_rights rows where the slot is active.
+ * For a single data row (plus optional continuation rows), iterate every slot
+ * in the slot map and insert platform_rights rows where the slot is active.
+ *
+ * Acquired slots: 6 columns — [platform/license, category, start, end, territory, nature]
+ * Home slots:     7 columns — [platform/license, category, nature, start, end, territory, holdbacks]
  *
  * slotErrors is populated (not thrown) on per-slot failures.
  */
-async function extractAcquiredPlatformRights(
+async function extractPlatformRights(
   dataCols: string[],
   slots: PlatformSlot[],
   cache: CacheStore,
   movieId: string,
   slotErrors: PlatformRightsRowError[],
+  isHome: boolean,
+  continuationColArrays?: string[][],
 ): Promise<void> {
   const today = new Date().toISOString().split('T')[0]
+  const slotWidth = isHome ? 7 : 6
 
   for (const slot of slots) {
     const { colIndex, platformType, isHistory, hardcodedName, row2Label, slotIndex } = slot
-    // The 6 columns of this slot: [0]=platform/license, [1]=category, [2]=start, [3]=end, [4]=territory, [5]=nature
-    const colRange: [number, number] = [colIndex, colIndex + 5]
+    const colRange: [number, number] = [colIndex, colIndex + slotWidth - 1]
 
     try {
       const cell0 = (dataCols[colIndex] ?? '').trim()
@@ -1044,35 +767,65 @@ async function extractAcquiredPlatformRights(
         continue
       }
 
-      const categoryRaw = (dataCols[colIndex + 1] ?? '').trim()
-      const startRaw = (dataCols[colIndex + 2] ?? '').trim()
-      const endRaw = (dataCols[colIndex + 3] ?? '').trim()
-      const territoryRaw = (dataCols[colIndex + 4] ?? '').trim()
-      const natureRaw = (dataCols[colIndex + 5] ?? '').trim()
+      // Helper: insert one platform_rights record from a column array.
+      // Acquired: [platform, category, start, end, territory, nature]
+      // Home:     [platform, category, nature, start, end, territory, holdbacks]
+      const insertSlotRow = async (cols: string[]) => {
+        let categoryRaw: string, startRaw: string, endRaw: string, territoryRaw: string, natureRaw: string, holdbacksRaw: string
+        if (isHome) {
+          categoryRaw   = (cols[colIndex + 1] ?? '').trim()
+          natureRaw     = (cols[colIndex + 2] ?? '').trim()
+          startRaw      = (cols[colIndex + 3] ?? '').trim()
+          endRaw        = (cols[colIndex + 4] ?? '').trim()
+          territoryRaw  = (cols[colIndex + 5] ?? '').trim()
+          holdbacksRaw  = (cols[colIndex + 6] ?? '').trim()
+        } else {
+          // Acquired slot: [Platform/License, Category, Nature Of Rights, Start Date, End Date, Territory]
+          categoryRaw   = (cols[colIndex + 1] ?? '').trim()
+          natureRaw     = (cols[colIndex + 2] ?? '').trim()
+          startRaw      = (cols[colIndex + 3] ?? '').trim()
+          endRaw        = (cols[colIndex + 4] ?? '').trim()
+          territoryRaw  = (cols[colIndex + 5] ?? '').trim()
+          holdbacksRaw  = ''
+        }
 
-      const startDate = parseDate(startRaw)
-      const endDate = parseDate(endRaw)
+        const startDate = parseDate(startRaw)
+        const endDate   = parseDate(endRaw)
 
-      // Determine is_current
-      let isCurrent: boolean
-      if (isHistory) {
-        isCurrent = false
-      } else if (endDate && endDate !== '3099-12-31' && endDate < today) {
-        isCurrent = false
-      } else {
-        isCurrent = true
+        // Skip rows that carry no meaningful data for this slot
+        if (!startDate && !endDate && !natureRaw && !categoryRaw && !territoryRaw) return
+
+        let isCurrent: boolean
+        if (isHistory) {
+          isCurrent = false
+        } else if (endDate && endDate !== '3099-12-31' && endDate < today) {
+          isCurrent = false
+        } else {
+          isCurrent = true
+        }
+
+        await cache.insertPlatformRights({
+          movie_id: movieId,
+          platform_id: platformId,
+          category: cleanString(categoryRaw) ?? null,
+          start_date: startDate,
+          end_date: endDate,
+          territory: cleanString(territoryRaw) ?? null,
+          nature: cleanString(natureRaw) ?? null,
+          holdbacks: cleanString(holdbacksRaw) ?? null,
+          is_current: isCurrent,
+        })
       }
 
-      await cache.insertPlatformRights({
-        movie_id: movieId,
-        platform_id: platformId,
-        category: cleanString(categoryRaw) ?? null,
-        start_date: startDate,
-        end_date: endDate,
-        territory: cleanString(territoryRaw) ?? null,
-        nature: cleanString(natureRaw) ?? null,
-        is_current: isCurrent,
-      })
+      // Primary row
+      await insertSlotRow(dataCols)
+
+      // Continuation rows for additional natures
+      if (continuationColArrays) {
+        for (const contCols of continuationColArrays) {
+          await insertSlotRow(contCols)
+        }
+      }
     } catch (err) {
       slotErrors.push({
         row2Label,
@@ -1093,14 +846,16 @@ async function processHomeRow(
   keys: string[],
   cache: CacheStore,
   userId: string,
-  userRole: string,
   resolution: 'skip' | 'update' | null,
   platformSlots: PlatformSlot[] | null,
   rawDataCols: string[],
   slotErrors: PlatformRightsRowError[],
+  continuationColArrays?: string[][],
 ): Promise<'created' | 'skipped' | 'updated'> {
-  const title = cleanString(row['Title'])
-  if (!title) throw new Error('Title is required')
+  // New home sheet uses "Movie Name" at col 1 (not "Title")
+  const titleKey_col = findColumnByPattern(keys, ['Movie Name', 'Title'])
+  const title = cleanString(titleKey_col ? row[titleKey_col] : row['Movie Name'] ?? row['Title'])
+  if (!title) throw new Error('Movie Name is required')
 
   // ── Conflict check by title ──────────────────────────────────
   const titleKey = title.toLowerCase().trim()
@@ -1123,7 +878,6 @@ async function processHomeRow(
     : null
 
   // ── Production houses ────────────────────────────────────────
-  // Split by comma only (not & or -)
   let productionHouseName: string | null = null
   const rawProductionHouse = cleanString(row['Production House'])
   if (rawProductionHouse) {
@@ -1138,27 +892,49 @@ async function processHomeRow(
   }
 
   // ── Release date / year ──────────────────────────────────────
-  const rawDate = cleanString(row['Theatrical Release Date'])
-  // If it parses as a proper date, store formatted; otherwise store the raw text (e.g. "UNRELEASED")
+  // New sheet uses "Release Year" (col 6) — no separate release date column
+  const releaseDateKey = findColumnByPattern(keys, ['Theatrical Release Date', 'Release Date'])
+  const releaseYearKey = findColumnByPattern(keys, ['Release Year'])
+  const rawDate = cleanString(releaseDateKey ? row[releaseDateKey] : null)
+  const rawYear = cleanString(releaseYearKey ? row[releaseYearKey] : null)
+  // Release Year column may hold a plain year ("2022") or a full date ("10-May-96").
+  // Plain year → release_year only, no release_date.
+  // Full date  → both release_date and release_year (extracted).
   const parsedDate = rawDate ? parseDate(rawDate) : null
-  const releaseDate = parsedDate ?? rawDate // raw text fallback
-  const releaseYear = parsedDate ? parsedDate.split('-')[0] : rawDate && /^\d{4}$/.test(rawDate.trim()) ? rawDate.trim() : null
+  const isPlainYear = rawYear && /^\d{4}$/.test(rawYear.trim())
+  const parsedFromRawYear = !isPlainYear && rawYear ? parseDate(rawYear) : null
+  const releaseDate = parsedDate ?? parsedFromRawYear ?? rawDate ?? null
+  const releaseYear = parsedDate
+    ? parsedDate.split('-')[0]
+    : parsedFromRawYear
+    ? parsedFromRawYear.split('-')[0]
+    : isPlainYear
+    ? rawYear!.trim()
+    : null
 
-  // ── Recensor flag ────────────────────────────────────────────
-  const cert = normalizeCertification(row['Censor'])
+  // ── Certification ─────────────────────────────────────────────
+  const certKey = findColumnByPattern(keys, ['Certification', 'Censor'])
+  const cert = normalizeCertification(certKey ? row[certKey] : null)
   const recensorFlag = cert === 'A'
 
-  // ── Nature of rights (store raw, no normalization) ───────────
-  const natureKey = findColumnByPattern(keys, ['Nature of Right', 'Nature of Rights'])
-  const natureOfRights = preserveRawText(natureKey ? row[natureKey] : null)
+  // ── Color / B&W ───────────────────────────────────────────────
+  const colorKey = findColumnByPattern(keys, ['Color/B/W', 'Color/BW', 'Color or BW', 'Color'])
+  const colorOrBw = cleanString(colorKey ? row[colorKey] : null) ?? null
 
-  // ── Jointly owned extras ─────────────────────────────────────
-  const jointExploitKey = findColumnByPattern(keys, ['Joint Exploitation Rights', 'Exploitation Rights'])
+  // ── Jointly owned ────────────────────────────────────────────
+  // New sheet: col 10 = "Jointly Owned" (Yes/No), col 11 = "Jointly Owned by", col 12 = "Revenue Share", col 13 = "Joint Buy Back date"
+  const jointlyOwnedKey = findColumnByPattern(keys, ['Jointly Owned'])
+  const jointlyOwnedByKey = findColumnByPattern(keys, ['Jointly Owned by', 'Jointly Owned By'])
   const revenueShareKey = findColumnByPattern(keys, ['Revenue Share'])
-  const buyBackKey = findColumnByPattern(keys, ['Joint Buy Back Date', 'Buy Back Date'])
+  const buyBackKey = findColumnByPattern(keys, ['Joint Buy Back', 'Buy Back Date'])
 
-  // ── Approval status based on uploader role ───────────────────
-  const approvalStatus = userRole === 'admin' ? 'approved' : 'pending'
+  const jointlyOwnedRaw = jointlyOwnedKey ? cleanString(row[jointlyOwnedKey]) : null
+  const isJointlyOwned = jointlyOwnedRaw?.toLowerCase() === 'yes'
+  // "Sold to Grassroot" (or similar) in the Jointly Owned column → flags home_sold, not jointly_owned
+  const isSoldEntry = jointlyOwnedRaw && !isJointlyOwned && jointlyOwnedRaw.toLowerCase().startsWith('sold')
+
+  // Home productions always require legal approval — never auto-approve on import
+  const approvalStatus = 'pending'
 
   const movieData: Record<string, unknown> = {
     title,
@@ -1168,49 +944,24 @@ async function processHomeRow(
     release_year: releaseYear,
     certification: cert,
     recensor_flag: recensorFlag,
+    color_or_bw: colorOrBw,
     language,
     production_house_name: productionHouseName,
-    trailer_link: cleanString(row['YT Trailer Link']),
-    nature_of_rights: natureOfRights,
+    trailer_link: cleanString(row['YT Trailer Link'] ?? row['YT Link']),
     remarks: cleanString(row['Remarks']),
-    actionables: cleanString(row['Actionable']),
-    holdbacks: parseHoldbacks(row['Holdbacks'] ?? row['Holdback']),
-    territory: 'World',
-    // Jointly owned extras
-    jointly_exploitation_rights: jointExploitKey ? preserveRawText(row[jointExploitKey]) : null,
-    revenue_share: revenueShareKey ? preserveRawText(row[revenueShareKey]) : null,
-    joint_prod_buy_back_date: buyBackKey ? parseDate(row[buyBackKey]) : null,
-    // All rights fields fixed for home production
-    satellite_rights: 'Yes',
-    internet_rights: 'Yes',
-    negative_rights: 'Yes',
-    other_rights: 'Yes',
-    nature_of_satellite_rights: 'Exclusive',
-    nature_of_internet_rights: 'Exclusive',
-    nature_of_negative_rights: 'Exclusive',
-    nature_of_other_rights: 'Exclusive',
+    actionables: cleanString(row['Actionables'] ?? row['Actionable']),
+    jointly_owned: isJointlyOwned,
+    jointly_exploitation_rights: isJointlyOwned && jointlyOwnedByKey
+      ? preserveRawText(row[jointlyOwnedByKey])
+      : null,
+    revenue_share: isJointlyOwned && revenueShareKey ? preserveRawText(row[revenueShareKey]) : null,
+    joint_prod_buy_back_date: isJointlyOwned && buyBackKey ? parseDate(row[buyBackKey]) : null,
+    home_sold: !!isSoldEntry,
     clip_rights: 'Yes',
     character_rights: 'Yes',
     prequel_sequel_rights: 'Yes',
     subtitling_rights: 'Yes',
     dubbing_rights: 'Yes',
-    // Fields not applicable to home production — store as null
-    assignor_licensor: null,
-    licensee: null,
-    agreement_date: null,
-    agreement_start_date: null,
-    agreement_end_date: null,
-    satellite_rights_start_date: null,
-    satellite_rights_end_date: null,
-    internet_rights_start_date: null,
-    internet_rights_end_date: null,
-    negative_rights_start_date: null,
-    negative_rights_end_date: null,
-    other_rights_start_date: null,
-    other_rights_end_date: null,
-    syndication_internet_rights: null,
-    satellite_rights_classification: null,
-    internet_rights_classification: null,
     wtp_library: null,
     approval_status: approvalStatus,
     created_by: userId,
@@ -1225,7 +976,7 @@ async function processHomeRow(
     await relinkPeople(row, cache, movieId, castKey, directorKey)
     if (platformSlots) {
       await cache.clearMoviePlatformRights(movieId)
-      await extractAcquiredPlatformRights(rawDataCols, platformSlots, cache, movieId, slotErrors)
+      await extractPlatformRights(rawDataCols, platformSlots, cache, movieId, slotErrors, true, continuationColArrays)
     }
     return 'updated'
   }
@@ -1237,7 +988,7 @@ async function processHomeRow(
 
   await relinkPeople(row, cache, movieId, castKey, directorKey)
   if (platformSlots) {
-    await extractAcquiredPlatformRights(rawDataCols, platformSlots, cache, movieId, slotErrors)
+    await extractPlatformRights(rawDataCols, platformSlots, cache, movieId, slotErrors, true, continuationColArrays)
   }
   return 'created'
 }
@@ -1281,6 +1032,230 @@ function parseYesNoDefault(value: string | null | undefined): string {
   return v
 }
 
+interface MovieRightsPayload {
+  [key: string]: unknown
+  movie_id: string
+  right_type: string
+  nature: string | null
+  classification: string | null
+  territory: string | null
+  start_date: string | null
+  end_date: string | null
+  syndication: string | null
+  holdbacks: string | null
+}
+
+/**
+ * Column key cache for movie_rights extraction — computed once per import, reused per row.
+ *
+ * The acquired sheet primary rights section has:
+ *   - Flags:          Satellite Rights | Internet Rights | Negative Rights | Other Rights
+ *   - Classification: Satellite Rights Classification | Internet Classification
+ *   - Nature:         Nature of Satellite Rights | Nature of Internet Rights |
+ *                     Nature of Negative Rights | Nature of Other Rights
+ *   - Dates:          Satellite Rights Start/End Date | Internet Rights Start/End Date |
+ *                     Negative Rights Start/End Date | Other Rights Start/End Date
+ *   - Shared:         Territory (one column for all) | Holdbacks | Syndication- Internet Rights
+ *
+ * Airborne and Ship rights appear only in the platform rights section (cols 112+),
+ * not in the primary rights flags, so they are NOT included here.
+ */
+interface MovieRightsColKeys {
+  satRightsKey: string | null
+  intRightsKey: string | null
+  negRightsKey: string | null
+  othRightsKey: string | null
+  satClassKey: string | null
+  intClassKey: string | null
+  othClassKey: string | null
+  syndicationIntKey: string | null
+  holdbacksKey: string | null
+  natSatKey: string | null
+  natIntKey: string | null
+  natNegKey: string | null
+  natOthKey: string | null
+  satStartKey: string | null
+  satEndKey: string | null
+  intStartKey: string | null
+  intEndKey: string | null
+  negStartKey: string | null
+  negEndKey: string | null
+  othStartKey: string | null
+  othEndKey: string | null
+  territoryKey: string | null
+}
+
+function buildMovieRightsColKeys(keys: string[]): MovieRightsColKeys {
+  return {
+    satRightsKey:     findColumnByPattern(keys, ['Satellite Rights']),
+    intRightsKey:     findColumnByPattern(keys, ['Internet Rights']),
+    negRightsKey:     findColumnByPattern(keys, ['Negative Rights']),
+    othRightsKey:     findColumnByPattern(keys, ['Other Rights', 'Others']),
+    satClassKey:      findColumnByPattern(keys, ['Satellite Rights Classification', 'Satellite Classification']),
+    intClassKey:      findColumnByPattern(keys, ['Internet Classification', 'Internet Rights - Classification', 'Internet Rights Classification']),
+    othClassKey:      findColumnByPattern(keys, ['Other Rights Classification', 'Other Classification']),
+    syndicationIntKey: findColumnByPattern(keys, ['Syndication- Internet Rights', 'Syndication - Internet Rights', 'Internet Rights Syndication', 'Syndication']),
+    holdbacksKey:     findColumnByPattern(keys, ['Holdbacks', 'Holdback']),
+    natSatKey:        findColumnByPattern(keys, ['Nature of Satellite Rights', 'Nature of Satellite']),
+    natIntKey:        findColumnByPattern(keys, ['Nature of Internet Rights', 'Nature of Internet']),
+    natNegKey:        findColumnByPattern(keys, ['Nature of Negative Rights', 'Nature of Negative']),
+    natOthKey:        findColumnByPattern(keys, ['Nature of Other Rights', 'Nature of Other']),
+    satStartKey:      findColumnByPattern(keys, ['Satellite Rights Start Date', 'Satellite Start Date']),
+    satEndKey:        findColumnByPattern(keys, ['Satellite Rights End Date',   'Satellite End Date']),
+    intStartKey:      findColumnByPattern(keys, ['Internet Rights Start Date',  'Internet Start Date']),
+    intEndKey:        findColumnByPattern(keys, ['Internet Rights End Date',    'Internet End Date']),
+    negStartKey:      findColumnByPattern(keys, ['Negative Rights Start Date',  'Negative Start Date']),
+    negEndKey:        findColumnByPattern(keys, ['Negative Rights End Date',    'Negative End Date']),
+    othStartKey:      findColumnByPattern(keys, ['Other Rights Start Date',     'Other Start Date']),
+    othEndKey:        findColumnByPattern(keys, ['Other Rights End Date',       'Other End Date']),
+    territoryKey:     findColumnByPattern(keys, ['Territory']),
+  }
+}
+
+/**
+ * Build movie_rights DB rows from a primary CSV row plus optional continuation rows.
+ *
+ * Primary rights in the acquired sheet: Satellite, Internet, Negative, Other.
+ * Each type has: Yes/No flag, classification, nature, territory (shared), start/end date,
+ * syndication (Internet only), holdbacks (shared).
+ *
+ * Multi-nature continuation rows: when a movie has multiple natures for the same right type,
+ * the sheet adds continuation rows that only have nature/territory/start/end filled.
+ * Those are passed in `continuationRows` and each generates an additional movie_rights record.
+ */
+function buildMovieRightsRows(
+  movieId: string,
+  row: Record<string, string>,
+  keys: string[],
+  col: (row: Record<string, string>, key: string | null) => string | undefined,
+  ck?: MovieRightsColKeys,
+  continuationRows?: Record<string, string>[],
+): MovieRightsPayload[] {
+  const rows: MovieRightsPayload[] = []
+  const k = ck ?? buildMovieRightsColKeys(keys)
+
+  const satVal = parseYesNoDefault(col(row, k.satRightsKey))
+  const intVal = parseYesNoDefault(col(row, k.intRightsKey))
+  const negVal = parseYesNoDefault(col(row, k.negRightsKey))
+  const othVal = parseYesNoDefault(col(row, k.othRightsKey))
+
+  const territory = cleanString(col(row, k.territoryKey)) ?? null
+  const holdbacks = parseHoldbacks(cleanString(col(row, k.holdbacksKey)))
+
+  // ── Primary row: one record per active right type ──────────────────────
+  const satNature = preserveRawText(col(row, k.natSatKey))
+  const satClass = cleanString(col(row, k.satClassKey))
+  const satStartDate = parseDate(col(row, k.satStartKey))
+  const satEndDate = parseDate(col(row, k.satEndKey))
+  if (satVal === 'Yes' || satNature || satClass || satStartDate || satEndDate) {
+    rows.push({
+      movie_id: movieId,
+      right_type: 'Satellite',
+      nature: satNature || (satVal === 'Yes' ? 'Owned' : null),
+      classification: satClass,
+      territory,
+      start_date: satStartDate,
+      end_date: satEndDate,
+      syndication: null,
+      holdbacks,
+    })
+  }
+
+  const intNature = preserveRawText(col(row, k.natIntKey))
+  const intClass = cleanString(col(row, k.intClassKey))
+  const intStartDate = parseDate(col(row, k.intStartKey))
+  const intEndDate = parseDate(col(row, k.intEndKey))
+  // Create Internet row if the Yes flag is set OR if detailed data exists.
+  // Default nature to 'Owned' when flag=Yes but no nature text — satisfies NOT NULL.
+  if (intVal === 'Yes' || intNature || intClass || intStartDate || intEndDate) {
+    rows.push({
+      movie_id: movieId,
+      right_type: 'Internet',
+      nature: intNature || (intVal === 'Yes' ? 'Owned' : null),
+      classification: intClass,
+      territory,
+      start_date: intStartDate,
+      end_date: intEndDate,
+      syndication: preserveRawText(col(row, k.syndicationIntKey)),
+      holdbacks,
+    })
+  }
+
+  const negNature = preserveRawText(col(row, k.natNegKey))
+  if (negVal === 'Yes' || negNature || parseDate(col(row, k.negStartKey)) || parseDate(col(row, k.negEndKey))) {
+    rows.push({
+      movie_id: movieId,
+      right_type: 'Negative',
+      nature: negNature || (negVal === 'Yes' ? 'Owned' : null),
+      classification: null,
+      territory,
+      start_date: parseDate(col(row, k.negStartKey)),
+      end_date: parseDate(col(row, k.negEndKey)),
+      syndication: null,
+      holdbacks,
+    })
+  }
+
+  // "Other Rights" cell may carry a label like "Yes ( Airborne Rights, Ship Rights...)"
+  // or just "Yes". Store the raw value as classification when it isn't a plain Yes/No.
+  const othNature = preserveRawText(col(row, k.natOthKey))
+  if (othVal && othVal !== 'No') {
+    rows.push({
+      movie_id: movieId,
+      right_type: 'Other',
+      nature: othNature,
+      classification: othVal !== 'Yes' ? othVal : cleanString(col(row, k.othClassKey)),
+      territory,
+      start_date: parseDate(col(row, k.othStartKey)),
+      end_date: parseDate(col(row, k.othEndKey)),
+      syndication: null,
+      holdbacks,
+    })
+  }
+
+  // ── Continuation rows: additional natures for the same right types ─────
+  // A continuation row has the rights flag blank but fills in nature/start/end
+  // for the type(s) it adds a new nature to.
+  if (continuationRows) {
+    for (const contRow of continuationRows) {
+      const contTerritory = cleanString(col(contRow, k.territoryKey)) ?? territory
+      const contHoldbacks = parseHoldbacks(cleanString(col(contRow, k.holdbacksKey))) ?? holdbacks
+
+      const pushIfData = (
+        rightType: string,
+        natKey: string | null,
+        startKey: string | null,
+        endKey: string | null,
+        classKey: string | null,
+        synKey: string | null,
+      ) => {
+        const nature = preserveRawText(col(contRow, natKey))
+        const startDate = parseDate(col(contRow, startKey))
+        const endDate = parseDate(col(contRow, endKey))
+        if (!nature && !startDate && !endDate) return
+        rows.push({
+          movie_id: movieId,
+          right_type: rightType,
+          nature,
+          classification: cleanString(col(contRow, classKey)),
+          territory: contTerritory,
+          start_date: startDate,
+          end_date: endDate,
+          syndication: synKey ? preserveRawText(col(contRow, synKey)) : null,
+          holdbacks: contHoldbacks,
+        })
+      }
+
+      pushIfData('Satellite', k.natSatKey, k.satStartKey, k.satEndKey, k.satClassKey, null)
+      pushIfData('Internet',  k.natIntKey, k.intStartKey, k.intEndKey, k.intClassKey, k.syndicationIntKey)
+      pushIfData('Negative',  k.natNegKey, k.negStartKey, k.negEndKey, null, null)
+      pushIfData('Other',     k.natOthKey, k.othStartKey, k.othEndKey, k.othClassKey, null)
+    }
+  }
+
+  return rows
+}
+
 async function processAcquiredRow(
   row: Record<string, string>,
   keys: string[],
@@ -1291,6 +1266,8 @@ async function processAcquiredRow(
   platformSlots: PlatformSlot[] | null,
   rawDataCols: string[],
   slotErrors: PlatformRightsRowError[],
+  continuationRows?: Record<string, string>[],
+  continuationRawCols?: string[][],
 ): Promise<'created' | 'skipped' | 'updated'> {
   // ── Required field ───────────────────────────────────────
   const movieNameKey = findColumnByPattern(keys, ['Movie Name', 'Movie Title', 'Title'])
@@ -1354,48 +1331,9 @@ async function processAcquiredRow(
   const certKey = findColumnByPattern(keys, ['Certification', 'Certif'])
   const colorKey = findColumnByPattern(keys, ['Color/B/W', 'Color / B/W', 'Colour'])
 
-  // ── Primary Rights Yes/No flags ──────────────────────────
-  // Blank cell = 'No' (not licensed). Other Rights may also contain a name (e.g. "Cable TV") — store as-is.
-  const satRightsKey = findColumnByPattern(keys, ['Satellite Rights'])
-  const intRightsKey = findColumnByPattern(keys, ['Internet Rights'])
-  const negRightsKey = findColumnByPattern(keys, ['Negative Rights'])
-  const othRightsKey = findColumnByPattern(keys, ['Other Rights', 'Others'])
-
-  // ── Rights sub-classifications ───────────────────────────
-  const satClassKey = findColumnByPattern(keys, ['Satellite Rights Classification', 'Satellite Classification'])
-  const internetClassKey = findColumnByPattern(keys, ['Internet Classification', 'Internet Rights - Classification', 'Internet Rights Classification'])
-
-  // ── Holdbacks: explicit column first, then positional fallback after Internet Classification ──
-  const hbKey = findColumnByPattern(keys, ['Holdbacks', 'Holdback'])
-  let holdbacksRaw: string | null = hbKey ? cleanString(row[hbKey]) : null
-  if (!holdbacksRaw && internetClassKey) {
-    const idx = keys.indexOf(internetClassKey)
-    const candidate = idx + 1 < keys.length ? cleanString(row[keys[idx + 1]]) : null
-    if (candidate && candidate.toLowerCase().startsWith('on ')) holdbacksRaw = candidate
-  }
-
-  // ── Nature per right type — store raw text, null for blank/n/a ──
-  const natSatKey = findColumnByPattern(keys, ['Nature of Satellite Rights', 'Nature of Satellite'])
-  const natIntKey = findColumnByPattern(keys, ['Nature of Internet Rights', 'Nature of Internet'])
-  const natNegKey = findColumnByPattern(keys, ['Nature of Negative Rights', 'Nature of Negative'])
-  const natOthKey = findColumnByPattern(keys, ['Nature of Other Rights', 'Nature of Other'])
-
-  // ── Per-right date ranges ────────────────────────────────
-  const satStartKey = findColumnByPattern(keys, ['Satellite Rights Start Date', 'Satellite Start Date'])
-  const satEndKey = findColumnByPattern(keys, ['Satellite Rights End Date', 'Satellite End Date'])
-  const intStartKey = findColumnByPattern(keys, ['Internet Rights Start Date', 'Internet Start Date'])
-  const intEndKey = findColumnByPattern(keys, ['Internet Rights End Date', 'Internet End Date'])
-  const negStartKey = findColumnByPattern(keys, ['Negative Rights Start Date', 'Negative Start Date'])
-  const negEndKey = findColumnByPattern(keys, ['Negative Rights End Date', 'Negative End Date'])
-  const othStartKey = findColumnByPattern(keys, ['Other Rights Start Date', 'Other Start Date'])
-  const othEndKey = findColumnByPattern(keys, ['Other Rights End Date', 'Other End Date'])
-
   // ── Clip rights ──────────────────────────────────────────
   const clipRightsKey = findColumnByPattern(keys, ['Clip Rights'])
   const clipDurKey = findColumnByPattern(keys, ['Duration', 'Clip Rights Duration'])
-
-  // ── Syndication ──────────────────────────────────────────
-  const syndicationKey = findColumnByPattern(keys, ['Syndication- Internet Rights', 'Syndication - Internet Rights', 'Syndication'])
 
   // ── Derivative / secondary ───────────────────────────────
   const preqSeqKey = findColumnByPattern(keys, ['Prequel/ Sequel Rights', 'Prequel/Sequel Rights', 'Prequel Sequel'])
@@ -1404,13 +1342,12 @@ async function processAcquiredRow(
   const dubbingKey = findColumnByPattern(keys, ['Dubbing Rights'])
 
   // ── Other metadata ───────────────────────────────────────
-  const territoryKey = findColumnByPattern(keys, ['Territory'])
   const remarksKey = findColumnByPattern(keys, ['Remarks'])
   const actionablesKey = findColumnByPattern(keys, ['Actionables', 'Actionable'])
   const castKey = findColumnByPattern(keys, ['Cast Details', 'Cast'])
   const directorKey = findColumnByPattern(keys, ['Director'])
 
-  // ── Build movie record ───────────────────────────────────
+  // ── Build movie record (no flat rights columns — they live in movie_rights) ─
   const movieData: Record<string, unknown> = {
     title,
     source: 'acquired',
@@ -1425,54 +1362,33 @@ async function processAcquiredRow(
     agreement_date: parseDate(col(row, agrmtDateKey)),
     agreement_start_date: parseDate(col(row, agrmtStartKey)),
     agreement_end_date: parseDate(col(row, agrmtEndKey)),
-    // Primary Rights flags — blank = 'No' (not licensed); Other Rights may hold a name
-    satellite_rights: parseYesNoDefault(col(row, satRightsKey)),
-    internet_rights: parseYesNoDefault(col(row, intRightsKey)),
-    negative_rights: parseYesNoDefault(col(row, negRightsKey)),
-    other_rights: parseYesNoDefault(col(row, othRightsKey)),
-    // Sub-classifications
-    satellite_rights_classification: cleanString(col(row, satClassKey)),
-    internet_rights_classification: cleanString(col(row, internetClassKey)),
-    // Nature per type
-    nature_of_satellite_rights: preserveRawText(col(row, natSatKey)),
-    nature_of_internet_rights: preserveRawText(col(row, natIntKey)),
-    nature_of_negative_rights: preserveRawText(col(row, natNegKey)),
-    nature_of_other_rights: preserveRawText(col(row, natOthKey)),
-    // Date ranges
-    satellite_rights_start_date: parseDate(col(row, satStartKey)),
-    satellite_rights_end_date: parseDate(col(row, satEndKey)),
-    internet_rights_start_date: parseDate(col(row, intStartKey)),
-    internet_rights_end_date: parseDate(col(row, intEndKey)),
-    negative_rights_start_date: parseDate(col(row, negStartKey)),
-    negative_rights_end_date: parseDate(col(row, negEndKey)),
-    other_rights_start_date: parseDate(col(row, othStartKey)),
-    other_rights_end_date: parseDate(col(row, othEndKey)),
-    // Clip rights
+    // Clip rights (standalone — no nature/territory)
     clip_rights: parseYesNoDefault(col(row, clipRightsKey)),
     clip_rights_duration: cleanString(col(row, clipDurKey)),
-    // Holdbacks
-    holdbacks: parseHoldbacks(holdbacksRaw),
-    // Syndication
-    syndication_internet_rights: preserveRawText(col(row, syndicationKey)),
     // Derivative / secondary
     prequel_sequel_rights: preserveRawText(col(row, preqSeqKey)),
     character_rights: preserveRawText(col(row, charRightsKey)),
     subtitling_rights: preserveRawText(col(row, subtitleKey)),
     dubbing_rights: preserveRawText(col(row, dubbingKey)),
-    // Other
-    nature_of_rights: null,
-    territory: cleanString(col(row, territoryKey)),
     remarks: cleanString(col(row, remarksKey)),
     actionables: cleanString(col(row, actionablesKey)),
     approval_status: userRole === 'admin' ? 'approved' : 'pending',
   }
 
+  // Pre-build column key cache once — reused across primary + continuation rows
+  const ck = buildMovieRightsColKeys(keys)
+
   if (existingId && resolution === 'update') {
     await cache.updateMovie(existingId, movieData)
     await relinkPeople(row, cache, existingId, castKey, directorKey)
+    // Sync movie_rights (including continuation rows for extra natures)
+    await cache.clearMovieRights(existingId)
+    const mrRows = buildMovieRightsRows(existingId, row, keys, col, ck, continuationRows)
+    await cache.insertMovieRightsRows(mrRows)
+    // Sync platform_rights (including continuation rows for extra natures)
     if (platformSlots) {
       await cache.clearMoviePlatformRights(existingId)
-      await extractAcquiredPlatformRights(rawDataCols, platformSlots, cache, existingId, slotErrors)
+      await extractPlatformRights(rawDataCols, platformSlots, cache, existingId, slotErrors, false, continuationRawCols)
     }
     return 'updated'
   }
@@ -1484,8 +1400,12 @@ async function processAcquiredRow(
   cache.movies.set(titleKey, movieId)
 
   await relinkPeople(row, cache, movieId, castKey, directorKey)
+  // Insert movie_rights rows (including continuation rows for extra natures)
+  const mrRows = buildMovieRightsRows(movieId, row, keys, col, ck, continuationRows)
+  await cache.insertMovieRightsRows(mrRows)
+  // Insert platform_rights rows (including continuation rows for extra natures)
   if (platformSlots) {
-    await extractAcquiredPlatformRights(rawDataCols, platformSlots, cache, movieId, slotErrors)
+    await extractPlatformRights(rawDataCols, platformSlots, cache, movieId, slotErrors, false, continuationRawCols)
   }
 
   return 'created'
@@ -1498,13 +1418,15 @@ async function processAcquiredRow(
 function detectCSVFormat(headers: string[]): 'home' | 'acquired' | 'unknown' {
   const headersLower = headers.map((h) => h.toLowerCase().trim())
 
-  // Acquired: has Movie Name or Assignor/Licensor
-  if (headersLower.some((h) => h === 'movie name')) return 'acquired'
-  if (headersLower.some((h) => h.includes('assignor') || h.includes('licensor'))) return 'acquired'
+  // Home: has "Jointly Owned" column (unique to home sheet) or "Production No" at col 0
+  if (headersLower.some((h) => h === 'jointly owned')) return 'home'
+  if (headersLower[0] === 'production no') return 'home'
+  // Legacy home format: had "Title" as the primary movie name column
+  if (headersLower.some((h) => h === 'title') && !headersLower.some((h) => h.includes('assignor') || h.includes('licensor'))) return 'home'
 
-  // Home: has Title or Production No
-  if (headersLower.some((h) => h === 'title')) return 'home'
-  if (headersLower.some((h) => h.includes('production no'))) return 'home'
+  // Acquired: has Assignor/Licensor column or is definitively NOT home
+  if (headersLower.some((h) => h.includes('assignor') || h.includes('licensor'))) return 'acquired'
+  if (headersLower.some((h) => h === 'movie name')) return 'acquired'
 
   return 'unknown'
 }
@@ -1514,22 +1436,22 @@ function validateHeaders(headers: string[], format: 'home' | 'acquired'): { vali
   const warnings: string[] = []
 
   if (format === 'home') {
-    if (!headersLower.some((h) => h === 'title')) {
+    // Home sheet requires either "Movie Name" (new format) or "Title" (legacy)
+    const hasTitle = headersLower.some((h) => h === 'movie name' || h === 'title')
+    if (!hasTitle) {
       return {
         valid: false,
-        error: "Home production CSV is missing the required 'Title' column. " + `First columns found: ${headers.slice(0, 10).join(', ')}`,
+        error: "Home production CSV is missing the required 'Movie Name' column. " + `First columns found: ${headers.slice(0, 10).join(', ')}`,
         warnings: [],
       }
     }
-    // Soft warnings for useful-but-optional columns
-    for (const label of ['Cast', 'Director', 'Language', 'Production House', 'Theatrical Release Date']) {
+    for (const label of ['Cast', 'Director', 'Language', 'Production House']) {
       if (!headersLower.some((h) => h.includes(label.toLowerCase()))) {
         warnings.push(label)
       }
     }
   } else {
-    // Only Movie Name is required for acquired — every other column is optional
-    const hasMovieName = headersLower.some((h) => h === 'movie name') || headersLower.some((h) => h === 'movie title') || headersLower.some((h) => h === 'title')
+    const hasMovieName = headersLower.some((h) => h === 'movie name' || h === 'movie title' || h === 'title')
     if (!hasMovieName) {
       return {
         valid: false,
@@ -1537,7 +1459,6 @@ function validateHeaders(headers: string[], format: 'home' | 'acquired'): { vali
         warnings: [],
       }
     }
-    // Soft warnings for useful-but-optional columns
     const usefulCols: [string, string][] = [
       ['cast details', 'Cast Details'],
       ['director', 'Director'],
@@ -1738,7 +1659,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           message:
-            "Could not detect CSV format. The file must have a 'Movie Name' column (acquired) or a 'Title' column (home production). " +
+            "Could not detect CSV format. The file must have a 'Movie Name' + 'Jointly Owned' column (home production) or a 'Movie Name' + 'Assignor/Licensor' column (acquired). " +
             `Columns found: ${headers.slice(0, 15).join(', ')}${headers.length > 15 ? '…' : ''}`,
         },
         { status: 400 },
@@ -1764,10 +1685,9 @@ export async function POST(request: Request) {
     //   Field row  = preambleRows[headerRowIndex]   ← same row as metadata headers
     let acquiredPlatformSlots: PlatformSlot[] | null = null
     if (detectedFormat === 'acquired' && subHeaderRowIndex !== null) {
-      const bannerRow = headerRowIndex > 0 ? preambleRows[headerRowIndex - 1] : []
       const typeRow = preambleRows[headerRowIndex]
       const fieldRow = preambleRows[subHeaderRowIndex]
-      acquiredPlatformSlots = parsePlatformRightsSections(bannerRow, typeRow, fieldRow)
+      acquiredPlatformSlots = parsePlatformRightsSections(typeRow, fieldRow)
     }
     let homePlatformSlots: PlatformSlot[] | null = null
     if (detectedFormat === 'home') {
@@ -1777,16 +1697,14 @@ export async function POST(request: Request) {
       // headerRowIndex is 0 in this layout, so we always use rows [0,1,2] as [banner,type,field].
       if (headerRowIndex >= 2) {
         // Legacy layout where preamble rows sit above the header
-        const bannerRow = preambleRows[headerRowIndex - 2] ?? []
         const typeRow = preambleRows[headerRowIndex - 1] ?? []
         const fieldRow = preambleRows[headerRowIndex]
-        homePlatformSlots = parsePlatformRightsSections(bannerRow, typeRow, fieldRow)
+        homePlatformSlots = parsePlatformRightsSections(typeRow, fieldRow)
       } else {
         // Standard home layout: header row IS row 0; platform sub-rows are rows 1 and 2
-        const bannerRow = preambleRows[headerRowIndex] ?? []       // row 0 — also the metadata header
         const typeRow = preambleRows[headerRowIndex + 1] ?? []     // row 1 — platform type labels
         const fieldRow = preambleRows[headerRowIndex + 2] ?? []    // row 2 — Platform/License, Category…
-        homePlatformSlots = parsePlatformRightsSections(bannerRow, typeRow, fieldRow)
+        homePlatformSlots = parsePlatformRightsSections(typeRow, fieldRow)
       }
     }
 
@@ -1818,32 +1736,70 @@ export async function POST(request: Request) {
     const resolutionsRaw = formData.get('resolutions') as string | null
     const resolutions: Record<string, 'skip' | 'update'> = resolutionsRaw ? JSON.parse(resolutionsRaw) : {}
 
-    // 9a. First pass: detect unresolved conflicts before writing anything
+    // 9a. Group rows: a continuation row has no movie name and belongs to the most
+    //     recent primary row. Both acquired and home formats use continuation rows for
+    //     additional platform natures (e.g. DTH with two nature entries).
+    //
+    // A continuation row is defined as: Movie Name cell is blank/null AND at least one
+    // data cell is non-empty.
+
+    interface AcquiredGroup {
+      primaryIndex: number              // index into rows[] for the primary row
+      continuationIndexes: number[]     // indexes of following continuation rows
+    }
+
+    const movieNameKey = findColumnByPattern(headers, ['Movie Name', 'Movie Title', 'Title'])
+
+    const buildGroups = (): AcquiredGroup[] => {
+      const groups: AcquiredGroup[] = []
+      let currentGroup: AcquiredGroup | null = null
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i] as Record<string, string>
+        const title = cleanString(col(row, movieNameKey) ?? (movieNameKey ? row[movieNameKey] : undefined))
+        if (title) {
+          currentGroup = { primaryIndex: i, continuationIndexes: [] }
+          groups.push(currentGroup)
+        } else if (currentGroup) {
+          currentGroup.continuationIndexes.push(i)
+        }
+      }
+      return groups
+    }
+
+    let acquiredGroups: AcquiredGroup[] = []
+    let homeGroups: AcquiredGroup[] = []
+
+    if (detectedFormat === 'acquired') {
+      acquiredGroups = buildGroups()
+    } else {
+      homeGroups = buildGroups()
+    }
+
+    // 9b. First pass: detect unresolved conflicts before writing anything
     {
       const unresolvedConflicts: ConflictRow[] = []
 
       if (detectedFormat === 'home') {
-        // Home: conflict = same title already in DB (prod no is not unique — dubbed versions share it)
-        for (let i = 0; i < rows.length; i++) {
-          const row = rows[i] as Record<string, string>
-          const title = cleanString(row['Title'])
+        // Home: check only primary rows (continuation rows belong to the same movie)
+        for (const group of homeGroups) {
+          const row = rows[group.primaryIndex] as Record<string, string>
+          const title = cleanString(movieNameKey ? row[movieNameKey] : row['Movie Name'] ?? row['Title'])
           if (!title) continue
           const existingId = cache.movies.get(title.toLowerCase().trim()) ?? null
           if (existingId && !(title in resolutions)) {
-            unresolvedConflicts.push({ row: i + 2, title, existingId })
+            unresolvedConflicts.push({ row: group.primaryIndex + 2, title, existingId })
           }
         }
       } else {
-        // Acquired: conflict = same title already in DB
-        const movieNameKey = findColumnByPattern(headers, ['Movie Name', 'Movie Title', 'Title'])
-        for (let i = 0; i < rows.length; i++) {
-          const row = rows[i] as Record<string, string>
+        // Acquired: check only primary rows (continuation rows belong to the same movie)
+        for (const group of acquiredGroups) {
+          const row = rows[group.primaryIndex] as Record<string, string>
           const title = cleanString(col(row, movieNameKey) ?? row['Movie Name'])
           if (!title) continue
           const titleKey = title.toLowerCase().trim()
           const existingId = cache.movies.get(titleKey) ?? null
           if (existingId && !(title in resolutions)) {
-            unresolvedConflicts.push({ row: i + 2, title, existingId })
+            unresolvedConflicts.push({ row: group.primaryIndex + 2, title, existingId })
           }
         }
       }
@@ -1861,17 +1817,19 @@ export async function POST(request: Request) {
 
     const dataStartRowIndex = subHeaderRowIndex !== null ? subHeaderRowIndex + 1 : effectiveDataStartRow
 
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i] as Record<string, string>
-      const rowNum = i + dataStartRowIndex + 1 // 1-based line number in original file
+    if (detectedFormat === 'home') {
+      // Iterate over pre-grouped primary rows, passing continuation raw col arrays along
+      for (const group of homeGroups) {
+        const i = group.primaryIndex
+        const row = rows[i] as Record<string, string>
+        const rowNum = i + dataStartRowIndex + 1
+        const contRawCols = group.continuationIndexes.map((ci) => rawCols[ci] ?? [])
 
-      try {
-        let result: 'created' | 'skipped' | 'updated'
-        if (detectedFormat === 'home') {
-          const homeTitle = cleanString(row['Title']) || ''
+        try {
+          const homeTitle = cleanString(movieNameKey ? row[movieNameKey] : row['Movie Name'] ?? row['Title']) || ''
           const homeResolution = homeTitle ? (resolutions[homeTitle] ?? null) : null
           const homeSlotErrors: PlatformRightsRowError[] = []
-          result = await processHomeRow(row, headers, cache, user.id, profile.role, homeResolution, homePlatformSlots, rawCols[i] ?? [], homeSlotErrors)
+          const result = await processHomeRow(row, headers, cache, user.id, homeResolution, homePlatformSlots, rawCols[i] ?? [], homeSlotErrors, contRawCols)
           for (const se of homeSlotErrors) {
             errors.push({
               row: rowNum,
@@ -1879,12 +1837,28 @@ export async function POST(request: Request) {
               message: se.message,
             })
           }
-        } else {
-          const movieNameKey = findColumnByPattern(headers, ['Movie Name', 'Movie Title', 'Title'])
+          if (result === 'created') success++
+          else if (result === 'updated') updated++
+          else skipped++
+        } catch (err) {
+          errors.push({ row: rowNum, message: err instanceof Error ? err.message : 'Unknown error' })
+        }
+      }
+    } else {
+      // Acquired: iterate over pre-grouped primary rows, passing continuation rows along
+      for (const group of acquiredGroups) {
+        const i = group.primaryIndex
+        const row = rows[i] as Record<string, string>
+        const rowNum = i + dataStartRowIndex + 1
+
+        const contRows = group.continuationIndexes.map((ci) => rows[ci] as Record<string, string>)
+        const contRawCols = group.continuationIndexes.map((ci) => rawCols[ci] ?? [])
+
+        try {
           const title = cleanString(col(row, movieNameKey) ?? row['Movie Name']) || ''
           const resolution = resolutions[title] ?? null
           const slotErrors: PlatformRightsRowError[] = []
-          result = await processAcquiredRow(
+          const result = await processAcquiredRow(
             row,
             headers,
             cache,
@@ -1894,8 +1868,9 @@ export async function POST(request: Request) {
             acquiredPlatformSlots,
             rawCols[i] ?? [],
             slotErrors,
+            contRows,
+            contRawCols,
           )
-          // Fold per-slot errors into the row error list
           for (const se of slotErrors) {
             errors.push({
               row: rowNum,
@@ -1903,15 +1878,12 @@ export async function POST(request: Request) {
               message: se.message,
             })
           }
+          if (result === 'created') success++
+          else if (result === 'updated') updated++
+          else skipped++
+        } catch (err) {
+          errors.push({ row: rowNum, message: err instanceof Error ? err.message : 'Unknown error' })
         }
-
-        if (result === 'created') success++
-        else if (result === 'updated') updated++
-        else skipped++
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Unknown error'
-        errors.push({ row: rowNum, message: msg })
-        // Don't abort — continue to next row so one bad row doesn't block the rest
       }
     }
 
@@ -1923,7 +1895,8 @@ export async function POST(request: Request) {
       skipped,
       updated,
       errors,
-      total: rows.length,
+      // Total = primary movie rows only (continuation rows don't count as separate movies)
+      total: detectedFormat === 'acquired' ? acquiredGroups.length : homeGroups.length,
       detectedFormat,
       stats: cache.stats,
       warnings: warningMsg,

@@ -55,43 +55,43 @@ export async function getPeopleWithStats(options?: {
 
     const personIds = (people || []).map((p: { id: string }) => p.id);
 
+    // Step 1: fetch all movie_people rows (no movie join — avoids inner-join row drops)
     let allMoviePeopleData: any[] = [];
     if (personIds.length > 0) {
-      const CHUNK_SIZE = 100;
+      const CHUNK_SIZE = 50;
       for (let i = 0; i < personIds.length; i += CHUNK_SIZE) {
         const chunkIds = personIds.slice(i, i + CHUNK_SIZE);
-        
-        let mpOffset = 0;
-        const mpLimit = 1000;
-        let hasMoreMp = true;
-        while (hasMoreMp) {
-          const { data: mpData, error: mpError } = await supabase
-            .from("movie_people")
-            .select("person_id, role, movies(title)")
-            .in("person_id", chunkIds)
-            .range(mpOffset, mpOffset + mpLimit - 1);
-          
-          if (mpError) throw sanitizeError(mpError);
-          
-          if (mpData && mpData.length > 0) {
-            allMoviePeopleData = [...allMoviePeopleData, ...mpData];
-            if (mpData.length < mpLimit) {
-              hasMoreMp = false;
-            } else {
-              mpOffset += mpLimit;
-            }
-          } else {
-            hasMoreMp = false;
-          }
-        }
+        const { data: mpData, error: mpError } = await supabase
+          .from("movie_people")
+          .select("person_id, role, movie_id")
+          .in("person_id", chunkIds)
+          .limit(10000);
+        if (mpError) throw sanitizeError(mpError);
+        if (mpData) allMoviePeopleData = [...allMoviePeopleData, ...mpData];
       }
     }
 
+    // Step 2: collect all unique movie_ids then fetch their titles in one query
+    const allMovieIds = [...new Set(allMoviePeopleData.map((r: any) => r.movie_id).filter(Boolean))];
+    const movieTitleMap = new Map<string, string>();
+    if (allMovieIds.length > 0) {
+      const CHUNK_SIZE = 200;
+      for (let i = 0; i < allMovieIds.length; i += CHUNK_SIZE) {
+        const chunk = allMovieIds.slice(i, i + CHUNK_SIZE);
+        const { data: moviesData } = await supabase
+          .from("movies")
+          .select("id, title")
+          .in("id", chunk);
+        (moviesData || []).forEach((m: any) => { if (m.title) movieTitleMap.set(m.id, m.title); });
+      }
+    }
+
+    // Step 3: count unique normalized titles per person per role
     const actorUniqueTitles = new Map<string, Set<string>>();
     const directorUniqueTitles = new Map<string, Set<string>>();
 
-    (allMoviePeopleData || []).forEach((r: any) => {
-      const title = r.movies?.title;
+    allMoviePeopleData.forEach((r: any) => {
+      const title = movieTitleMap.get(r.movie_id);
       if (!title) return;
       const normalized = normalizeMovieTitle(title);
       if (r.role === "Actor") {
@@ -164,14 +164,21 @@ export async function getPersonById(id: string): Promise<PersonWithStats | null>
 
     const { data: moviePeopleData } = await supabase
       .from("movie_people")
-      .select("role, movies(title)")
+      .select("role, movie_id")
       .eq("person_id", id);
+
+    const mpMovieIds = [...new Set((moviePeopleData || []).map((r: any) => r.movie_id).filter(Boolean))];
+    const titleMap = new Map<string, string>();
+    if (mpMovieIds.length > 0) {
+      const { data: moviesData } = await supabase.from("movies").select("id, title").in("id", mpMovieIds);
+      (moviesData || []).forEach((m: any) => { if (m.title) titleMap.set(m.id, m.title); });
+    }
 
     const actorTitles = new Set<string>();
     const directorTitles = new Set<string>();
 
     (moviePeopleData || []).forEach((r: any) => {
-      const title = r.movies?.title;
+      const title = titleMap.get(r.movie_id);
       if (!title) return;
       const normalized = normalizeMovieTitle(title);
       if (r.role === "Actor") actorTitles.add(normalized);

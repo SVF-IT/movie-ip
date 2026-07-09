@@ -41,11 +41,8 @@ import {
   Edit,
   FileText,
   Loader2,
-  MoreHorizontal,
   Plus,
   Trash2,
-  Tv,
-  Wifi,
   X
 } from "lucide-react";
 import Link from "next/link";
@@ -72,29 +69,20 @@ interface RightWithDetails extends PlatformRight {
 
 interface PlatformOption { id: string; name: string; platform_type?: string }
 
-type RightsTypeFilter = "all" | "satellite" | "internet" | "other";
-
-const rightsTypePills: { id: RightsTypeFilter; label: string; icon: React.ElementType }[] = [
-  { id: "all", label: "All Rights", icon: FileText },
-  { id: "satellite", label: "Satellite", icon: Tv },
-  { id: "internet", label: "Internet", icon: Wifi },
-  { id: "other", label: "Other", icon: MoreHorizontal },
+// Grouped type dropdown: group label → list of exact platform_type strings
+const RIGHTS_TYPE_GROUPS: { group: string; types: string[] }[] = [
+  { group: "Satellite", types: ["Satellite TV", "DTH VOD", "Terrestrial TV", "Cable TV"] },
+  { group: "Internet", types: ["SVOD", "TVOD", "AVOD", "FVOD", "NVOD", "IPTV"] },
+  { group: "Other", types: ["Air Rights", "Ship Rights", "Surface Rights", "Hotel Rights"] },
 ];
-
-function platformTypeCategory(platformType: string): "satellite" | "internet" | "other" {
-  const pt = platformType.toLowerCase();
-  if (pt.includes("satellite") || pt.includes("dth") || pt.includes("terrestrial")) return "satellite";
-  if (pt.includes("svod") || pt.includes("tvod") || pt.includes("avod") || pt.includes("fvod") || pt.includes("nvod") || pt.includes("iptv")) return "internet";
-  return "other";
-}
 
 export default function RightsPage() {
   const [rights, setRights] = useState<RightWithDetails[]>([]);
   const [totalCount, setTotalCount] = useState(0);
 
-  // Type filter: satellite | internet | other | all
-  const [rightsTypeFilter, setRightsTypeFilter] = useState<RightsTypeFilter>("all");
-  // Platform name filter — populated dynamically from DB, scoped to selected type
+  // "all" | exact platform_type string e.g. "Satellite TV", "SVOD"
+  const [rightsTypeFilter, setRightsTypeFilter] = useState("all");
+  // Platform id — populated from DB scoped to selected sub-type
   const [platformFilter, setPlatformFilter] = useState("all");
   const [platformOptions, setPlatformOptions] = useState<PlatformOption[]>([]);
 
@@ -113,16 +101,15 @@ export default function RightsPage() {
   const [exportData, setExportData] = useState<RightWithDetails[]>([]);
   const [exportLoading, setExportLoading] = useState(false);
 
-  // Load platforms from DB, filtered to the currently selected type category
+  // Load platforms from DB filtered to the exact selected platform_type
   useEffect(() => {
     const supabase = createClient();
     supabase.from("platforms").select("id, name, platform_type").order("name").then(({ data }: { data: PlatformOption[] | null }) => {
       let opts: PlatformOption[] = data || [];
       if (rightsTypeFilter !== "all") {
-        opts = opts.filter((p) => platformTypeCategory(p.platform_type || "") === rightsTypeFilter);
+        opts = opts.filter((p) => (p.platform_type || "").toLowerCase() === rightsTypeFilter.toLowerCase());
       }
       setPlatformOptions(opts);
-      // Reset platform name filter when type changes — the previous platform may not exist in the new type
       setPlatformFilter("all");
     });
   }, [rightsTypeFilter]);
@@ -135,7 +122,7 @@ export default function RightsPage() {
 
       const { data, count } = await getAllRights({
         platformId: platformFilter !== "all" ? platformFilter : undefined,
-        platformTypeCategory: rightsTypeFilter !== "all" ? rightsTypeFilter : undefined,
+        platformTypeExact: rightsTypeFilter !== "all" ? rightsTypeFilter : undefined,
         movieId: movieIdFilter !== "all" ? movieIdFilter : undefined,
         isExpired: isExpiredValue,
         limit: 10000,
@@ -175,7 +162,7 @@ export default function RightsPage() {
       const isExpiredValue = statusFilter === "active" ? false : statusFilter === "expired" ? true : undefined;
       const { data } = await getAllRights({
         platformId: platformFilter !== "all" ? platformFilter : undefined,
-        platformTypeCategory: rightsTypeFilter !== "all" ? rightsTypeFilter : undefined,
+        platformTypeExact: rightsTypeFilter !== "all" ? rightsTypeFilter : undefined,
         movieId: movieIdFilter !== "all" ? movieIdFilter : undefined,
         isExpired: isExpiredValue,
         limit: 10000,
@@ -236,26 +223,30 @@ export default function RightsPage() {
           </SelectContent>
         </Select>
 
-        {/* Type pills */}
-        {rightsTypePills.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            onClick={() => { setRightsTypeFilter(id); }}
-            className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all duration-200 h-9",
-              rightsTypeFilter === id
-                ? "bg-red-600/15 border-red-500/40 text-red-300"
-                : "border-(--svf-border) text-(--text-faint) hover:border-red-500/30 hover:text-red-400"
-            )}
-          >
-            <Icon className="h-3 w-3" />{label}
-          </button>
-        ))}
+        {/* Rights type grouped dropdown */}
+        <Select value={rightsTypeFilter} onValueChange={(v) => { setRightsTypeFilter(v); }}>
+          <SelectTrigger className="h-9 w-44 bg-(--bg-raise)/40 border-(--svf-border) text-(--text)">
+            <SelectValue placeholder="All Types" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Types</SelectItem>
+            {RIGHTS_TYPE_GROUPS.map(({ group, types }) => (
+              <div key={group}>
+                <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) select-none">
+                  {group}
+                </div>
+                {types.map((t) => (
+                  <SelectItem key={t} value={t} className="pl-5">{t}</SelectItem>
+                ))}
+              </div>
+            ))}
+          </SelectContent>
+        </Select>
 
-        {/* Platform — only when type selected */}
+        {/* Platform — only when a sub-type is selected */}
         {rightsTypeFilter !== "all" && (
           <Select value={platformFilter} onValueChange={(v) => { setPlatformFilter(v); }}>
-            <SelectTrigger className="h-9 w-40 bg-(--bg-raise)/40 border-(--svf-border) text-(--text)">
+            <SelectTrigger className="h-9 w-44 bg-(--bg-raise)/40 border-(--svf-border) text-(--text)">
               <SelectValue placeholder="All Platforms" />
             </SelectTrigger>
             <SelectContent>
@@ -315,6 +306,7 @@ export default function RightsPage() {
                       <SortableHeader column="platforms" label="Platform" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden md:table-cell" />
                       <SortableHeader column="license_type" label="Type" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden lg:table-cell" />
                       <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden lg:table-cell">Category</TableHead>
+                      <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden lg:table-cell">Nature</TableHead>
                       <SortableHeader column="start_date" label="Start Date" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden lg:table-cell" />
                       <SortableHeader column="end_date" label="End Date" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)" />
                       <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Status</TableHead>
@@ -344,6 +336,9 @@ export default function RightsPage() {
                           </TableCell>
                           <TableCell className="hidden lg:table-cell text-xs text-(--text-faint) py-3.5">
                             {right.category || "—"}
+                          </TableCell>
+                          <TableCell className="hidden lg:table-cell text-xs text-(--text-faint) py-3.5">
+                            {right.nature || "—"}
                           </TableCell>
                           <TableCell className="hidden lg:table-cell tabular-nums text-xs text-emerald-400 font-medium py-3.5">
                             {right.start_date ? format(new Date(right.start_date), "dd MMM yy") : "—"}

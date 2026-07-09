@@ -21,7 +21,6 @@ export async function getMovies(options?: {
   certification?: string[];
   yearFrom?: number;
   yearTo?: number;
-  territory?: string;
   limit?: number;
   offset?: number;
 }): Promise<{ data: MovieWithDetails[]; count: number }> {
@@ -56,10 +55,6 @@ export async function getMovies(options?: {
 
   if (options?.yearTo) {
     query = query.lte("release_year", options.yearTo);
-  }
-
-  if (options?.territory) {
-    query = query.ilike("territory", `%${options.territory}%`);
   }
 
   query = query.order("title");
@@ -494,13 +489,12 @@ export async function removeMovieDirector(id: string): Promise<void> {
  * Each group contains all language versions of the same movie
  */
 export async function getGroupedMovies(options?: {
-  source?: "home_production" | "acquired" | "expired" | "bangladeshi";
+  source?: "home_production" | "acquired" | "expired" | "bangladeshi" | "sold";
   search?: string;
   language?: string;
   certification?: string[];
   yearFrom?: number;
   yearTo?: number;
-  territory?: string;
   natureOfRights?: string;
   sortBy?: 'title_asc' | 'title_desc' | 'created_at_desc' | 'release_date_asc' | 'release_date_desc';
   limit?: number;
@@ -517,9 +511,9 @@ export async function getGroupedMovies(options?: {
     // EXPIRED: acquired movies with a past agreement_end_date
     query = query.eq("source", "acquired").lt("agreement_end_date", now);
   } else if (options?.source === 'home_production') {
-    // HOME: all home_production movies — only explicitly Sold are hidden
+    // HOME: all home_production movies, excluding sold (those live in the Expired bucket)
     query = query.eq("source", "home_production")
-      .or(`nature_of_rights.is.null,nature_of_rights.not.ilike.%Sold%`);
+      .or(`home_sold.is.null,home_sold.eq.false`);
   } else if (options?.source === 'acquired') {
     // ACQUIRED: non-expired acquired movies (no end date, or end date >= today)
     query = query.eq("source", "acquired")
@@ -527,10 +521,14 @@ export async function getGroupedMovies(options?: {
   } else if (options?.source === 'bangladeshi') {
     // BANGLADESHI: all movies flagged as bangladeshi — no agreement date filtering
     query = query.eq("is_bangladeshi", true);
+  } else if (options?.source === 'sold') {
+    // SOLD: home movies explicitly flagged home_sold, or (legacy) with "Sold" in jointly_exploitation_rights
+    query = query.eq("source", "home_production")
+      .or(`home_sold.eq.true,jointly_exploitation_rights.ilike.%Sold%`);
   } else {
-    // ALL: home (not explicitly sold) + acquired (not expired)
+    // ALL: all home (not sold) + acquired (not expired)
     query = query.or(
-      `and(source.eq.home_production,or(nature_of_rights.is.null,nature_of_rights.not.ilike.%Sold%)),` +
+      `and(source.eq.home_production,or(home_sold.is.null,home_sold.eq.false)),` +
       `and(source.eq.acquired,or(agreement_end_date.is.null,agreement_end_date.gte.${now}))`
     );
   }
@@ -567,33 +565,15 @@ export async function getGroupedMovies(options?: {
     query = query.lte("release_year", options.yearTo);
   }
 
-  if (options?.territory) {
-    const territory = options.territory;
-    if (territory === 'World Wide') {
-      query = query.eq("territory", "World");
-    } else if (territory === 'India') {
-      query = query.ilike("territory", "%India%");
-    } else if (territory === 'Others') {
-      // Not World exactly AND does not contain India
-      query = query.not("territory", "eq", "World").not("territory", "ilike", "%India%");
-    } else {
-      query = query.ilike("territory", `%${territory}%`);
-    }
-  }
-
   if (options?.natureOfRights && options.natureOfRights !== 'all') {
     const nature = options.natureOfRights;
-    const standardNatures = ['Exclusive', 'Non-Exclusive', 'Jointly Owned', 'Sold', 'Sold to Grassroot'];
 
     if (nature === 'Sold' || nature === 'Sold/Expired') {
-      query = query.ilike("nature_of_rights", "%Sold%");
+      query = query.ilike("jointly_exploitation_rights", "%Sold%");
     } else if (nature === 'Jointly Owned') {
-      query = query.eq("nature_of_rights", 'Jointly Owned');
-    } else if (nature === 'Other') {
-      query = query.not("nature_of_rights", "in", `(${standardNatures.map(n => `'${n}'`).join(',')})`);
-    } else {
-      query = query.eq("nature_of_rights", nature);
+      query = query.eq("jointly_owned", true);
     }
+    // 'Other' and specific-nature filters are no longer supported after column drop
   }
 
   // Initial database sort by title just in case
@@ -620,13 +600,11 @@ export async function getGroupedMovies(options?: {
         title: baseTitle,
         source: movie.source,
         release_year: movie.release_year,
-        poster_url: movie.poster_url,
         trailer_link: movie.trailer_link,
         production_house_name: movie.production_house_name,
         cast_names: movie.cast_names,
         director_names: movie.director_names,
         certification: movie.certification,
-        nature_of_rights: movie.nature_of_rights === 'Jointly Production' ? 'Jointly Owned' : movie.nature_of_rights,
         versions: [],
         total_versions: 0,
         total_rights: 0,

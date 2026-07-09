@@ -18,6 +18,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { useAppToast } from "@/hooks/use-app-toast";
 import { useRequirePermission } from "@/hooks/use-require-permission";
 import { getMovieApprovalHistory, resubmitMovie } from "@/lib/api/approvals";
+import { getMovieRightsOwned, syncMovieRights } from "@/lib/api/movie-rights";
 import {
   addMoviePerson,
   getMovieById,
@@ -34,15 +35,20 @@ import {
   submitPersonChange,
   type PendingChange,
 } from "@/lib/api/pending-changes";
+import {
+  DraftMovieRight,
+  MovieRightsOwnedSection,
+  newDraftRight,
+} from "@/components/forms/movie-rights-owned-section";
 import type {
   CertificationType,
   MovieApproval,
   MoviePeople,
+  MovieRight,
   MovieSource,
   MovieWithDetails,
   Person,
   ProductionHouse,
-  RightNature,
 } from "@/lib/types/database";
 import { AlertTriangle, ArrowLeft, CheckCircle, Clock, Film, GitPullRequest, Loader2, Plus, RotateCcw, Search, X, XCircle } from "lucide-react";
 import Link from "next/link";
@@ -51,13 +57,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const CERTIFICATIONS = ["U", "UA", "U/A", "UA 7+", "UA 13+", "UA 16+", "A", "S", "V/U", "V/UA", "UNCENSORED", "TBD"];
 
-const HOME_NATURE_OPTIONS = [
-  { value: "Exclusive", label: "Exclusively Owned" },
-  { value: "Jointly Owned", label: "Jointly Owned" },
-  { value: "Sold/Expired", label: "Sold / Expired" },
-];
 
-const HOLDBACK_PRESETS = ["Audio Rights", "Theatrical Exploitation", "FVOD", "AVOD", "SVOD", "TVOD"];
 
 const inputCls = "bg-(--bg-raise) border-(--svf-border) text-(--text) placeholder:text-(--text-faint) focus-visible:border-(--svf-border-strong) focus-visible:ring-0 h-10";
 const selectCls = "bg-(--bg-raise) border-(--svf-border) text-(--text) h-10";
@@ -110,48 +110,6 @@ function TogglePill({ value, onChange, options = ["Yes", "No"] }: { value: strin
   );
 }
 
-function SyndicationField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const isFixedValue = value === "Yes" || value === "No" || value === "";
-  const [customMode, setCustomMode] = useState(!isFixedValue);
-  const [customText, setCustomText] = useState(isFixedValue ? "" : value);
-  const activePill = customMode ? "Custom" : value;
-  const handlePill = (v: string) => {
-    if (v === "Custom") { setCustomMode(true); onChange(customText); }
-    else { setCustomMode(false); onChange(v); }
-  };
-  const handleTextChange = (text: string) => {
-    setCustomText(text);
-    onChange(text);
-  };
-  return (
-    <div className="flex flex-col gap-2 items-end">
-      <TogglePill value={activePill} onChange={handlePill} options={["Yes", "No", "Custom"]} />
-      {customMode && (
-        <input
-          autoFocus
-          type="text"
-          value={customText}
-          onChange={(e) => handleTextChange(e.target.value)}
-          placeholder="Enter custom syndication terms…"
-          className="w-64 h-8 rounded-xl border border-(--svf-border) bg-(--bg-raise) px-3 text-xs text-(--text) placeholder:text-(--text-faint) focus:outline-none focus:border-(--svf-border-strong)"
-        />
-      )}
-    </div>
-  );
-}
-
-function RightsCard({ title, value, onChange, children }: { title: string; value: string; onChange: (v: string) => void; children?: React.ReactNode }) {
-  const isAcq = value === "Yes";
-  return (
-    <div className={["rounded-[10px] border overflow-hidden transition-colors duration-200", isAcq ? "border-emerald-500/40" : "border-(--svf-border)"].join(" ")}>
-      <div className="flex items-center justify-between px-3 py-2.5 bg-(--bg-raise) gap-2">
-        <span className={["text-[11px] font-bold uppercase tracking-widest transition-colors duration-200", isAcq ? "text-emerald-700 dark:text-emerald-400" : "text-(--text-faint)"].join(" ")}>{title}</span>
-        <TogglePill value={value} onChange={onChange} />
-      </div>
-      {isAcq && <div className="p-3 border-t border-(--svf-border) bg-(--bg-raise)">{children}</div>}
-    </div>
-  );
-}
 
 const LANG_LIST = ["Bengali", "Hindi", "English", "Tamil", "Telugu", "Malayalam", "Kannada", "Marathi", "Gujarati", "Punjabi", "Odia", "Assamese"];
 
@@ -235,262 +193,6 @@ function InlineRightsRow({ label, value, onChange, langValue, onLangChange }: { 
   );
 }
 
-function MultiChips({ options, value, onChange }: { options: string[]; value: string; onChange: (v: string) => void }) {
-  const [customInput, setCustomInput] = useState("");
-  const [showCustom, setShowCustom] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const selected = value ? value.split(",").map(s => s.trim()).filter(Boolean) : [];
-  const commit = (next: string[]) => onChange(next.join(", "));
-  const toggle = (opt: string) => commit(selected.includes(opt) ? selected.filter(s => s !== opt) : [...selected, opt]);
-  const addCustom = () => {
-    const val = customInput.trim();
-    if (!val || selected.includes(val)) { setCustomInput(""); setShowCustom(false); return; }
-    commit([...selected, val]); setCustomInput(""); setShowCustom(false);
-  };
-  return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap gap-1.5">
-        {options.map(opt => {
-          const sel = selected.includes(opt);
-          return (
-            <button key={opt} type="button" onClick={() => toggle(opt)}
-              className={["px-2.5 py-1 rounded-full text-xs font-semibold border transition-all duration-100 select-none",
-                sel ? "bg-(--hover) border-(--svf-border-strong) text-(--text)" : "bg-(--bg-raise) border-(--svf-border) text-(--text-faint) hover:text-(--text)",
-              ].join(" ")}>
-              {opt}
-            </button>
-          );
-        })}
-        {!showCustom && (
-          <button type="button" onClick={() => { setShowCustom(true); setTimeout(() => inputRef.current?.focus(), 50); }}
-            className="px-2.5 py-1 rounded-full text-xs font-semibold border border-dashed border-(--svf-border-strong) text-(--text-faint) hover:text-(--text) hover:border-(--svf-border-strong) transition-all">
-            + Custom
-          </button>
-        )}
-      </div>
-      {showCustom && (
-        <div className="flex gap-2 items-center">
-          <Input ref={inputRef} value={customInput} onChange={e => setCustomInput(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } if (e.key === "Escape") { setShowCustom(false); setCustomInput(""); } }}
-            placeholder="Type value…"
-            className="h-7 flex-1 bg-(--bg-raise) border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-xs" />
-          <button type="button" onClick={addCustom}
-            className="h-7 px-2.5 rounded-[9px] bg-(--bg-raise) border border-(--svf-border-strong) text-(--text) text-xs font-semibold hover:bg-(--hover) transition-all">
-            Add
-          </button>
-          <button type="button" onClick={() => { setShowCustom(false); setCustomInput(""); }}
-            className="h-7 w-7 flex items-center justify-center rounded-[9px] text-(--text-faint) hover:text-(--text)">
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      )}
-      {selected.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {selected.map(item => (
-            <span key={item} className="flex items-center gap-1 pl-2.5 pr-1 py-0.5 rounded-full bg-(--bg-deep) border border-(--svf-border-strong) text-xs font-semibold text-(--text)">
-              {item}
-              <button type="button" onClick={() => commit(selected.filter(s => s !== item))}
-                className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-(--hover) transition-all">
-                <X className="h-2.5 w-2.5" />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function HoldbackPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [customInput, setCustomInput] = useState("");
-  const [showCustom, setShowCustom] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const raw = value.replace(/^on\s*/i, "");
-  const selected = raw ? raw.split(",").map(s => s.trim()).filter(Boolean) : [];
-  const commit = (next: string[]) => onChange(next.length ? `on ${next.join(", ")}` : "");
-  const toggle = (opt: string) => commit(selected.includes(opt) ? selected.filter(s => s !== opt) : [...selected, opt]);
-  const addCustom = () => {
-    const val = customInput.trim();
-    if (!val || selected.includes(val)) { setCustomInput(""); setShowCustom(false); return; }
-    commit([...selected, val]); setCustomInput(""); setShowCustom(false);
-  };
-  return (
-    <div className="space-y-2.5">
-      <div className="flex flex-wrap gap-1.5">
-        {HOLDBACK_PRESETS.map(opt => {
-          const sel = selected.includes(opt);
-          return (
-            <button key={opt} type="button" onClick={() => toggle(opt)}
-              className={["px-2.5 py-1 rounded-full text-xs font-semibold border transition-all duration-100 select-none",
-                sel ? "bg-(--hover) border-(--svf-border-strong) text-(--text)" : "bg-(--bg-raise) border-(--svf-border) text-(--text-faint) hover:text-(--text)",
-              ].join(" ")}>{opt}</button>
-          );
-        })}
-        {!showCustom && (
-          <button type="button" onClick={() => { setShowCustom(true); setTimeout(() => inputRef.current?.focus(), 50); }}
-            className="px-2.5 py-1 rounded-full text-xs font-semibold border border-dashed border-(--svf-border-strong) text-(--text-faint) hover:text-(--text) hover:border-(--svf-border-strong) transition-all">
-            + Custom
-          </button>
-        )}
-      </div>
-      {showCustom && (
-        <div className="flex gap-2 items-center">
-          <Input ref={inputRef} value={customInput} onChange={e => setCustomInput(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } if (e.key === "Escape") { setShowCustom(false); setCustomInput(""); } }}
-            placeholder="Type custom value…"
-            className="h-7 flex-1 bg-(--bg-raise) border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-xs focus-visible:ring-amber-500/40" />
-          <button type="button" onClick={addCustom}
-            className="h-7 px-2.5 rounded-[9px] bg-amber-600/20 border border-amber-500/30 text-amber-400 text-xs font-semibold hover:bg-amber-600/30 transition-all">Add</button>
-          <button type="button" onClick={() => { setShowCustom(false); setCustomInput(""); }}
-            className="h-7 w-7 flex items-center justify-center rounded-[9px] text-(--text-faint) hover:text-(--text)">
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      )}
-      {selected.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {selected.map(item => (
-            <span key={item} className="flex items-center gap-1 pl-2.5 pr-1 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/25 text-xs font-semibold text-amber-700 dark:text-amber-300">
-              {item}
-              <button type="button" onClick={() => commit(selected.filter(s => s !== item))}
-                className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-amber-500/20 transition-all">
-                <X className="h-2.5 w-2.5" />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-      {value && (
-        <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-[9px] bg-(--bg-raise) border border-(--svf-border)">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) shrink-0">DB value:</span>
-          <span className="text-[11px] text-(--text-faint) font-mono break-all">{value}</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-const OTHER_RIGHTS_OPTIONS = [
-  "Airborne Rights",
-  "Clip Rights",
-  "Hotel Rights",
-  "Mechanical Synch Rights",
-  "Ship Rights",
-  "Surface Transport Rights",
-  "Other Communication & Broadcasting Rights",
-];
-
-function parseOtherRights(value: string): { isYes: boolean; types: string[] } {
-  if (!value) return { isYes: false, types: [] };
-  const trimmed = value.trim();
-  const lower = trimmed.toLowerCase();
-  if (lower === "no" || lower === "") return { isYes: false, types: [] };
-
-  if (lower.startsWith("yes")) {
-    const openParenIndex = trimmed.indexOf("(");
-    const closeParenIndex = trimmed.lastIndexOf(")");
-    if (openParenIndex !== -1 && closeParenIndex !== -1 && closeParenIndex > openParenIndex) {
-      const content = trimmed.substring(openParenIndex + 1, closeParenIndex);
-      const types = content.split(",").map(s => s.trim()).filter(Boolean);
-      return { isYes: true, types };
-    }
-    return { isYes: true, types: [] };
-  }
-
-  // Handle legacy/other values that are comma-separated without starting with "Yes"
-  const types = trimmed.split(",").map(s => s.trim()).filter(Boolean);
-  return { isYes: true, types };
-}
-
-function commitOtherRights(isYes: boolean, types: string[]): string {
-  if (!isYes) return "No";
-  if (types.length === 0) return "Yes";
-  return `Yes(${types.join(", ")})`;
-}
-
-function OtherRightsMultiPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [customInput, setCustomInput] = useState("");
-  const [showCustom, setShowCustom] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const { isYes, types } = parseOtherRights(value);
-
-  const setYes = (yes: boolean) => onChange(commitOtherRights(yes, yes ? types : []));
-  const toggle = (opt: string) => onChange(commitOtherRights(true,
-    types.includes(opt) ? types.filter(s => s !== opt) : [...types, opt]
-  ));
-  const remove = (s: string) => onChange(commitOtherRights(true, types.filter(x => x !== s)));
-  const addCustom = () => {
-    const v = customInput.trim();
-    if (!v || types.includes(v)) { setCustomInput(""); setShowCustom(false); return; }
-    onChange(commitOtherRights(true, [...types, v]));
-    setCustomInput("");
-    setShowCustom(false);
-  };
-
-  return (
-    <div className="space-y-2.5">
-      {/* Yes / No toggle */}
-      <TogglePill value={isYes ? "Yes" : value === "No" ? "No" : ""} onChange={(v) => setYes(v === "Yes")} />
-
-      {/* Type picker — only when Yes */}
-      {isYes && (
-        <div className="space-y-2 pt-1">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Specify types (optional)</p>
-          <div className="flex flex-wrap gap-1.5">
-            {OTHER_RIGHTS_OPTIONS.map(opt => (
-              <button key={opt} type="button" onClick={() => toggle(opt)}
-                className={[
-                  "px-2 py-0.5 rounded-full text-xs font-semibold border transition-all select-none",
-                  types.includes(opt)
-                    ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-700 dark:text-emerald-300"
-                    : "bg-(--bg-raise) border-(--svf-border) text-(--text-faint) hover:text-(--text)",
-                ].join(" ")}>
-                {opt}
-              </button>
-            ))}
-            {!showCustom && (
-              <button type="button" onClick={() => { setShowCustom(true); setTimeout(() => inputRef.current?.focus(), 50); }}
-                className="px-2 py-0.5 rounded-full text-xs font-semibold border border-dashed border-(--svf-border-strong) text-(--text-faint) hover:text-(--text) transition-all">
-                + Custom
-              </button>
-            )}
-          </div>
-
-          {showCustom && (
-            <div className="flex gap-2 items-center">
-              <Input ref={inputRef} value={customInput} onChange={e => setCustomInput(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCustom(); } if (e.key === "Escape") { setShowCustom(false); setCustomInput(""); } }}
-                placeholder="Type right name…"
-                className="h-7 flex-1 bg-(--bg-raise) border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-xs focus-visible:ring-red-500/40" />
-              <button type="button" onClick={addCustom} className="h-7 px-2.5 rounded-[9px] bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-xs font-semibold hover:bg-emerald-500/25">Add</button>
-              <button type="button" onClick={() => { setShowCustom(false); setCustomInput(""); }} className="h-7 w-7 flex items-center justify-center rounded-[9px] text-(--text-faint) hover:text-(--text)">
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          )}
-
-          {types.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {types.map(s => (
-                <span key={s} className="flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
-                  {s}
-                  <button type="button" onClick={() => remove(s)} className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-emerald-500/20">
-                    <X className="h-2.5 w-2.5" />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-
-          <div className="text-[10px] font-mono text-(--text-faint) pt-0.5">
-            {commitOtherRights(isYes, types)}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 function DurationInput({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
   return (
@@ -530,25 +232,6 @@ function ClipDurationField({ value, onChange, className }: { value: string; onCh
   );
 }
 
-const RIGHTS_NATURE_OPTIONS = ["Exclusive", "Non-exclusive", "Shared Exclusive", "N/A"];
-
-function RightsNatureSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const isCustom = value !== "" && !RIGHTS_NATURE_OPTIONS.includes(value);
-  return (
-    <div className="space-y-1.5">
-      <Select value={isCustom ? "__custom__" : value} onValueChange={(v) => { if (v === "__custom__") onChange(""); else onChange(v); }}>
-        <SelectTrigger className={`${selectCls} h-8 text-xs`}><SelectValue placeholder="Select…" /></SelectTrigger>
-        <SelectContent>
-          {RIGHTS_NATURE_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
-          <SelectItem value="__custom__">Custom…</SelectItem>
-        </SelectContent>
-      </Select>
-      {isCustom && (
-        <Input value={value} onChange={(e) => onChange(e.target.value)} placeholder="Enter custom nature…" className={`${inputCls} h-8 text-xs`} autoFocus />
-      )}
-    </div>
-  );
-}
 
 export default function EditMoviePage() {
   const router = useRouter();
@@ -580,42 +263,23 @@ export default function EditMoviePage() {
   const [agreementDate, setAgreementDate] = useState("");
   const [agreementStartDate, setAgreementStartDate] = useState("");
   const [agreementEndDate, setAgreementEndDate] = useState("");
-  const [internetRightsClassification, setInternetRightsClassification] = useState("");
   const [prequelSequelRights, setPrequelSequelRights] = useState("");
   const [characterRights, setCharacterRights] = useState("");
   const [subtitlingRights, setSubtitlingRights] = useState("");
   const [subtitlingLang, setSubtitlingLang] = useState("");
   const [dubbingRights, setDubbingRights] = useState("");
   const [dubbingLang, setDubbingLang] = useState("");
-  const [natureOfRights, setNatureOfRights] = useState("");
-  const [territory, setTerritory] = useState("");
+  const [jointlyOwned, setJointlyOwned] = useState(false);
+  const [homeSold, setHomeSold] = useState(false);
   const [remarks, setRemarks] = useState("");
   const [actionables, setActionables] = useState("");
   const [jointProdBuyBackDate, setJointProdBuyBackDate] = useState("");
   const [jointlyExploitationRights, setJointlyExploitationRights] = useState("");
   const [recensorFlag, setRecensorFlag] = useState(false);
-  // New rights fields
-  const [satelliteRights, setSatelliteRights] = useState("");
-  const [internetRights, setInternetRights] = useState("");
-  const [negativeRights, setNegativeRights] = useState("");
-  const [otherRights, setOtherRights] = useState("");
-  const [satelliteRightsClassification, setSatelliteRightsClassification] = useState("");
   const [clipRights, setClipRights] = useState("");
   const [clipRightsDuration, setClipRightsDuration] = useState("");
-  const [holdbacks, setHoldbacks] = useState("");
-  const [natureOfSatelliteRights, setNatureOfSatelliteRights] = useState("");
-  const [natureOfInternetRights, setNatureOfInternetRights] = useState("");
-  const [natureOfNegativeRights, setNatureOfNegativeRights] = useState("");
-  const [natureOfOtherRights, setNatureOfOtherRights] = useState("");
-  const [satelliteRightsStartDate, setSatelliteRightsStartDate] = useState("");
-  const [satelliteRightsEndDate, setSatelliteRightsEndDate] = useState("");
-  const [internetRightsStartDate, setInternetRightsStartDate] = useState("");
-  const [internetRightsEndDate, setInternetRightsEndDate] = useState("");
-  const [negativeRightsStartDate, setNegativeRightsStartDate] = useState("");
-  const [negativeRightsEndDate, setNegativeRightsEndDate] = useState("");
-  const [otherRightsStartDate, setOtherRightsStartDate] = useState("");
-  const [otherRightsEndDate, setOtherRightsEndDate] = useState("");
-  const [syndicationInternetRights, setSyndicationInternetRights] = useState("");
+  const [rightsOwned, setRightsOwned] = useState<DraftMovieRight[]>([]);
+  const [existingRights, setExistingRights] = useState<MovieRight[]>([]);
 
   // Cast & Directors
   const [cast, setCast] = useState<MoviePeople[]>([]);
@@ -679,7 +343,6 @@ export default function EditMoviePage() {
         setAgreementDate(movie.agreement_date || "");
         setAgreementStartDate(movie.agreement_start_date || "");
         setAgreementEndDate(movie.agreement_end_date || "");
-        setInternetRightsClassification(movie.internet_rights_classification || "");
         setPrequelSequelRights(movie.prequel_sequel_rights || "");
         setCharacterRights(movie.character_rights || "");
         // subtitling/dubbing stored as "Yes(Bengali, Hindi)" or legacy "Yes: Bengali"
@@ -695,8 +358,8 @@ export default function EditMoviePage() {
         } else if (dubRaw.includes(":")) {
           setDubbingRights("Yes"); setDubbingLang(dubRaw.split(":").slice(1).join(":").trim());
         } else { setDubbingRights(dubRaw); setDubbingLang(""); }
-        setNatureOfRights(movie.nature_of_rights || "");
-        setTerritory(movie.territory || "");
+        setJointlyOwned(movie.jointly_owned ?? (!!movie.jointly_exploitation_rights));
+        setHomeSold(movie.home_sold ?? false);
         setRemarks(movie.remarks || "");
         setActionables(movie.actionables || "");
         setWtpLibrary(movie.wtp_library || "");
@@ -704,28 +367,8 @@ export default function EditMoviePage() {
         setJointProdBuyBackDate(movie.joint_prod_buy_back_date || "");
         setJointlyExploitationRights(movie.jointly_exploitation_rights || "");
         setRecensorFlag(movie.recensor_flag ?? false);
-        setSatelliteRights(movie.satellite_rights || "");
-        setInternetRights(movie.internet_rights || "");
-        setNegativeRights(movie.negative_rights || "");
-        setOtherRights(movie.other_rights || "");
-        setSatelliteRightsClassification(movie.satellite_rights_classification || "");
-        setInternetRightsClassification(movie.internet_rights_classification || "");
         setClipRights(movie.clip_rights || "");
         setClipRightsDuration(movie.clip_rights_duration || "");
-        setHoldbacks(movie.holdbacks || "");
-        setNatureOfSatelliteRights(movie.nature_of_satellite_rights || "");
-        setNatureOfInternetRights(movie.nature_of_internet_rights || "");
-        setNatureOfNegativeRights(movie.nature_of_negative_rights || "");
-        setNatureOfOtherRights(movie.nature_of_other_rights || "");
-        setSatelliteRightsStartDate(movie.satellite_rights_start_date || "");
-        setSatelliteRightsEndDate(movie.satellite_rights_end_date || "");
-        setInternetRightsStartDate(movie.internet_rights_start_date || "");
-        setInternetRightsEndDate(movie.internet_rights_end_date || "");
-        setNegativeRightsStartDate(movie.negative_rights_start_date || "");
-        setNegativeRightsEndDate(movie.negative_rights_end_date || "");
-        setOtherRightsStartDate(movie.other_rights_start_date || "");
-        setOtherRightsEndDate(movie.other_rights_end_date || "");
-        setSyndicationInternetRights(movie.syndication_internet_rights || "");
         const status = (movie as any).approval_status ?? null;
         setApprovalStatus(status);
         // Only auto-switch to Approval tab if no explicit ?tab= param in URL
@@ -750,13 +393,12 @@ export default function EditMoviePage() {
           agreement_date: movie.agreement_date || "",
           agreement_start_date: movie.agreement_start_date || "",
           agreement_end_date: movie.agreement_end_date || "",
-          internet_rights_classification: movie.internet_rights_classification || "",
           prequel_sequel_rights: movie.prequel_sequel_rights || "",
           character_rights: movie.character_rights || "",
           subtitling_rights: movie.subtitling_rights || "",
           dubbing_rights: movie.dubbing_rights || "",
-          nature_of_rights: movie.nature_of_rights || "",
-          territory: movie.territory || "",
+          jointly_owned: movie.jointly_owned ?? (!!movie.jointly_exploitation_rights),
+          home_sold: movie.home_sold ?? false,
           remarks: movie.remarks || "",
           actionables: movie.actionables || "",
           wtp_library: movie.wtp_library || "",
@@ -764,39 +406,24 @@ export default function EditMoviePage() {
           joint_prod_buy_back_date: movie.joint_prod_buy_back_date || "",
           jointly_exploitation_rights: movie.jointly_exploitation_rights || "",
           recensor_flag: movie.recensor_flag ?? false,
-          satellite_rights: movie.satellite_rights || "",
-          internet_rights: movie.internet_rights || "",
-          negative_rights: movie.negative_rights || "",
-          other_rights: movie.other_rights || "",
-          satellite_rights_classification: movie.satellite_rights_classification || "",
           clip_rights: movie.clip_rights || "",
           clip_rights_duration: movie.clip_rights_duration || "",
-          holdbacks: movie.holdbacks || "",
-          nature_of_satellite_rights: movie.nature_of_satellite_rights || "",
-          nature_of_internet_rights: movie.nature_of_internet_rights || "",
-          nature_of_negative_rights: movie.nature_of_negative_rights || "",
-          nature_of_other_rights: movie.nature_of_other_rights || "",
-          satellite_rights_start_date: movie.satellite_rights_start_date || "",
-          satellite_rights_end_date: movie.satellite_rights_end_date || "",
-          internet_rights_start_date: movie.internet_rights_start_date || "",
-          internet_rights_end_date: movie.internet_rights_end_date || "",
-          negative_rights_start_date: movie.negative_rights_start_date || "",
-          negative_rights_end_date: movie.negative_rights_end_date || "",
-          other_rights_start_date: movie.other_rights_start_date || "",
-          other_rights_end_date: movie.other_rights_end_date || "",
-          syndication_internet_rights: movie.syndication_internet_rights || "",
         });
 
-        const [castData, dirData, historyData, pendingData] = await Promise.all([
+        const [castData, dirData, historyData, pendingData, rightsData] = await Promise.all([
           getMovieCast(movieId),
           getMovieDirectors(movieId),
           getMovieApprovalHistory(movieId),
           getMoviePendingChanges(movieId),
+          movie.source === "acquired" ? getMovieRightsOwned(movieId) : Promise.resolve([] as MovieRight[]),
         ]);
         setCast(castData);
         setDirectors(dirData);
         setApprovalHistory(historyData);
         setPendingChanges(pendingData);
+        setExistingRights(rightsData);
+        let counter = 0;
+        setRightsOwned(rightsData.map(r => ({ ...r, _key: `loaded-${++counter}` })));
       } catch { toast.error("Failed to load movie"); }
       finally { setLoading(false); }
     }
@@ -890,7 +517,7 @@ export default function EditMoviePage() {
   };
 
   const isHomeProd = source === "home_production";
-  const isJointlyOwned = natureOfRights === "Jointly Owned";
+  const isJointlyOwned = jointlyOwned;
 
   const handleSave = async () => {
     if (!title.trim()) { toast.error("Title is required"); return; }
@@ -923,13 +550,12 @@ export default function EditMoviePage() {
         agreement_date: agreementDate || "",
         agreement_start_date: agreementStartDate || "",
         agreement_end_date: agreementEndDate || "",
-        internet_rights_classification: internetRightsClassification || "",
         prequel_sequel_rights: prequelSequelRights || "",
         character_rights: characterRights || "",
-        subtitling_rights: subtitlingLang ? `${subtitlingRights}(${subtitlingLang})` : subtitlingRights || "",
-        dubbing_rights: dubbingLang ? `${dubbingRights}(${dubbingLang})` : dubbingRights || "",
-        nature_of_rights: source === "acquired" ? "" : (natureOfRights || ""),
-        territory: territory || "",
+        subtitling_rights: isHomeProd ? "Yes" : (subtitlingLang ? `${subtitlingRights}(${subtitlingLang})` : subtitlingRights || ""),
+        dubbing_rights: isHomeProd ? "Yes" : (dubbingLang ? `${dubbingRights}(${dubbingLang})` : dubbingRights || ""),
+        jointly_owned: isHomeProd ? jointlyOwned : false,
+        home_sold: isHomeProd ? homeSold : false,
         remarks: remarks || "",
         actionables: actionables || "",
         wtp_library: wtpLibrary || "",
@@ -937,27 +563,8 @@ export default function EditMoviePage() {
         joint_prod_buy_back_date: isJointlyOwned ? jointProdBuyBackDate : "",
         jointly_exploitation_rights: isJointlyOwned ? jointlyExploitationRights : "",
         recensor_flag: recensorFlag,
-        satellite_rights: satelliteRights || "",
-        internet_rights: internetRights || "",
-        negative_rights: negativeRights || "",
-        other_rights: otherRights || "",
-        satellite_rights_classification: satelliteRightsClassification || "",
         clip_rights: clipRights || "",
         clip_rights_duration: clipRightsDuration || "",
-        holdbacks: holdbacks || "",
-        nature_of_satellite_rights: natureOfSatelliteRights || "",
-        nature_of_internet_rights: natureOfInternetRights || "",
-        nature_of_negative_rights: natureOfNegativeRights || "",
-        nature_of_other_rights: natureOfOtherRights || "",
-        satellite_rights_start_date: satelliteRightsStartDate || "",
-        satellite_rights_end_date: satelliteRightsEndDate || "",
-        internet_rights_start_date: internetRightsStartDate || "",
-        internet_rights_end_date: internetRightsEndDate || "",
-        negative_rights_start_date: negativeRightsStartDate || "",
-        negative_rights_end_date: negativeRightsEndDate || "",
-        other_rights_start_date: otherRightsStartDate || "",
-        other_rights_end_date: otherRightsEndDate || "",
-        syndication_internet_rights: syndicationInternetRights || "",
       };
 
       // Editor always stages; legal/admin always apply directly
@@ -987,41 +594,27 @@ export default function EditMoviePage() {
         assignor_licensor: assignorLicensor || undefined,
         licensee: licensee || undefined, agreement_date: agreementDate || undefined,
         agreement_start_date: agreementStartDate || undefined, agreement_end_date: agreementEndDate || undefined,
-        prequel_sequel_rights: prequelSequelRights || undefined, character_rights: characterRights || undefined,
-        subtitling_rights: (subtitlingLang ? `${subtitlingRights}(${subtitlingLang})` : subtitlingRights) || undefined,
-        dubbing_rights: (dubbingLang ? `${dubbingRights}(${dubbingLang})` : dubbingRights) || undefined,
-        nature_of_rights: isHomeProd ? (natureOfRights as RightNature) || undefined : undefined,
-        territory: territory || undefined, remarks: remarks || undefined,
+        prequel_sequel_rights: isHomeProd ? "Yes" : prequelSequelRights || undefined,
+        character_rights: isHomeProd ? "Yes" : characterRights || undefined,
+        subtitling_rights: isHomeProd ? "Yes" : (subtitlingLang ? `${subtitlingRights}(${subtitlingLang})` : subtitlingRights) || undefined,
+        dubbing_rights: isHomeProd ? "Yes" : (dubbingLang ? `${dubbingRights}(${dubbingLang})` : dubbingRights) || undefined,
+        clip_rights: isHomeProd ? "Yes" : clipRights || undefined,
+        remarks: remarks || undefined,
         actionables: actionables || undefined,
         wtp_library: wtpLibrary || undefined,
-        revenue_share: isJointlyOwned ? revenueShare : undefined,
-        joint_prod_buy_back_date: isJointlyOwned ? jointProdBuyBackDate : undefined,
-        jointly_exploitation_rights: isJointlyOwned ? jointlyExploitationRights : undefined,
+        jointly_owned: isHomeProd ? jointlyOwned : undefined,
+        home_sold: isHomeProd ? homeSold : undefined,
+        revenue_share: isHomeProd && isJointlyOwned ? (revenueShare || undefined) : undefined,
+        joint_prod_buy_back_date: isHomeProd && isJointlyOwned ? (jointProdBuyBackDate || undefined) : undefined,
+        jointly_exploitation_rights: isHomeProd && isJointlyOwned ? (jointlyExploitationRights || undefined) : undefined,
         recensor_flag: recensorFlag,
-        satellite_rights: satelliteRights || undefined,
-        internet_rights: internetRights || undefined,
-        negative_rights: negativeRights || undefined,
-        other_rights: otherRights || undefined,
-        satellite_rights_classification: satelliteRightsClassification || undefined,
-        internet_rights_classification: internetRightsClassification || undefined,
-        clip_rights: clipRights || undefined,
-        clip_rights_duration: clipRightsDuration || undefined,
-        holdbacks: holdbacks || undefined,
-        nature_of_satellite_rights: natureOfSatelliteRights || undefined,
-        nature_of_internet_rights: natureOfInternetRights || undefined,
-        nature_of_negative_rights: natureOfNegativeRights || undefined,
-        nature_of_other_rights: natureOfOtherRights || undefined,
-        satellite_rights_start_date: satelliteRightsStartDate || undefined,
-        satellite_rights_end_date: satelliteRightsEndDate || undefined,
-        internet_rights_start_date: internetRightsStartDate || undefined,
-        internet_rights_end_date: internetRightsEndDate || undefined,
-        negative_rights_start_date: negativeRightsStartDate || undefined,
-        negative_rights_end_date: negativeRightsEndDate || undefined,
-        other_rights_start_date: otherRightsStartDate || undefined,
-        other_rights_end_date: otherRightsEndDate || undefined,
-        syndication_internet_rights: syndicationInternetRights || undefined,
+        clip_rights_duration: isHomeProd ? undefined : clipRightsDuration || undefined,
       };
       await updateMovie(movieId, movieData);
+      if (source === "acquired") {
+        const validRights = rightsOwned.filter(r => r.nature.trim());
+        await syncMovieRights(movieId, validRights, existingRights);
+      }
       toast.success("Movie saved successfully.");
       router.push(`/movies/${movieId}`);
     } catch (err) {
@@ -1174,7 +767,7 @@ export default function EditMoviePage() {
                         const sel = source === opt.value;
                         return (
                           <button key={opt.value} type="button"
-                            onClick={() => { setSource(opt.value as MovieSource); if (opt.value === 'home_production' && natureOfRights === 'Non-Exclusive') setNatureOfRights(''); }}
+                            onClick={() => { setSource(opt.value as MovieSource); if (opt.value === 'acquired') setJointlyOwned(false); }}
                             className={["text-left p-4 rounded-[10px] border-[1.5px] transition-all duration-150 cursor-pointer",
                               sel ? "border-amber-500/70 bg-amber-500/10 shadow-[0_0_0_1px] shadow-amber-500/30"
                                 : "border-(--svf-border) bg-(--bg-raise) hover:border-amber-500/30 hover:bg-amber-500/5",
@@ -1188,38 +781,35 @@ export default function EditMoviePage() {
                   </FormField>
                 </div>
 
-                {/* Nature of Rights — pill options */}
+                {/* Jointly Owned toggle — only for home production */}
                 {isHomeProd && (
                   <div className="md:col-span-2">
-                    <FormField label="Nature of Rights">
-                      <div className="flex flex-wrap gap-2 mt-1">
-                        {HOME_NATURE_OPTIONS.map((opt) => {
-                          const sel = natureOfRights === opt.value;
-                          return (
-                            <button key={opt.value} type="button"
-                              onClick={() => {
-                                const newVal = sel ? "" : opt.value;
-                                setNatureOfRights(newVal);
-                                const jointly = newVal === "Jointly Owned";
-                                const svfId = productionHouses.find(h => h.name.toLowerCase() === 'svf')?.id ?? null;
-                                if (jointly && svfId) {
-                                  setSelectedHouseIds(ids => {
-                                    const rest = ids.filter(id => id !== svfId && id !== "");
-                                    return [svfId, ...rest];
-                                  });
-                                } else if (!jointly) {
-                                  setSelectedHouseIds(ids => [ids[0] === svfId ? "" : (ids[0] || "")]);
-                                }
-                              }}
-                              className={["px-4 py-2 rounded-full border text-[12.5px] font-semibold transition-all duration-120 select-none",
-                                sel ? "bg-amber-500/12 border-amber-500/60 text-amber-700 dark:text-amber-400"
-                                  : "bg-(--bg-raise) border-(--svf-border) text-(--text-faint) hover:text-(--text)",
-                              ].join(" ")}>
-                              {opt.label}
-                            </button>
-                          );
-                        })}
-                      </div>
+                    <FormField label="Jointly Owned">
+                      <TogglePill value={jointlyOwned ? "Yes" : "No"} onChange={v => {
+                        const isJoint = v === "Yes";
+                        setJointlyOwned(isJoint);
+                        const svfId = productionHouses.find(h => h.name.toLowerCase() === 'svf')?.id ?? null;
+                        if (isJoint && svfId) {
+                          setSelectedHouseIds(ids => {
+                            const rest = ids.filter(id => id !== svfId && id !== "");
+                            return [svfId, ...rest];
+                          });
+                        } else if (!isJoint) {
+                          setSelectedHouseIds(ids => [ids[0] === svfId ? "" : (ids[0] || "")]);
+                        }
+                      }} />
+                    </FormField>
+                  </div>
+                )}
+
+                {/* Sold toggle — only for home production. Marks movie as expired. */}
+                {isHomeProd && (
+                  <div className="md:col-span-2">
+                    <FormField label="Sold">
+                      <TogglePill value={homeSold ? "Yes" : "No"} onChange={v => setHomeSold(v === "Yes")} />
+                      {homeSold && (
+                        <p className="text-xs text-(--text-faint) mt-1.5">This movie will appear in the Expired section.</p>
+                      )}
                     </FormField>
                   </div>
                 )}
@@ -1322,6 +912,18 @@ export default function EditMoviePage() {
 
               </div>
             </SectionCard>
+
+            {/* Subtitling/Dubbing — shown for home production on the basic tab (rights tab is disabled for home) */}
+            {isHomeProd && (
+              <SectionCard title="Derivative Rights">
+                <div>
+                  <InlineRightsRow label="Sub-Titling Rights" value={subtitlingRights} onChange={(v) => { setSubtitlingRights(v); if (v !== "Yes" && v !== "No") setSubtitlingLang(""); }}
+                    langValue={subtitlingLang} onLangChange={setSubtitlingLang} />
+                  <InlineRightsRow label="Dubbing Rights" value={dubbingRights} onChange={(v) => { setDubbingRights(v); if (v !== "Yes" && v !== "No") setDubbingLang(""); }}
+                    langValue={dubbingLang} onLangChange={setDubbingLang} />
+                </div>
+              </SectionCard>
+            )}
           </div>}
 
           {activeTab === "acquired" && <div className="space-y-4">
@@ -1347,103 +949,12 @@ export default function EditMoviePage() {
           </div>}
 
           {activeTab === "rights" && <div className="space-y-4">
-            <SectionCard title="Primary Rights">
-              <p className="text-xs text-(--text-faint) mb-3">Toggle <strong className="text-(--text)">Yes</strong> to expand details for each rights type.</p>
-              <div className="grid gap-3 md:grid-cols-2">
-                {/* Satellite */}
-                <RightsCard title="Satellite Rights" value={satelliteRights} onChange={setSatelliteRights}>
-                  <div className="space-y-2.5">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1.5">Classification</p>
-                      <MultiChips options={["Pay TV", "Free TV", "Pay Per View", "DTH"]}
-                        value={satelliteRightsClassification} onChange={setSatelliteRightsClassification} />
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1.5">Nature</p>
-                      <RightsNatureSelect value={natureOfSatelliteRights} onChange={setNatureOfSatelliteRights} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1">Start</p>
-                        <Input type="date" value={satelliteRightsStartDate} onChange={(e) => setSatelliteRightsStartDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
-                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1">End</p>
-                        <Input type="date" value={satelliteRightsEndDate} onChange={(e) => setSatelliteRightsEndDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
-                    </div>
-                  </div>
-                </RightsCard>
-
-                {/* Internet */}
-                <RightsCard title="Internet Rights" value={internetRights} onChange={setInternetRights}>
-                  <div className="space-y-2.5">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1.5">Classification</p>
-                      <MultiChips options={["AVOD", "FVOD", "SVOD", "NVOD", "TVOD", "IPTV"]}
-                        value={internetRightsClassification} onChange={setInternetRightsClassification} />
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1.5">Nature</p>
-                      <RightsNatureSelect value={natureOfInternetRights} onChange={setNatureOfInternetRights} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1">Start</p>
-                        <Input type="date" value={internetRightsStartDate} onChange={(e) => setInternetRightsStartDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
-                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1">End</p>
-                        <Input type="date" value={internetRightsEndDate} onChange={(e) => setInternetRightsEndDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
-                    </div>
-                  </div>
-                </RightsCard>
-
-                {/* Negative */}
-                <RightsCard title="Negative Rights" value={negativeRights} onChange={setNegativeRights}>
-                  <div className="space-y-2.5">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1.5">Nature</p>
-                      <RightsNatureSelect value={natureOfNegativeRights} onChange={setNatureOfNegativeRights} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1">Start</p>
-                        <Input type="date" value={negativeRightsStartDate} onChange={(e) => setNegativeRightsStartDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
-                      <div><p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1">End</p>
-                        <Input type="date" value={negativeRightsEndDate} onChange={(e) => setNegativeRightsEndDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
-                    </div>
-                  </div>
-                </RightsCard>
-
-                {/* Other */}
-                <div className={["rounded-[10px] border overflow-hidden transition-colors duration-200",
-                  (otherRights && otherRights !== "No") ? "border-emerald-500/40" : "border-(--svf-border)"].join(" ")}>
-                  <div className="flex items-center justify-between px-3 py-2.5 bg-(--bg-raise) gap-2">
-                    <span className={["text-[11px] font-bold uppercase tracking-widest transition-colors duration-200",
-                      (otherRights && otherRights !== "No") ? "text-emerald-700 dark:text-emerald-400" : "text-(--text-faint)"].join(" ")}>Other Rights</span>
-                  </div>
-                  <div className="p-3 border-t border-(--svf-border) bg-(--bg-raise) space-y-2.5">
-                    <OtherRightsMultiPicker value={otherRights} onChange={setOtherRights} />
-                    {(otherRights && otherRights !== "No") && (
-                      <>
-                        <div>
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1.5">Nature</p>
-                          <RightsNatureSelect value={natureOfOtherRights} onChange={setNatureOfOtherRights} />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div><p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1">Start</p>
-                            <Input type="date" value={otherRightsStartDate} onChange={(e) => setOtherRightsStartDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
-                          <div><p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-1">End</p>
-                            <Input type="date" value={otherRightsEndDate} onChange={(e) => setOtherRightsEndDate(e.target.value)} className={`${inputCls} h-8 text-xs`} /></div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-4 pt-4 border-t border-(--svf-border)">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-(--text)">Syndication – Internet Rights</p>
-                    <p className="text-xs text-(--text-faint) mt-0.5">Sub-licensing for internet syndication</p>
-                  </div>
-                  <SyndicationField value={syndicationInternetRights} onChange={setSyndicationInternetRights} />
-                </div>
-              </div>
+            <SectionCard title="Rights We Own">
+              <MovieRightsOwnedSection
+                movieId={movieId}
+                entries={rightsOwned}
+                onChange={setRightsOwned}
+              />
             </SectionCard>
 
             <SectionCard title="Clip Rights">
@@ -1482,13 +993,8 @@ export default function EditMoviePage() {
           </div>}
 
           {activeTab === "notes" && <div className="space-y-4">
-            <SectionCard title="Notes & Holdbacks">
+            <SectionCard title="Notes">
               <div className="space-y-4">
-                <FormField label="Holdbacks apply to">
-                  <div className="mt-1">
-                    <HoldbackPicker value={holdbacks} onChange={setHoldbacks} />
-                  </div>
-                </FormField>
                 <FormField label="Remarks">
                   <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={3} className={textareaCls} />
                 </FormField>

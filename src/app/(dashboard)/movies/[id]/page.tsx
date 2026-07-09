@@ -28,10 +28,11 @@ import {
 } from "@/components/ui/table";
 import { useAuth } from "@/contexts/auth-context";
 import { useAppToast } from "@/hooks/use-app-toast";
+import { getMovieRightsOwned } from "@/lib/api/movie-rights";
 import { deleteMovie, getMovieById, getMovieExpiredRights, getMovieRights, getMovieVersions } from "@/lib/api/movies";
 import { submitRightChange } from "@/lib/api/pending-changes";
 import { deleteRight } from "@/lib/api/rights";
-import type { MovieLanguageVersion, MovieWithDetails, PlatformRight } from "@/lib/types/database";
+import type { MovieLanguageVersion, MovieRight, MovieWithDetails, PlatformRight } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import {
@@ -155,6 +156,7 @@ export default function MovieDetailPage() {
   const [selectedVersionId, setSelectedVersionId] = useState<string>(movieId);
   const [rights, setRights] = useState<RightWithDetails[]>([]);
   const [expiredRights, setExpiredRights] = useState<RightWithDetails[]>([]);
+  const [ownedRights, setOwnedRights] = useState<MovieRight[]>([]);
   const [loading, setLoading] = useState(true);
   const toast = useAppToast();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -219,12 +221,14 @@ export default function MovieDetailPage() {
         } else {
           setLanguageVersions([]);
         }
-        const [rightsData, expiredData] = await Promise.all([
+        const [rightsData, expiredData, ownedData] = await Promise.all([
           getMovieRights(movieId),
           getMovieExpiredRights(movieId),
+          movieData?.source === "acquired" ? getMovieRightsOwned(movieId) : Promise.resolve([] as MovieRight[]),
         ]);
         setRights(rightsData as RightWithDetails[]);
         setExpiredRights(expiredData as RightWithDetails[]);
+        setOwnedRights(ownedData);
       } catch (err) {
         console.error("Error fetching movie data:", err);
         toast.error(err instanceof Error ? err.message : "Failed to load movie");
@@ -475,6 +479,9 @@ export default function MovieDetailPage() {
                   {movie.source === "home_production" ? "Home Production" : "Acquired"}
                 </Badge>
                 {isExpired && <Badge variant="outline" className="text-xs font-semibold px-2.5 py-0.5 bg-red-500/10 text-red-400 border-red-500/25">Agreement Expired</Badge>}
+                {movie.source === "home_production" && currentVersion.home_sold && (
+                  <Badge variant="outline" className="text-xs font-semibold px-2.5 py-0.5 bg-red-500/10 text-red-400 border-red-500/25">Sold — Expired</Badge>
+                )}
                 {movie.release_year && (
                   <div className="flex items-center gap-1.5 text-(--text-faint)"><Calendar className="h-3.5 w-3.5" /><span className="text-sm font-medium">{movie.release_year}</span></div>
                 )}
@@ -546,7 +553,6 @@ export default function MovieDetailPage() {
           </div>
           <InfoRow label="Color / B&W" value={currentVersion.color_or_bw} />
           {movie.source !== "acquired" && <InfoRow label="Production House" value={currentVersion.production_house_name} />}
-          {currentVersion.territory && <InfoRow label="Territory" value={currentVersion.territory} />}
         </div>
       </div>
 
@@ -570,111 +576,160 @@ export default function MovieDetailPage() {
         <SectionTitle icon={ShieldCheck} title="Rights Information" accent />
         {movie.source === "home_production" ? (
           <div className="space-y-5">
-            <div className="grid grid-cols-2 gap-8">
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2">Nature of Rights</span>
-                {currentVersion.nature_of_rights
-                  ? <Badge variant="outline" className={cn("text-xs font-semibold px-2 py-0.5",
-                    currentVersion.nature_of_rights.toLowerCase().includes("exclusive") ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
-                      : currentVersion.nature_of_rights.toLowerCase().includes("jointly") ? "bg-amber-500/10 text-amber-400 border-amber-500/25"
-                        : "bg-(--bg-raise) text-(--text) border-(--svf-border)")}>{currentVersion.nature_of_rights}</Badge>
-                  : <span className="text-(--text-faint) text-sm">—</span>}
-              </div>
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2">Territory</span>
-                <div className="flex items-center gap-1.5 text-(--text) text-sm"><Globe className="h-3.5 w-3.5 text-(--text-faint)" />{currentVersion.territory || "World"}</div>
-              </div>
-            </div>
-            <div className="pt-4 border-t border-(--svf-border)">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2.5">Rights Owned</span>
+            {/* Static read-only Rights Owned section — all rights owned by default for home production */}
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-3">Rights Owned</span>
               <div className="flex flex-wrap gap-2">
-                {["Satellite", "Internet", "Negative", "Other", "Prequel/Sequel", "Character", "Sub-Titling", "Dubbing"].map(r => (
-                  <span key={r} className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/8 border border-emerald-500/20 text-emerald-400">
-                    <CheckCircle2 className="h-3 w-3" />{r}
-                  </span>
+                {["Satellite", "Internet", "Negative", "Airborne", "Ship", "Other", "Clip", "Derivative", "Ancillary"].map(right => (
+                  <Badge key={right} variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/25 text-xs font-semibold px-2 py-0.5">
+                    {right}
+                  </Badge>
                 ))}
               </div>
-              <p className="text-[10px] text-(--text-faint) mt-2">All rights exclusively owned — Yes by default for home production</p>
             </div>
-            {currentVersion.nature_of_rights?.toLowerCase().includes("jointly") && (
-              <div className="pt-4 border-t border-(--svf-border) grid grid-cols-2 gap-8">
-                <InfoRow label="Revenue Share" value={currentVersion.revenue_share} />
-                <InfoRow label="Buy-Back Opening Date" value={formatDate(currentVersion.joint_prod_buy_back_date)} />
-                {currentVersion.jointly_exploitation_rights && <div className="col-span-2"><InfoRow label="Exploitation Rights Held By" value={currentVersion.jointly_exploitation_rights} /></div>}
-              </div>
-            )}
-            {currentVersion.holdbacks && (
+            {/* Jointly Owned info */}
+            {(currentVersion.jointly_owned || currentVersion.jointly_exploitation_rights) && (
               <div className="pt-4 border-t border-(--svf-border)">
-                <HoldbacksBlock value={currentVersion.holdbacks} />
+                <div className="flex items-center gap-2 mb-3">
+                  <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/25 text-xs font-semibold">Jointly Owned</Badge>
+                </div>
+                <div className="grid grid-cols-2 gap-8">
+                  <InfoRow label="Revenue Share" value={currentVersion.revenue_share} />
+                  <InfoRow label="Buy-Back Opening Date" value={formatDate(currentVersion.joint_prod_buy_back_date)} />
+                  {currentVersion.jointly_exploitation_rights && <div className="col-span-2"><InfoRow label="Exploitation Rights Held By" value={currentVersion.jointly_exploitation_rights} /></div>}
+                </div>
               </div>
             )}
           </div>
         ) : (
           <div className="space-y-5">
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2">Territory</span>
-              <div className="flex items-center gap-1.5 text-(--text) text-sm"><Globe className="h-3.5 w-3.5 text-(--text-faint)" />{currentVersion.territory || "World"}</div>
-            </div>
-            {(currentVersion.satellite_rights || currentVersion.internet_rights || currentVersion.negative_rights || currentVersion.other_rights) && (
+            {ownedRights.length > 0 && (
               <div className="pt-4 border-t border-(--svf-border)">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-3">Primary Rights</span>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { label: "Satellite", flag: currentVersion.satellite_rights, classification: currentVersion.satellite_rights_classification, nature: currentVersion.nature_of_satellite_rights, start: currentVersion.satellite_rights_start_date, end: currentVersion.satellite_rights_end_date },
-                    { label: "Internet", flag: currentVersion.internet_rights, classification: currentVersion.internet_rights_classification, nature: currentVersion.nature_of_internet_rights, start: currentVersion.internet_rights_start_date, end: currentVersion.internet_rights_end_date },
-                    { label: "Negative", flag: currentVersion.negative_rights, classification: undefined, nature: currentVersion.nature_of_negative_rights, start: currentVersion.negative_rights_start_date, end: currentVersion.negative_rights_end_date },
-                    { label: "Other", flag: currentVersion.other_rights, classification: undefined, nature: currentVersion.nature_of_other_rights, start: currentVersion.other_rights_start_date, end: currentVersion.other_rights_end_date },
-                  ].filter(r => r.flag).map(({ label, flag, classification, nature, start, end }) => (
-                    <div key={label} className="rounded-[12px] border border-(--svf-border) bg-(--bg-raise) p-3 space-y-1.5">
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <span className="text-xs font-bold text-(--text)">{label}</span>
-                        {(() => {
-                          const parsed = parseOtherRights(flag || "");
-                          if (parsed.isYes && parsed.types.length === 0) {
-                            return <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500/10 text-emerald-400 border-emerald-500/25">Yes</Badge>;
-                          }
-                          if (parsed.isYes && parsed.types.length > 0) {
-                            return (
-                              <div className="flex flex-wrap gap-1">
-                                {parsed.types.map(s => (
-                                  <span key={s} className="text-[10px] px-1.5 py-0 rounded-full bg-emerald-500/10 text-emerald-400 border-emerald-500/25 font-semibold">{s}</span>
-                                ))}
-                              </div>
-                            );
-                          }
-                          return <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 bg-(--bg-raise) text-(--text-faint) border-(--svf-border)">{flag || "No"}</Badge>;
-                        })()}
+                <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-3">Rights We Own</span>
+                {/* Group by right_type */}
+                {(() => {
+                  const groups = new Map<string, typeof ownedRights>();
+                  ownedRights.forEach(r => {
+                    if (!groups.has(r.right_type)) groups.set(r.right_type, []);
+                    groups.get(r.right_type)!.push(r);
+                  });
+                  const natureStyle = (n: string) => {
+                    const l = n.toLowerCase();
+                    if (l.includes("non") && l.includes("exclusive")) {
+                      return {
+                        border: "border-amber-500/40",
+                        glow: "shadow-[0_0_0_1px_rgba(245,158,11,0.15)]",
+                        badge: "bg-amber-500/15 text-amber-300 border-amber-500/40",
+                        bar: "bg-amber-500",
+                      };
+                    }
+                    if (l.includes("exclusive") && !l.includes("shared")) {
+                      return {
+                        border: "border-emerald-500/40",
+                        glow: "shadow-[0_0_0_1px_rgba(16,185,129,0.15)]",
+                        badge: "bg-emerald-500/15 text-emerald-300 border-emerald-500/40",
+                        bar: "bg-emerald-500",
+                      };
+                    }
+                    if (l.includes("shared")) {
+                      return {
+                        border: "border-blue-500/40",
+                        glow: "shadow-[0_0_0_1px_rgba(59,130,246,0.15)]",
+                        badge: "bg-blue-500/15 text-blue-300 border-blue-500/40",
+                        bar: "bg-blue-500",
+                      };
+                    }
+                    return {
+                      border: "border-(--svf-border)",
+                      glow: "",
+                      badge: "bg-(--bg-deep) text-(--text-faint) border-(--svf-border)",
+                      bar: "bg-(--text-faint)",
+                    };
+                  };
+                  return Array.from(groups.entries()).map(([type, rows]) => (
+                    <div key={type} className="mb-4 last:mb-0">
+                      {/* Group header */}
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">{type}</span>
+                        <div className="flex-1 h-px bg-(--svf-border)" />
+                        <span className="text-[10px] text-(--text-faint)">{rows.length} right{rows.length > 1 ? "s" : ""}</span>
                       </div>
-                      {classification && <p className="text-xs text-(--text)">{classification}</p>}
-                      {nature && <p className="text-xs text-(--text-faint) italic">{nature}</p>}
-                      {(start || end) && <p className="text-[10px] text-(--text-faint) font-mono">{formatDate(start)} → {formatDate(end)}</p>}
+                      <div className="space-y-2.5 pl-1">
+                        {rows.map(r => {
+                          const style = natureStyle(r.nature);
+                          return (
+                            <div key={r.id} className={`relative overflow-hidden rounded-[10px] border ${style.border} ${style.glow} bg-(--bg-raise)/60 pl-4 pr-3.5 py-3.5`}>
+                              {/* Accent bar */}
+                              <div className={`absolute left-0 top-0 bottom-0 w-1 ${style.bar}`} />
+                              {/* Row 1: nature badge, bold & prominent + classification */}
+                              <div className="flex items-center gap-2 flex-wrap mb-2.5">
+                                <Badge variant="outline" className={`text-xs font-extrabold uppercase tracking-wide px-2.5 py-1 ${style.badge}`}>{r.nature}</Badge>
+                                {r.classification && (
+                                  <span className="text-[10px] font-medium text-(--text-faint) bg-(--bg-deep) border border-(--svf-border) rounded px-1.5 py-0.5">{r.classification}</span>
+                                )}
+                              </div>
+                              {/* Row 2: Territory + dates in a mini grid */}
+                              <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
+                                {r.territory && (
+                                  <div>
+                                    <span className="text-[9px] font-bold uppercase tracking-widest text-(--text-faint) block mb-0.5">Territory</span>
+                                    <div className="flex items-center gap-1 text-xs text-(--text)">
+                                      <Globe className="h-3 w-3 text-(--text-faint) shrink-0" />
+                                      {r.territory}
+                                    </div>
+                                  </div>
+                                )}
+                                {(r.start_date || r.end_date) && (
+                                  <div>
+                                    <span className="text-[9px] font-bold uppercase tracking-widest text-(--text-faint) block mb-0.5">Period</span>
+                                    <span className="text-xs font-mono text-(--text-faint)">
+                                      {formatDate(r.start_date) || "—"} <span className="opacity-50">→</span> {formatDate(r.end_date) || "Perpetual"}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                              {r.holdbacks && (
+                                <div className="mt-2 pt-2 border-t border-(--svf-border)">
+                                  <span className="text-[9px] font-bold uppercase tracking-widest text-amber-500/70 block mb-0.5">Holdbacks</span>
+                                  <span className="text-xs text-amber-400">{r.holdbacks}</span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  ))}
+                  ));
+                })()}
+              </div>
+            )}
+
+            {/* Derivative Rights group */}
+            {(currentVersion.clip_rights || currentVersion.clip_rights_duration ||
+              currentVersion.prequel_sequel_rights || currentVersion.character_rights ||
+              currentVersion.subtitling_rights || currentVersion.dubbing_rights) && (
+                <div className="pt-4 border-t border-(--svf-border)">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Derivative Rights</span>
+                    <div className="flex-1 h-px bg-(--svf-border)" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { label: "Clip Rights", value: currentVersion.clip_rights },
+                      { label: "Clip Duration", value: currentVersion.clip_rights_duration },
+                      { label: "Prequel / Sequel", value: currentVersion.prequel_sequel_rights },
+                      { label: "Character Rights", value: currentVersion.character_rights },
+                      { label: "Sub-Titling", value: currentVersion.subtitling_rights },
+                      { label: "Dubbing Rights", value: currentVersion.dubbing_rights },
+                    ].filter(f => f.value).map(({ label, value }) => (
+                      <div key={label} className="rounded-[10px] border border-(--svf-border) bg-(--bg-raise)/60 px-3.5 py-2.5">
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-(--text-faint) block mb-1">{label}</span>
+                        <span className="text-sm text-(--text) font-medium">{value}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
-            {(currentVersion.clip_rights || currentVersion.clip_rights_duration) && (
-              <div className="pt-4 border-t border-(--svf-border) grid grid-cols-2 gap-8">
-                {currentVersion.clip_rights && <InfoRow label="Clip Rights" value={currentVersion.clip_rights} />}
-                {currentVersion.clip_rights_duration && <InfoRow label="Clip Duration" value={currentVersion.clip_rights_duration} />}
-              </div>
-            )}
-            {currentVersion.holdbacks && (
-              <div className="pt-4 border-t border-(--svf-border)">
-                <HoldbacksBlock value={currentVersion.holdbacks} />
-              </div>
-            )}
-            {[
-              { label: "Syndication – Internet Rights", value: currentVersion.syndication_internet_rights },
-              { label: "Prequel / Sequel Rights", value: currentVersion.prequel_sequel_rights },
-              { label: "Character Rights", value: currentVersion.character_rights },
-              { label: "Sub-Titling Rights", value: currentVersion.subtitling_rights },
-              { label: "Dubbing Rights", value: currentVersion.dubbing_rights },
-            ].filter(f => f.value).map(({ label, value }) => (
-              <div key={label} className="pt-4 border-t border-(--svf-border)">
-                <InfoRow label={label} value={value ?? undefined} />
-              </div>
-            ))}
+              )}
           </div>
         )}
       </div>
@@ -683,58 +738,48 @@ export default function MovieDetailPage() {
       {movie.source === "acquired" && (
         <div className="bg-(--panel-solid) border border-(--svf-border) rounded-[12px] p-6">
           <SectionTitle icon={Calendar} title="Acquisition Details" accent />
-          <div className="grid grid-cols-2 gap-x-8 gap-y-5">
+          <div className="grid grid-cols-3 gap-x-10 gap-y-5">
             <InfoRow label="Assignor / Licensor" value={currentVersion.assignor_licensor} />
             <InfoRow label="Licensee" value={currentVersion.licensee} />
-            <InfoRow label="Agreement Date" value={formatDate(currentVersion.agreement_date)} />
-            <div className="col-span-2">
+            <div>
               <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-1.5">Agreement Period</span>
               <span className="text-sm text-(--text) font-mono tracking-tight">
                 {formatDate(currentVersion.agreement_start_date)} <span className="text-(--text-faint) mx-1">→</span> {formatDate(currentVersion.agreement_end_date)}
               </span>
             </div>
-            {(currentVersion.satellite_rights_start_date || currentVersion.satellite_rights_end_date) && (
-              <div className="col-span-2">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-1.5">Satellite Rights Period</span>
-                <span className="text-sm text-(--text) font-mono tracking-tight">
-                  {formatDate(currentVersion.satellite_rights_start_date)} <span className="text-(--text-faint) mx-1">→</span> {formatDate(currentVersion.satellite_rights_end_date)}
-                </span>
-              </div>
-            )}
-            {(currentVersion.internet_rights_start_date || currentVersion.internet_rights_end_date) && (
-              <div className="col-span-2">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-1.5">Internet Rights Period</span>
-                <span className="text-sm text-(--text) font-mono tracking-tight">
-                  {formatDate(currentVersion.internet_rights_start_date)} <span className="text-(--text-faint) mx-1">→</span> {formatDate(currentVersion.internet_rights_end_date)}
-                </span>
-              </div>
-            )}
-            {currentVersion.syndication_internet_rights && (
-              <div className="col-span-2"><InfoRow label="Syndication – Internet Rights" value={currentVersion.syndication_internet_rights} /></div>
-            )}
           </div>
         </div>
       )}
 
       {/* ── Notes (only when data exists) ── */}
-      {(currentVersion.wtp_library || currentVersion.remarks || currentVersion.actionables) && (
+      {(currentVersion.wtp_library || currentVersion.remarks || currentVersion.actionables || movie.is_bangladeshi != null) && (
         <div className="bg-(--panel-solid) border border-(--svf-border) rounded-[12px] p-6">
           <SectionTitle icon={Info} title="Notes & Additional Information" accent />
           <div className="space-y-5">
-            {currentVersion.wtp_library && (
+            {movie.is_bangladeshi != null && (
               <div>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2">Bangladeshi Film</span>
+                <Badge variant="outline" className={movie.is_bangladeshi
+                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25 text-xs font-semibold"
+                  : "bg-(--bg-raise) text-(--text-faint) border-(--svf-border) text-xs font-semibold"}>
+                  {movie.is_bangladeshi ? "Yes" : "No"}
+                </Badge>
+              </div>
+            )}
+            {currentVersion.wtp_library && (
+              <div className={movie.is_bangladeshi != null ? "pt-4 border-t border-(--svf-border)" : ""}>
                 <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2">WTP / Library</span>
                 <p className="text-sm text-(--text) bg-(--bg-raise) border border-(--svf-border) px-4 py-3 rounded-[12px]">{currentVersion.wtp_library}</p>
               </div>
             )}
             {currentVersion.remarks && (
-              <div className={currentVersion.wtp_library ? "pt-4 border-t border-(--svf-border)" : ""}>
+              <div className={(movie.is_bangladeshi != null || currentVersion.wtp_library) ? "pt-4 border-t border-(--svf-border)" : ""}>
                 <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2">Remarks</span>
                 <p className="text-sm text-(--text) bg-(--bg-raise) border border-(--svf-border) px-4 py-3 rounded-[12px] leading-relaxed">{currentVersion.remarks}</p>
               </div>
             )}
             {currentVersion.actionables && (
-              <div className={(currentVersion.wtp_library || currentVersion.remarks) ? "pt-4 border-t border-(--svf-border)" : ""}>
+              <div className={(movie.is_bangladeshi != null || currentVersion.wtp_library || currentVersion.remarks) ? "pt-4 border-t border-(--svf-border)" : ""}>
                 <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2">Actionables</span>
                 <p className="text-sm text-(--text) bg-amber-500/5 border border-amber-500/20 px-4 py-3 rounded-[12px] leading-relaxed">{currentVersion.actionables}</p>
               </div>

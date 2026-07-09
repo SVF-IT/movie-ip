@@ -22,6 +22,54 @@ async function fetchPlatformRightsChunked(
   return results
 }
 
+/** Returns a Set of movie_ids that have at least one movie_rights row matching the given right_type(s). */
+async function fetchMovieRightsIdsByType(movieIds: string[], rightTypes: string[]): Promise<Set<string>> {
+  if (movieIds.length === 0) return new Set()
+  const result = new Set<string>()
+  for (let i = 0; i < movieIds.length; i += CHUNK_SIZE) {
+    const chunk = movieIds.slice(i, i + CHUNK_SIZE)
+    const { data } = await supabase
+      .from('movie_rights')
+      .select('movie_id, right_type, end_date')
+      .in('movie_id', chunk)
+      .in('right_type', rightTypes)
+    for (const row of data || []) result.add(row.movie_id)
+  }
+  return result
+}
+
+/**
+ * Returns a Map<movie_id, earliest_end_date | null> for acquired movies.
+ * null means the right has no end date (perpetual).
+ * Only considers right_types matching the given list.
+ */
+async function fetchMovieRightsEndDates(movieIds: string[], rightTypes: string[]): Promise<Map<string, string | null>> {
+  if (movieIds.length === 0) return new Map()
+  const map = new Map<string, string | null>()
+  for (let i = 0; i < movieIds.length; i += CHUNK_SIZE) {
+    const chunk = movieIds.slice(i, i + CHUNK_SIZE)
+    const { data } = await supabase
+      .from('movie_rights')
+      .select('movie_id, end_date')
+      .in('movie_id', chunk)
+      .in('right_type', rightTypes)
+    for (const row of data || []) {
+      const endDate: string | null = row.end_date ?? null
+      if (!map.has(row.movie_id)) {
+        map.set(row.movie_id, endDate)
+      } else {
+        const existing = map.get(row.movie_id)!
+        // null = perpetual (most generous) — once set, keep null
+        if (existing !== null) {
+          if (endDate === null) map.set(row.movie_id, null)
+          else if (endDate > existing) map.set(row.movie_id, endDate)
+        }
+      }
+    }
+  }
+  return map
+}
+
 function isSatellitePlatformType(pt: string): boolean {
   const n = pt.toLowerCase()
   return n.includes('satellite') || n.includes('dth') || n.includes('terrestrial') || n.includes('cable')
@@ -253,14 +301,14 @@ export async function getRightsFocusedStats(): Promise<RightsFocusedStats> {
     // Get all movies that are NOT expired and NOT "Sold to Grassroot"
     // A movie is expired if its agreement_end_date is in the past
     // Movies sold to grassroot (remapped to Sold/Expired) should not be part of any open titles or WTP count
-    const moviesQuery = supabase.from('movies').select('id, agreement_end_date, nature_of_rights').eq('approval_status', 'approved')
+    const moviesQuery = supabase.from('movies').select('id, source, agreement_end_date, jointly_exploitation_rights').eq('approval_status', 'approved')
     const { data: allMovies } = await moviesQuery
     const allMovieIds = new Set(
       (allMovies || [])
-        .filter((m: { id: string; source?: string; agreement_end_date?: string | null; nature_of_rights?: string | null }) => {
+        .filter((m: { id: string; source?: string; agreement_end_date?: string | null; jointly_exploitation_rights?: string | null }) => {
           if (m.source === 'home_production') {
-            const nature = (m.nature_of_rights || '').toLowerCase()
-            return !nature.includes('sold') && !nature.includes('grassroot')
+            const jer = (m.jointly_exploitation_rights || '').toLowerCase()
+            return !jer.startsWith('sold')
           }
           if (!m.agreement_end_date) return true
           return m.agreement_end_date >= today
@@ -320,22 +368,19 @@ export async function getRightsModeStats(mode: RightsMode, language?: string): P
     const currentYearStart = `${currentYear}-01-01`
     const currentYearEnd = `${currentYear}-12-31`
 
-    // Fetch all approved movies (language-filtered)
+    // Fetch all approved movies (language-filtered) — no flat rights columns needed
     let moviesQuery = supabase
       .from('movies')
-      .select(
-        'id, source, certification, nature_of_rights, agreement_end_date, satellite_rights, internet_rights, negative_rights, satellite_rights_end_date, internet_rights_end_date, wtp_library',
-      )
+      .select('id, source, certification, jointly_exploitation_rights, agreement_end_date, wtp_library')
       .eq('approval_status', 'approved')
     if (language) moviesQuery = moviesQuery.eq('language', language)
     const { data: allMovies } = await moviesQuery
 
     const validMovies = (allMovies || []).filter((m: any) => {
       if (m.source === 'home_production') {
-        const nature = (m.nature_of_rights || '').toLowerCase()
-        return !nature.includes('sold') && !nature.includes('grassroot')
+        const jer = (m.jointly_exploitation_rights || '').toLowerCase()
+        return !jer.startsWith('sold')
       }
-      // Acquired: always include (expiry checked per-right-type below)
       return true
     })
 
@@ -347,7 +392,6 @@ export async function getRightsModeStats(mode: RightsMode, language?: string): P
       const homeMovieIds = homeMovies.map((m: any) => m.id)
 
       // Home open: no active satellite platform_right, cert != A
-      // platform_type in (Satellite TV, DTH VOD, Terrestrial TV)
       let moviesWithActiveSatRights = new Set<string>()
       if (homeMovieIds.length > 0) {
         const satRights = await fetchPlatformRightsChunked(
@@ -362,35 +406,41 @@ export async function getRightsModeStats(mode: RightsMode, language?: string): P
         !moviesWithActiveSatRights.has(m.id) && (m.certification || '').trim().toUpperCase() !== 'A'
       ).length
 
-      // Acquired open: satellite_rights=Yes OR negative_rights=Yes,
-      // cert != A, not expired (satellite_rights_end_date if present, else agreement_end_date),
-      // and no active satellite platform_right where platform_type include satellite/terrestrial/dth AND (end_date is null or >= today)
-      const acquiredMovies = validMovies.filter((m: any) => {
-        if (m.source !== 'acquired') return false
-        if (m.satellite_rights !== 'Yes' && m.negative_rights !== 'Yes') return false
-        if ((m.certification || '').trim().toUpperCase() === 'A') return false
-        // Use satellite_rights_end_date if available, else agreement_end_date
-        const endDate = m.satellite_rights_end_date || m.agreement_end_date
+      // Acquired open: has a Satellite or Negative movie_rights row that hasn't expired,
+      // cert != A, and no active satellite platform_right
+      const acquiredMovies = validMovies.filter((m: any) => m.source === 'acquired' && (m.certification || '').trim().toUpperCase() !== 'A')
+      const acquiredMovieIds = acquiredMovies.map((m: any) => m.id)
+
+      // Which acquired movies have a Satellite or Negative right?
+      const acqWithSatRight = await fetchMovieRightsIdsByType(acquiredMovieIds, ['Satellite', 'Negative'])
+      // Get the effective end_date per movie from movie_rights
+      const acqSatEndDates = await fetchMovieRightsEndDates(acquiredMovieIds, ['Satellite', 'Negative'])
+
+      const eligibleAcquired = acquiredMovies.filter((m: any) => {
+        if (!acqWithSatRight.has(m.id)) return false
+        const mrEnd = acqSatEndDates.get(m.id)
+        // mrEnd undefined = no row (already excluded above); null = perpetual
+        const endDate = mrEnd ?? m.agreement_end_date ?? null
         if (endDate && endDate < today) return false
         return true
       })
-      const acquiredMovieIds = acquiredMovies.map((m: any) => m.id)
+      const eligibleAcquiredIds = eligibleAcquired.map((m: any) => m.id)
+
       const moviesWithActiveSatPlatformRight = new Set<string>()
-      if (acquiredMovieIds.length > 0) {
-        const acqSatRights = await fetchPlatformRightsChunked(acquiredMovieIds, 'movie_id, platforms(platform_type), end_date')
+      if (eligibleAcquiredIds.length > 0) {
+        const acqSatRights = await fetchPlatformRightsChunked(eligibleAcquiredIds, 'movie_id, platforms(platform_type), end_date')
         acqSatRights.forEach((r: any) => {
           if (!isAcquiredSatellitePlatform(r.platforms?.platform_type || '')) return
           if (!r.end_date || r.end_date >= today) moviesWithActiveSatPlatformRight.add(r.movie_id)
         })
       }
-      openAcquiredCount = acquiredMovies.filter((m: any) => !moviesWithActiveSatPlatformRight.has(m.id)).length
+      openAcquiredCount = eligibleAcquired.filter((m: any) => !moviesWithActiveSatPlatformRight.has(m.id)).length
     } else {
       // Internet mode
       const homeMovies = validMovies.filter((m: any) => m.source === 'home_production')
       const homeMovieIds = homeMovies.map((m: any) => m.id)
 
       // Home open: no active internet platform_right (excluding Hoichoi)
-      // platform_type in (SVOD, TVOD, AVOD, FVOD), is_current=true, (end_date is null or >= today)
       let moviesWithActiveIntRights = new Set<string>()
       if (homeMovieIds.length > 0) {
         const intRights = await fetchPlatformRightsChunked(
@@ -405,21 +455,27 @@ export async function getRightsModeStats(mode: RightsMode, language?: string): P
       }
       openHomeCount = homeMovies.filter((m: any) => !moviesWithActiveIntRights.has(m.id)).length
 
-      // Acquired open: internet_rights=Yes OR negative_rights=Yes,
-      // not expired (internet_rights_end_date if present, else agreement_end_date),
+      // Acquired open: has an Internet or Negative movie_rights row that hasn't expired,
       // and no active internet platform_right (excluding Hoichoi)
-      const acquiredMovies = validMovies.filter((m: any) => {
-        if (m.source !== 'acquired') return false
-        if (m.internet_rights !== 'Yes' && m.negative_rights !== 'Yes') return false
-        const endDate = m.internet_rights_end_date || m.agreement_end_date
+      const acquiredMovies = validMovies.filter((m: any) => m.source === 'acquired')
+      const acquiredMovieIds = acquiredMovies.map((m: any) => m.id)
+
+      const acqWithIntRight = await fetchMovieRightsIdsByType(acquiredMovieIds, ['Internet', 'Negative'])
+      const acqIntEndDates = await fetchMovieRightsEndDates(acquiredMovieIds, ['Internet', 'Negative'])
+
+      const eligibleAcquired = acquiredMovies.filter((m: any) => {
+        if (!acqWithIntRight.has(m.id)) return false
+        const mrEnd = acqIntEndDates.get(m.id)
+        const endDate = mrEnd ?? m.agreement_end_date ?? null
         if (endDate && endDate < today) return false
         return true
       })
-      const acquiredMovieIds = acquiredMovies.map((m: any) => m.id)
+      const eligibleAcquiredIds = eligibleAcquired.map((m: any) => m.id)
+
       const moviesWithActiveIntPlatformRight = new Set<string>()
-      if (acquiredMovieIds.length > 0) {
+      if (eligibleAcquiredIds.length > 0) {
         const acqIntRights = await fetchPlatformRightsChunked(
-          acquiredMovieIds, 'movie_id, platforms(name, platform_type), end_date',
+          eligibleAcquiredIds, 'movie_id, platforms(name, platform_type), end_date',
           (q) => q.eq('is_current', true)
         )
         acqIntRights.forEach((r: any) => {
@@ -427,7 +483,7 @@ export async function getRightsModeStats(mode: RightsMode, language?: string): P
           if (!r.end_date || r.end_date >= today) moviesWithActiveIntPlatformRight.add(r.movie_id)
         })
       }
-      openAcquiredCount = acquiredMovies.filter((m: any) => !moviesWithActiveIntPlatformRight.has(m.id)).length
+      openAcquiredCount = eligibleAcquired.filter((m: any) => !moviesWithActiveIntPlatformRight.has(m.id)).length
     }
 
     const openTitlesCount = openHomeCount + openAcquiredCount
@@ -534,8 +590,8 @@ export async function getOpenTitlesForMode(
     // Filter valid home movies: exclude sold/grassroot
     const validMovies = ((movies || []) as any[]).filter((m: any) => {
       if (m.source !== 'home_production') return true
-      const nature = (m.nature_of_rights || '').toLowerCase()
-      return !nature.includes('sold') && !nature.includes('grassroot')
+      const jer = (m.jointly_exploitation_rights || '').toLowerCase()
+      return !jer.startsWith('sold')
     })
 
     let openTitles: any[] = []
@@ -553,14 +609,16 @@ export async function getOpenTitlesForMode(
       }
       const openHomeMovies = homeMovies.filter((m: any) => !moviesWithActiveSatRights.has(m.id) && (m.certification || '').trim().toUpperCase() !== 'A')
 
-      // Acquired: satellite_rights=Yes OR negative_rights=Yes, cert != A,
-      // not expired (satellite_rights_end_date ?? agreement_end_date), no active satellite platform_right
-      // where platform_type include satellite/terrestrial/dth AND (end_date is null or >= today)
-      const acquiredMovies = validMovies.filter((m: any) => {
-        if (m.source !== 'acquired') return false
-        if (m.satellite_rights !== 'Yes' && m.negative_rights !== 'Yes') return false
-        if ((m.certification || '').trim().toUpperCase() === 'A') return false
-        const endDate = m.satellite_rights_end_date || m.agreement_end_date
+      // Acquired: has Satellite or Negative movie_rights row, cert != A,
+      // not expired, no active satellite platform_right
+      const acquiredCandidates = validMovies.filter((m: any) => m.source === 'acquired' && (m.certification || '').trim().toUpperCase() !== 'A')
+      const acquiredCandidateIds = acquiredCandidates.map((m: any) => m.id)
+      const acqWithSatRight2 = await fetchMovieRightsIdsByType(acquiredCandidateIds, ['Satellite', 'Negative'])
+      const acqSatEndDates2 = await fetchMovieRightsEndDates(acquiredCandidateIds, ['Satellite', 'Negative'])
+      const acquiredMovies = acquiredCandidates.filter((m: any) => {
+        if (!acqWithSatRight2.has(m.id)) return false
+        const mrEnd = acqSatEndDates2.get(m.id)
+        const endDate = mrEnd ?? m.agreement_end_date ?? null
         if (endDate && endDate < today) return false
         return true
       })
@@ -601,12 +659,15 @@ export async function getOpenTitlesForMode(
       }
       const openHomeMovies = homeMovies.filter((m: any) => !moviesWithActiveIntRights.has(m.id))
 
-      // Acquired: internet_rights=Yes OR negative_rights=Yes,
-      // not expired (internet_rights_end_date ?? agreement_end_date), no active internet platform_right (excl. Hoichoi)
-      const acquiredMovies = validMovies.filter((m: any) => {
-        if (m.source !== 'acquired') return false
-        if (m.internet_rights !== 'Yes' && m.negative_rights !== 'Yes') return false
-        const endDate = m.internet_rights_end_date || m.agreement_end_date
+      // Acquired: has Internet or Negative movie_rights row, not expired, no active internet platform_right (excl. Hoichoi)
+      const acquiredCandidatesInt = validMovies.filter((m: any) => m.source === 'acquired')
+      const acquiredCandidateIdsInt = acquiredCandidatesInt.map((m: any) => m.id)
+      const acqWithIntRight2 = await fetchMovieRightsIdsByType(acquiredCandidateIdsInt, ['Internet', 'Negative'])
+      const acqIntEndDates2 = await fetchMovieRightsEndDates(acquiredCandidateIdsInt, ['Internet', 'Negative'])
+      const acquiredMovies = acquiredCandidatesInt.filter((m: any) => {
+        if (!acqWithIntRight2.has(m.id)) return false
+        const mrEnd = acqIntEndDates2.get(m.id)
+        const endDate = mrEnd ?? m.agreement_end_date ?? null
         if (endDate && endDate < today) return false
         return true
       })
@@ -635,10 +696,9 @@ export async function getOpenTitlesForMode(
     // Filter by open date range: title must be open (rights end date within or after openFrom, before openTo)
     if (options?.openFrom || options?.openTo) {
       openTitles = openTitles.filter((m: any) => {
-        const endDate = mode === 'satellite'
-          ? (m.satellite_rights_end_date || m.agreement_end_date)
-          : (m.internet_rights_end_date || m.agreement_end_date)
-        // Titles with no end date are open indefinitely — include unless openFrom is set and we want bounded results
+        // For acquired movies, the effective expiry is the agreement_end_date
+        // (per-right expiry is already filtered above via movie_rights lookup)
+        const endDate = m.agreement_end_date ?? null
         if (!endDate) return true
         if (options.openFrom && endDate < options.openFrom) return false
         if (options.openTo && endDate > options.openTo) return false
@@ -734,8 +794,8 @@ export async function getExpiringSatelliteTitles(options?: {
 
     const validMovies = allMovies.filter((m: any) => {
       if (m.source === 'home_production') {
-        const nature = (m.nature_of_rights || '').toLowerCase()
-        return !nature.includes('sold') && !nature.includes('grassroot')
+        const jer = (m.jointly_exploitation_rights || '').toLowerCase()
+        return !jer.startsWith('sold')
       }
       if (!m.agreement_end_date) return true
       return m.agreement_end_date >= today
@@ -887,8 +947,8 @@ export async function getExpiringInternetTitles(options?: {
     }))
     const validMovies = allMovies.filter((m: any) => {
       if (m.source === 'home_production') {
-        const nature = (m.nature_of_rights || '').toLowerCase()
-        return !nature.includes('sold') && !nature.includes('grassroot')
+        const jer = (m.jointly_exploitation_rights || '').toLowerCase()
+        return !jer.startsWith('sold')
       }
       if (!m.agreement_end_date) return true
       return m.agreement_end_date >= today
@@ -997,8 +1057,8 @@ export async function getActiveInternetTitles(options?: {
     }))
     const validMovies = allMovies.filter((m: any) => {
       if (m.source !== 'home_production') return true
-      const nature = (m.nature_of_rights || '').toLowerCase()
-      return !nature.includes('sold') && !nature.includes('grassroot')
+      const jer = (m.jointly_exploitation_rights || '').toLowerCase()
+      return !jer.startsWith('sold')
     })
 
     let filteredMovies = validMovies
@@ -1065,18 +1125,18 @@ export async function getActiveInternetTitlesCount(language?: string): Promise<{
   try {
     const today = new Date().toISOString().split('T')[0]
 
-    // Fetch all approved movies (language-filtered)
+    // Fetch all approved movies (language-filtered) — no flat rights columns needed
     let moviesQuery = supabase
       .from('movies')
-      .select('id, source, nature_of_rights, internet_rights, negative_rights, internet_rights_end_date')
+      .select('id, source, jointly_exploitation_rights, agreement_end_date')
       .eq('approval_status', 'approved')
     if (language) moviesQuery = moviesQuery.eq('language', language)
     const { data: allMovies } = await moviesQuery
 
     const validMovies = (allMovies || []).filter((m: any) => {
       if (m.source === 'home_production') {
-        const nature = (m.nature_of_rights || '').toLowerCase()
-        return !nature.includes('sold') && !nature.includes('grassroot')
+        const jer = (m.jointly_exploitation_rights || '').toLowerCase()
+        return !jer.startsWith('sold')
       }
       return true
     })
@@ -1099,21 +1159,27 @@ export async function getActiveInternetTitlesCount(language?: string): Promise<{
       moviesWithActivePlatformRights.add(r.movie_id)
     })
 
+    // For acquired movies: check movie_rights for Internet or Negative rows
+    const acquiredIds = validMovies.filter((m: any) => m.source === 'acquired').map((m: any) => m.id)
+    const acqWithIntRight = await fetchMovieRightsIdsByType(acquiredIds, ['Internet', 'Negative'])
+    const acqIntEndDates = await fetchMovieRightsEndDates(acquiredIds, ['Internet', 'Negative'])
+
     const homeWithActive = new Set<string>()
     const acquiredWithActive = new Set<string>()
 
     validMovies.forEach((m: any) => {
       const hasPlatformRight = moviesWithActivePlatformRights.has(m.id)
-      const hasMovieLevelRight = m.source === 'acquired' && 
-        (m.internet_rights === 'Yes' || m.negative_rights === 'Yes') &&
-        (!m.internet_rights_end_date || m.internet_rights_end_date >= today)
+      const hasMovieLevelRight = m.source === 'acquired' &&
+        acqWithIntRight.has(m.id) &&
+        (() => {
+          const mrEnd = acqIntEndDates.get(m.id)
+          const endDate = mrEnd ?? m.agreement_end_date ?? null
+          return !endDate || endDate >= today
+        })()
 
       if (hasPlatformRight || hasMovieLevelRight) {
-        if (m.source === 'home_production') {
-          homeWithActive.add(m.id)
-        } else if (m.source === 'acquired') {
-          acquiredWithActive.add(m.id)
-        }
+        if (m.source === 'home_production') homeWithActive.add(m.id)
+        else if (m.source === 'acquired') acquiredWithActive.add(m.id)
       }
     })
 
@@ -1185,9 +1251,8 @@ export async function getMoviesForDashboard(options?: {
       query = query.in('wtp_library', ['WTP', 'WTP/BD'])
     }
 
-    // "Sold to Grassroot" (now Sold/Expired) can be filtered directly on the nature_of_rights column
     if (options?.rightsStatus === 'sold_to_grassroot') {
-      query = query.or('nature_of_rights.ilike.%Sold to Grassroot%,nature_of_rights.ilike.%Sold/Expired%,nature_of_rights.ilike.%Sold%')
+      query = query.ilike('jointly_exploitation_rights', '%Sold%')
     }
 
     // Applying sorting at SQL level when possible
@@ -1260,10 +1325,10 @@ export async function getMoviesForDashboard(options?: {
     // For special categories (open_titles, wtp), filter the movies
     if (options?.category === 'open_titles') {
       // Exclude expired movies (agreement_end_date < today) and "Sold to Grassroot" movies
-      filteredMovies = filteredMovies.filter((m: { source?: string; nature_of_rights?: string; agreement_end_date?: string }) => {
+      filteredMovies = filteredMovies.filter((m: { source?: string; jointly_exploitation_rights?: string; agreement_end_date?: string }) => {
         if (m.source === 'home_production') {
-          const nature = (m.nature_of_rights || '').toLowerCase()
-          return !nature.includes('sold') && !nature.includes('grassroot')
+          const jer = (m.jointly_exploitation_rights || '').toLowerCase()
+          return !jer.startsWith('sold')
         }
         // Acquired: exclude if agreement_end_date is in the past
         if (m.agreement_end_date && m.agreement_end_date < today) return false

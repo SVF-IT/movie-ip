@@ -3,6 +3,7 @@
 import { ComprehensiveCSVImportDialog } from "@/components/import-export/comprehensive-csv-import-dialog";
 import type { ExportFieldDef } from "@/components/import-export/data-export-dialog";
 import { BulkPostersUploadDialog } from "@/components/movies/bulk-posters-upload-dialog";
+import { SpecialEventsBanner } from "@/components/movies/special-events-banner";
 import { RoleGate } from "@/components/role-gate";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,19 +30,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { SpecialEventsBanner } from "@/components/movies/special-events-banner";
 import { useAuth } from "@/contexts/auth-context";
 import { useAppToast } from "@/hooks/use-app-toast";
-import { getDistinctCertifications, getPlatforms, getRightsNatureTypes } from "@/lib/api/dashboard";
+import { getDistinctCertifications, getPlatforms } from "@/lib/api/dashboard";
 import { getBulkMoviePlatformRights, getGroupedMovies, getLanguages } from "@/lib/api/movies";
-import type { ApprovalStatus, GroupedMovie, MovieLanguageVersion, Platform, PlatformRight, RightsNatureType } from "@/lib/types/database";
+import type { ApprovalStatus, GroupedMovie, MovieLanguageVersion, Platform, PlatformRight } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
 import {
   Activity,
   Calendar,
-  ChevronDown, ChevronLeft, ChevronRight,
+  ChevronDown,
   Download, Edit, ExternalLink, Film,
-  Image as ImageIcon,
   Languages,
   LayoutGrid, List, Loader2, Plus, Search, Settings2, ShieldCheck,
   Upload, X
@@ -74,8 +73,6 @@ export default function MoviesPage() {
   const [yearFrom, setYearFrom] = useState<string>("");
   const [yearTo, setYearTo] = useState<string>("");
   const [territoryFilter, setTerritoryFilter] = useState<string>("");
-  const [natureFilter, setNatureFilter] = useState<string>("all");
-  const [natureTypes, setNatureTypes] = useState<RightsNatureType[]>([]);
   const [sortBy, setSortBy] = useState<'title_asc' | 'title_desc' | 'created_at_desc' | 'release_date_asc' | 'release_date_desc'>('title_asc');
   const [agreementExpiryYear, setAgreementExpiryYear] = useState<string>("all");
   const [agreementEndFrom, setAgreementEndFrom] = useState<string>("");
@@ -99,7 +96,6 @@ export default function MoviesPage() {
       const bengali = langs.find((l) => l.toLowerCase() === 'bengali');
       if (bengali) setLanguageFilter(bengali);
     }).catch(() => { });
-    getRightsNatureTypes().then(setNatureTypes).catch(() => { });
     getDistinctCertifications().then((certs) => {
       const standardCerts = ['U', 'UA', 'UA 7+', 'UA 13+', 'UA 16+', 'A', 'S'];
       const dbCerts = certs.filter(c => c !== 'U/A');
@@ -126,18 +122,38 @@ export default function MoviesPage() {
 
       const source = (sourceFilter === "all" || sourceFilter === "jointly_owned") ? undefined : (sourceFilter as "home_production" | "acquired" | "expired" | "bangladeshi");
 
-      const { data: allGroupedData } = await getGroupedMovies({
-        source,
+      const commonParams = {
         search: searchQuery || undefined,
         language: (versionFilter === "multi") ? undefined : (languageFilter !== "all" ? languageFilter : undefined),
         certification: certificationFilter.length > 0 ? certificationFilter : undefined,
         yearFrom: yearFrom ? new Date(yearFrom).getFullYear() : undefined,
         yearTo: yearTo ? new Date(yearTo).getFullYear() : undefined,
-        territory: territoryFilter || undefined,
-        natureOfRights: sourceFilter === "jointly_owned" ? "Jointly Owned" : (natureFilter !== "all" ? natureFilter : undefined),
         sortBy,
         approvalStatus: canFilterByApproval ? approvalFilter : "approved",
-      });
+      };
+
+      let allGroupedData: GroupedMovie[];
+
+      if (sourceFilter === "expired") {
+        // "Expired" = expired acquired movies + sold home prod movies (merged, deduped)
+        const [expiredRes, soldRes] = await Promise.all([
+          getGroupedMovies({ ...commonParams, source: "expired" }),
+          getGroupedMovies({ ...commonParams, source: "sold" }),
+        ]);
+        const seen = new Set<string>();
+        allGroupedData = [...(expiredRes.data || []), ...(soldRes.data || [])].filter(m => {
+          if (seen.has(m.production_no)) return false;
+          seen.add(m.production_no);
+          return true;
+        });
+      } else {
+        const { data } = await getGroupedMovies({
+          ...commonParams,
+          source,
+          natureOfRights: sourceFilter === "jointly_owned" ? "Jointly Owned" : undefined,
+        });
+        allGroupedData = data;
+      }
 
       let filteredData = allGroupedData;
 
@@ -170,6 +186,7 @@ export default function MoviesPage() {
         });
       }
 
+
       setAllFilteredMovies(filteredData);
       setMovies(filteredData);
       setTotalCount(filteredData.length);
@@ -180,7 +197,7 @@ export default function MoviesPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, sourceFilter, versionFilter, languageFilter, certificationFilter, yearFrom, yearTo, territoryFilter, natureFilter, sortBy, agreementExpiryYear, agreementEndFrom, agreementEndTo, approvalFilter, canFilterByApproval]);
+  }, [searchQuery, sourceFilter, versionFilter, languageFilter, certificationFilter, yearFrom, yearTo, territoryFilter, sortBy, agreementExpiryYear, agreementEndFrom, agreementEndTo, approvalFilter, canFilterByApproval]);
 
   useEffect(() => { fetchMovies(); }, [fetchMovies]);
 
@@ -319,13 +336,10 @@ export default function MoviesPage() {
       if (!isHome) {
         groupRow = Array(metaCount).fill(null);
         const metaGroupSpans: [string, string, string][] = [
-          ["Primary Rights", "satellite_rights", "other_rights"],
-          ["Secondary Rights", "satellite_rights_classification", "internet_rights_classification"],
-          ["Holdbacks & Clip Rights", "holdbacks", "clip_rights_duration"],
-          ["Derivative Rights", "prequel_sequel_rights", "character_rights"],
-          ["Ancillary Rights", "subtitling_rights", "dubbing_rights"],
-          ["Nature of Rights", "nature_of_satellite_rights", "nature_of_other_rights"],
-          ["Details of Film", "territory", "color_or_bw"],
+          ["Agreement", "agreement_date", "agreement_end_date"],
+          ["Film Details", "color_or_bw", "color_or_bw"],
+          ["Clip Rights", "clip_rights", "clip_rights_duration"],
+          ["Derivative Rights", "prequel_sequel_rights", "dubbing_rights"],
         ];
         // groupRow row index = 0 for acquired
         for (const [label, firstKey, lastKey] of metaGroupSpans) {
@@ -421,7 +435,7 @@ export default function MoviesPage() {
     }
   };
 
-  const hasFilters = searchQuery || sourceFilter !== "all" || versionFilter !== "all" || natureFilter !== "all"
+  const hasFilters = searchQuery || sourceFilter !== "all" || versionFilter !== "all"
     || languageFilter !== "all" || certificationFilter.length > 0 || yearFrom || yearTo || territoryFilter
     || agreementExpiryYear !== "all" || agreementEndFrom || agreementEndTo;
 
@@ -454,9 +468,10 @@ export default function MoviesPage() {
   };
 
   const showAgreementExpiry = sourceFilter === "acquired";
-  const showJointProdCols = sourceFilter === "jointly_owned";
-  const showBuyBackCol = sourceFilter === "jointly_owned" || natureFilter === "Jointly Owned";
-  const showAgreementEndCol = sourceFilter !== "home_production" && sourceFilter !== "jointly_owned";
+  const isJointlyOwnedFilter = sourceFilter === "jointly_owned";
+  const showJointProdCols = isJointlyOwnedFilter;
+  const showBuyBackCol = isJointlyOwnedFilter;
+  const showAgreementEndCol = sourceFilter !== "home_production" && !isJointlyOwnedFilter;
   const showMultiVersionCol = versionFilter === "multi";
   const showLicensorCol = sourceFilter === "acquired";
 
@@ -575,19 +590,6 @@ export default function MoviesPage() {
               </Select>
             </div>
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Nature</label>
-              <Select value={natureFilter} onValueChange={(v) => { setNatureFilter(v); }}>
-                <SelectTrigger className="h-9 w-full">
-                  <div className="flex items-center gap-2"><ShieldCheck className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} /><SelectValue placeholder="Any Nature" /></div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Any Nature</SelectItem>
-                  {natureTypes.map((n) => <SelectItem key={n.id} value={n.name}>{n.name}</SelectItem>)}
-                  <SelectItem value="Other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
               <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Territory</label>
               <Select value={territoryFilter} onValueChange={(v) => { setTerritoryFilter(v === "all" ? "" : v); }}>
                 <SelectTrigger className="h-9 w-full">
@@ -657,7 +659,7 @@ export default function MoviesPage() {
             {hasFilters && (
               <div className="flex items-end">
                 <Button variant="outline" size="sm" className="h-9 gap-1.5 w-full bg-red-500/5 border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50" onClick={() => {
-                  setSearchQuery(""); setSourceFilter("all"); setVersionFilter("all"); setNatureFilter("all");
+                  setSearchQuery(""); setSourceFilter("all"); setVersionFilter("all");
                   setLanguageFilter(languages.find(l => l.toLowerCase() === "bengali") ?? "all");
                   setCertificationFilter([]); setYearFrom(""); setYearTo(""); setTerritoryFilter("");
                   setAgreementExpiryYear("all"); setAgreementEndFrom(""); setAgreementEndTo("");
@@ -860,7 +862,9 @@ export default function MoviesPage() {
                     {movies.map((movie, idx) => {
                       const pv = movie.primary_version || movie.versions[0];
                       const movieId = pv?.id;
-                      const isSold = movie.nature_of_rights?.toLowerCase().includes("sold");
+                      // Home production movies shown in the "expired" tab that have no agreement_end_date
+                      // are sold movies (returned by the "sold" source query in getGroupedMovies).
+                      const isSold = sourceFilter === "expired" && movie.source === "home_production";
                       const isAcquired = movie.source === "acquired" && !isSold;
                       const isExpiredAgreement = pv?.agreement_end_date && new Date(pv.agreement_end_date) < new Date();
                       const isExpired = isExpiredAgreement || isSold;
@@ -908,10 +912,10 @@ export default function MoviesPage() {
                             <div className="flex flex-col gap-1">
                               <Badge variant="outline" className={cn("text-[10px] w-fit font-semibold px-2 py-0.5",
                                 movie.source === "acquired" ? "bg-violet-500/10 text-violet-400 border-violet-500/25"
-                                  : (movie.nature_of_rights === "Jointly Owned") ? "bg-amber-500/10 text-amber-400 border-amber-500/25"
+                                  : (movie.primary_version as any)?.jointly_owned ? "bg-amber-500/10 text-amber-400 border-amber-500/25"
                                     : "bg-indigo-500/10 text-indigo-400 border-indigo-500/25"
                               )}>
-                                {movie.source === "acquired" ? "Acquired" : (movie.nature_of_rights === "Jointly Owned") ? "Jointly Owned" : "Home"}
+                                {movie.source === "acquired" ? "Acquired" : (movie.primary_version as any)?.jointly_owned ? "Jointly Owned" : "Home"}
                               </Badge>
                               {isExpired && <Badge variant="destructive" className="text-[10px] w-fit font-semibold px-2 py-0.5">Expired</Badge>}
                               {canFilterByApproval && (movie as any).approval_status === "pending" && <Badge variant="warning" className="text-[10px] w-fit font-semibold px-2 py-0.5">Pending</Badge>}
@@ -1089,7 +1093,7 @@ const HOME_EXPORT_FIELDS: ExportFieldDef[] = [
   { key: "release_date", label: "Theatrical Release Date" },
   { key: "trailer_link", label: "YT Trailer Link" },
   { key: "certification", label: "Censor" },
-  { key: "nature_of_rights", label: "Nature of Right" },
+  { key: "jointly_owned", label: "Jointly Owned" },
   { key: "holdbacks", label: "Holdbacks" },
   { key: "remarks", label: "Remarks" },
   { key: "actionables", label: "Actionable" },
@@ -1098,45 +1102,23 @@ const HOME_EXPORT_FIELDS: ExportFieldDef[] = [
   { key: "joint_prod_buy_back_date", label: "Joint Buy Back Date" },
 ];
 
-// Acquired metadata columns — matches the exact column order of the import template
-// (rows 1-2 of the CSV: the flat/secondary header section before the platform rights 3-row header)
+// Acquired metadata columns — movie-level fields only; rights come from movie_rights table via rightsMap
 const ACQUIRED_META_FIELDS: ExportFieldDef[] = [
   { key: "title", label: "Movie Name" },
   { key: "assignor_licensor", label: "Assignor/ Licensor" },
   { key: "licensee", label: "Licensee" },
   { key: "agreement_date", label: "Date of Agreement" },
-  { key: "satellite_rights", label: "Satellite Rights" },
-  { key: "internet_rights", label: "Internet Rights" },
-  { key: "negative_rights", label: "Negative Rights" },
-  { key: "other_rights", label: "Other Rights" },
-  { key: "satellite_rights_classification", label: "Satellite Rights Classification" },
-  { key: "internet_rights_classification", label: "Internet Classification" },
-  { key: "holdbacks", label: "Holdbacks" },
-  { key: "clip_rights", label: "Clip Rights" },
-  { key: "clip_rights_duration", label: "Duration" },
-  { key: "prequel_sequel_rights", label: "Prequel/ Sequel Rights" },
-  { key: "character_rights", label: "Character Rights" },
-  { key: "subtitling_rights", label: "Sub-Titling Rights" },
-  { key: "dubbing_rights", label: "Dubbing Rights" },
-  { key: "nature_of_satellite_rights", label: "Nature of Satellite Rights" },
-  { key: "nature_of_internet_rights", label: "Nature of Internet Rights" },
-  { key: "nature_of_negative_rights", label: "Nature of Negative Rights" },
-  { key: "nature_of_other_rights", label: "Nature of Other Rights" },
-  { key: "territory", label: "Territory" },
+  { key: "agreement_start_date", label: "Agreement Start Date" },
+  { key: "agreement_end_date", label: "Agreement End Date" },
   { key: "cast_names", label: "Cast Details" },
   { key: "director_names", label: "Director" },
   { key: "release_year", label: "Release Year" },
   { key: "certification", label: "Certification" },
   { key: "color_or_bw", label: "Color/B/W" },
-  { key: "agreement_start_date", label: "Agreement Start Date" },
-  { key: "agreement_end_date", label: "Agreement End Date" },
-  { key: "satellite_rights_start_date", label: "Satellite Rights\nStart Date" },
-  { key: "satellite_rights_end_date", label: "Satellite Rights\nEnd Date" },
-  { key: "internet_rights_start_date", label: "Internet Rights\nStart Date" },
-  { key: "internet_rights_end_date", label: "Internet Rights\nEnd Date" },
-  { key: "negative_rights_start_date", label: "Negative Rights\nStart Date" },
-  { key: "negative_rights_end_date", label: "Negative Rights\nEnd Date" },
-  { key: "other_rights_start_date", label: "Other Rights\nStart Date" },
-  { key: "other_rights_end_date", label: "Other Rights\nEnd Date" },
-  { key: "syndication_internet_rights", label: "Syndication-\nInternet Rights" },
+  { key: "clip_rights", label: "Clip Rights" },
+  { key: "clip_rights_duration", label: "Clip Rights Duration" },
+  { key: "prequel_sequel_rights", label: "Prequel/ Sequel Rights" },
+  { key: "character_rights", label: "Character Rights" },
+  { key: "subtitling_rights", label: "Sub-Titling Rights" },
+  { key: "dubbing_rights", label: "Dubbing Rights" },
 ];

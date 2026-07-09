@@ -161,7 +161,6 @@ export async function POST(request: Request) {
           production_no: row.production_no || undefined,
           color_or_bw: row.color_or_bw || row.color || undefined,
           trailer_link: row.trailer_link || row.trailer || undefined,
-          territory: row.territory || undefined,
           remarks: row.remarks || undefined,
           created_by: user.id,
         };

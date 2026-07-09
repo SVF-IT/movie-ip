@@ -163,7 +163,7 @@ export function BulkPostersUploadDialog({
                 const posterUrl = await uploadFile("images", path, match.file);
 
                 // 2. Update Movie in Database
-                await updateMovie(match.matchedMovieId!, { poster_url: posterUrl });
+                await updateMovie(match.matchedMovieId!, { poster_url: posterUrl } as any);
 
                 setMatches(prev => prev.map((m, idx) => idx === matchIdx ? { ...m, status: "success" } : m));
                 successCount++;
