@@ -41,6 +41,7 @@ import type { ApprovalStatus, MovieApproval } from "@/lib/types/database";
 import {
   Check,
   CheckCircle,
+  CheckSquare,
   ChevronDown,
   ChevronUp,
   Clock,
@@ -49,6 +50,7 @@ import {
   Info,
   Loader2,
   Search,
+  Square,
   X,
   XCircle
 } from "lucide-react";
@@ -126,9 +128,12 @@ interface MovieCardProps {
   onApprove: (movie: PendingMovieForApproval) => void;
   onReject: (movie: PendingMovieForApproval) => void;
   isLegalOrAdmin: boolean;
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }
 
-function MovieCard({ movie, onApprove, onReject, isLegalOrAdmin }: MovieCardProps) {
+function MovieCard({ movie, onApprove, onReject, isLegalOrAdmin, selectable, selected, onToggleSelect }: MovieCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [history, setHistory] = useState<MovieApproval[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -162,6 +167,15 @@ function MovieCard({ movie, onApprove, onReject, isLegalOrAdmin }: MovieCardProp
     >
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
+          {selectable && (
+            <input
+              type="checkbox"
+              checked={!!selected}
+              onChange={() => onToggleSelect?.(movie.id)}
+              className="mt-1 h-4 w-4 shrink-0 accent-(--svf-accent-bright) cursor-pointer"
+              aria-label={`Select ${movie.title}`}
+            />
+          )}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <Link
@@ -312,11 +326,17 @@ function PendingChangeCard({
   isLegalOrAdmin,
   onApprove,
   onReject,
+  selectable,
+  selected,
+  onToggleSelect,
 }: {
   change: PendingChange;
   isLegalOrAdmin: boolean;
   onApprove: (c: PendingChange) => void;
   onReject: (c: PendingChange) => void;
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const movieTitle = (change.movie as any)?.title || "Unknown Movie";
@@ -339,6 +359,15 @@ function PendingChangeCard({
     >
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
+          {selectable && (
+            <input
+              type="checkbox"
+              checked={!!selected}
+              onChange={() => onToggleSelect?.(change.id)}
+              className="mt-1 h-4 w-4 shrink-0 accent-(--svf-accent-bright) cursor-pointer"
+              aria-label={`Select ${movieTitle} change`}
+            />
+          )}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-bold text-(--text) line-clamp-1">{movieTitle}</span>
@@ -473,6 +502,13 @@ export default function LegalApprovalsPage() {
   const [rejectReason, setRejectReason] = useState("");
   const [rejecting, setRejecting] = useState(false);
 
+  // Bulk selection (new movies)
+  const [selectedMovieIds, setSelectedMovieIds] = useState<Set<string>>(new Set());
+  const [bulkApproving, setBulkApproving] = useState(false);
+  const [bulkRejectOpen, setBulkRejectOpen] = useState(false);
+  const [bulkRejectReason, setBulkRejectReason] = useState("");
+  const [bulkRejecting, setBulkRejecting] = useState(false);
+
   // ── Pending changes state ──
   const [changes, setChanges] = useState<PendingChange[]>([]);
   const [changesCount, setChangesCount] = useState(0);
@@ -488,6 +524,13 @@ export default function LegalApprovalsPage() {
   const [changeRejectTarget, setChangeRejectTarget] = useState<PendingChange | null>(null);
   const [changeRejectReason, setChangeRejectReason] = useState("");
   const [changeRejecting, setChangeRejecting] = useState(false);
+
+  // Bulk selection (changes)
+  const [selectedChangeIds, setSelectedChangeIds] = useState<Set<string>>(new Set());
+  const [bulkChangeApproving, setBulkChangeApproving] = useState(false);
+  const [bulkChangeRejectOpen, setBulkChangeRejectOpen] = useState(false);
+  const [bulkChangeRejectReason, setBulkChangeRejectReason] = useState("");
+  const [bulkChangeRejecting, setBulkChangeRejecting] = useState(false);
 
   const fetchMovies = useCallback(async () => {
     setLoading(true);
@@ -527,6 +570,8 @@ export default function LegalApprovalsPage() {
 
   useEffect(() => { fetchMovies(); }, [fetchMovies]);
   useEffect(() => { fetchChanges(); }, [fetchChanges]);
+  useEffect(() => { setSelectedMovieIds(new Set()); }, [movies]);
+  useEffect(() => { setSelectedChangeIds(new Set()); }, [changes]);
 
 
   const handleApprove = async () => {
@@ -556,6 +601,114 @@ export default function LegalApprovalsPage() {
     } finally {
       setRejecting(false);
     }
+  };
+
+  const toggleMovieSelect = (id: string) => {
+    setSelectedMovieIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllMovies = () => {
+    setSelectedMovieIds((prev) =>
+      prev.size === movies.filter((m) => m.approval_status === "pending").length
+        ? new Set()
+        : new Set(movies.filter((m) => m.approval_status === "pending").map((m) => m.id))
+    );
+  };
+
+  const handleBulkApprove = async () => {
+    if (selectedMovieIds.size === 0) return;
+    setBulkApproving(true);
+    const reviewer = profile?.full_name || profile?.email || "Legal";
+    const results = await Promise.allSettled(
+      Array.from(selectedMovieIds).map((id) => approveMovie(id, reviewer, profile?.id))
+    );
+    const failed = results.filter((r) => r.status === "rejected").length;
+    setBulkApproving(false);
+    if (failed > 0) {
+      toast.error(`${failed} movie(s) failed to approve`);
+    } else {
+      toast.success(`${results.length} movie(s) approved`);
+    }
+    fetchMovies();
+  };
+
+  const handleBulkReject = async () => {
+    if (selectedMovieIds.size === 0 || !bulkRejectReason.trim()) return;
+    setBulkRejecting(true);
+    const reviewer = profile?.full_name || profile?.email || "Legal";
+    const results = await Promise.allSettled(
+      Array.from(selectedMovieIds).map((id) =>
+        rejectMovie(id, bulkRejectReason.trim(), reviewer, profile?.id)
+      )
+    );
+    const failed = results.filter((r) => r.status === "rejected").length;
+    setBulkRejecting(false);
+    setBulkRejectOpen(false);
+    setBulkRejectReason("");
+    if (failed > 0) {
+      toast.error(`${failed} movie(s) failed to reject`);
+    } else {
+      toast.success(`${results.length} movie(s) rejected`);
+    }
+    fetchMovies();
+  };
+
+  const toggleChangeSelect = (id: string) => {
+    setSelectedChangeIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllChanges = () => {
+    setSelectedChangeIds((prev) =>
+      prev.size === changes.filter((c) => c.status === "pending").length
+        ? new Set()
+        : new Set(changes.filter((c) => c.status === "pending").map((c) => c.id))
+    );
+  };
+
+  const handleBulkChangeApprove = async () => {
+    if (selectedChangeIds.size === 0) return;
+    setBulkChangeApproving(true);
+    const reviewer = profile?.full_name || profile?.email || "Legal";
+    const results = await Promise.allSettled(
+      Array.from(selectedChangeIds).map((id) => approvePendingChange(id, reviewer, profile?.id))
+    );
+    const failed = results.filter((r) => r.status === "rejected").length;
+    setBulkChangeApproving(false);
+    if (failed > 0) {
+      toast.error(`${failed} change(s) failed to approve`);
+    } else {
+      toast.success(`${results.length} change(s) approved`);
+    }
+    fetchChanges();
+  };
+
+  const handleBulkChangeReject = async () => {
+    if (selectedChangeIds.size === 0 || !bulkChangeRejectReason.trim()) return;
+    setBulkChangeRejecting(true);
+    const reviewer = profile?.full_name || profile?.email || "Legal";
+    const results = await Promise.allSettled(
+      Array.from(selectedChangeIds).map((id) =>
+        rejectPendingChange(id, bulkChangeRejectReason.trim(), reviewer, profile?.id)
+      )
+    );
+    const failed = results.filter((r) => r.status === "rejected").length;
+    setBulkChangeRejecting(false);
+    setBulkChangeRejectOpen(false);
+    setBulkChangeRejectReason("");
+    if (failed > 0) {
+      toast.error(`${failed} change(s) failed to reject`);
+    } else {
+      toast.success(`${results.length} change(s) rejected`);
+    }
+    fetchChanges();
   };
 
   const handleChangeApprove = async () => {
@@ -650,8 +803,57 @@ export default function LegalApprovalsPage() {
             </div>
           ) : (
             <div className="space-y-4">
+              {isLegalOrAdmin && movies.some((m) => m.approval_status === "pending") && (
+                <div className="glass-card p-3 flex items-center justify-between gap-3 flex-wrap sticky top-0 z-10">
+                  <button
+                    onClick={toggleSelectAllMovies}
+                    className="flex items-center gap-2 text-sm text-(--text) hover:text-(--svf-accent-bright) transition-colors"
+                  >
+                    {selectedMovieIds.size > 0 && selectedMovieIds.size === movies.filter((m) => m.approval_status === "pending").length ? (
+                      <CheckSquare className="h-4 w-4" />
+                    ) : (
+                      <Square className="h-4 w-4" />
+                    )}
+                    {selectedMovieIds.size > 0
+                      ? `${selectedMovieIds.size} selected`
+                      : `Select all pending (${movies.filter((m) => m.approval_status === "pending").length})`}
+                  </button>
+                  {selectedMovieIds.size > 0 && (
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={handleBulkApprove}
+                        disabled={bulkApproving}
+                        className="bg-green-600/20 hover:bg-green-600/40 text-green-400 border border-green-500/30 h-8 px-3"
+                        variant="outline"
+                      >
+                        {bulkApproving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Check className="h-3.5 w-3.5 mr-1" />}
+                        Approve Selected
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => setBulkRejectOpen(true)}
+                        disabled={bulkApproving}
+                        className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 h-8 px-3"
+                        variant="outline"
+                      >
+                        <X className="h-3.5 w-3.5 mr-1" /> Reject Selected
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
               {movies.map((movie) => (
-                <MovieCard key={movie.id} movie={movie} onApprove={setApproveTarget} onReject={setRejectTarget} isLegalOrAdmin={isLegalOrAdmin} />
+                <MovieCard
+                  key={movie.id}
+                  movie={movie}
+                  onApprove={setApproveTarget}
+                  onReject={setRejectTarget}
+                  isLegalOrAdmin={isLegalOrAdmin}
+                  selectable={isLegalOrAdmin && movie.approval_status === "pending"}
+                  selected={selectedMovieIds.has(movie.id)}
+                  onToggleSelect={toggleMovieSelect}
+                />
               ))}
             </div>
           )}
@@ -697,9 +899,57 @@ export default function LegalApprovalsPage() {
             </div>
           ) : (
             <div className="space-y-4">
+              {isLegalOrAdmin && changes.some((c) => c.status === "pending") && (
+                <div className="glass-card p-3 flex items-center justify-between gap-3 flex-wrap sticky top-0 z-10">
+                  <button
+                    onClick={toggleSelectAllChanges}
+                    className="flex items-center gap-2 text-sm text-(--text) hover:text-(--svf-accent-bright) transition-colors"
+                  >
+                    {selectedChangeIds.size > 0 && selectedChangeIds.size === changes.filter((c) => c.status === "pending").length ? (
+                      <CheckSquare className="h-4 w-4" />
+                    ) : (
+                      <Square className="h-4 w-4" />
+                    )}
+                    {selectedChangeIds.size > 0
+                      ? `${selectedChangeIds.size} selected`
+                      : `Select all pending (${changes.filter((c) => c.status === "pending").length})`}
+                  </button>
+                  {selectedChangeIds.size > 0 && (
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={handleBulkChangeApprove}
+                        disabled={bulkChangeApproving}
+                        className="bg-green-600/20 hover:bg-green-600/40 text-green-400 border border-green-500/30 h-8 px-3"
+                        variant="outline"
+                      >
+                        {bulkChangeApproving ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Check className="h-3.5 w-3.5 mr-1" />}
+                        Approve Selected
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => setBulkChangeRejectOpen(true)}
+                        disabled={bulkChangeApproving}
+                        className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 h-8 px-3"
+                        variant="outline"
+                      >
+                        <X className="h-3.5 w-3.5 mr-1" /> Reject Selected
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
               {changes.map((change) => (
-                <PendingChangeCard key={change.id} change={change} isLegalOrAdmin={isLegalOrAdmin}
-                  onApprove={setChangeApproveTarget} onReject={setChangeRejectTarget} />
+                <PendingChangeCard
+                  key={change.id}
+                  change={change}
+                  isLegalOrAdmin={isLegalOrAdmin}
+                  onApprove={setChangeApproveTarget}
+                  onReject={setChangeRejectTarget}
+                  selectable={isLegalOrAdmin && change.status === "pending"}
+                  selected={selectedChangeIds.has(change.id)}
+                  onToggleSelect={toggleChangeSelect}
+                />
               ))}
             </div>
           )}
@@ -792,6 +1042,63 @@ export default function LegalApprovalsPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Bulk reject dialog (movies) */}
+      <Dialog
+        open={bulkRejectOpen}
+        onOpenChange={(o) => {
+          if (!o) {
+            setBulkRejectOpen(false);
+            setBulkRejectReason("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <XCircle className="h-5 w-5 text-red-400" />
+              Reject {selectedMovieIds.size} Movie{selectedMovieIds.size !== 1 ? "s" : ""}
+            </DialogTitle>
+            <DialogDescription>
+              This reason will be applied to all selected movies. Submitters will see it so
+              they know what to fix.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-2">
+            <Label htmlFor="bulk-reason">
+              Reason <span className="text-red-400">*</span>
+            </Label>
+            <Textarea
+              id="bulk-reason"
+              placeholder="e.g. Missing agreement dates, incorrect cast details…"
+              value={bulkRejectReason}
+              onChange={(e) => setBulkRejectReason(e.target.value)}
+              rows={4}
+              className="resize-none"
+            />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setBulkRejectOpen(false);
+                setBulkRejectReason("");
+              }}
+              disabled={bulkRejecting}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleBulkReject}
+              disabled={bulkRejecting || !bulkRejectReason.trim()}
+              variant="destructive"
+            >
+              {bulkRejecting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <X className="h-4 w-4 mr-2" />}
+              Reject {selectedMovieIds.size} Movie{selectedMovieIds.size !== 1 ? "s" : ""}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Approve change dialog */}
       <Dialog open={!!changeApproveTarget} onOpenChange={(o) => !o && setChangeApproveTarget(null)}>
         <DialogContent className="sm:max-w-md">
@@ -848,6 +1155,63 @@ export default function LegalApprovalsPage() {
             <Button onClick={handleChangeReject} disabled={changeRejecting || !changeRejectReason.trim()} variant="destructive">
               {changeRejecting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <X className="h-4 w-4 mr-2" />}
               Reject
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk reject dialog (changes) */}
+      <Dialog
+        open={bulkChangeRejectOpen}
+        onOpenChange={(o) => {
+          if (!o) {
+            setBulkChangeRejectOpen(false);
+            setBulkChangeRejectReason("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <XCircle className="h-5 w-5 text-red-400" />
+              Reject {selectedChangeIds.size} Edit Request{selectedChangeIds.size !== 1 ? "s" : ""}
+            </DialogTitle>
+            <DialogDescription>
+              This reason will be applied to all selected edit requests. The original data will
+              remain unchanged.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-2">
+            <Label htmlFor="bulk-change-reason">
+              Reason <span className="text-red-400">*</span>
+            </Label>
+            <Textarea
+              id="bulk-change-reason"
+              placeholder="e.g. Incorrect dates, wrong platform selected…"
+              value={bulkChangeRejectReason}
+              onChange={(e) => setBulkChangeRejectReason(e.target.value)}
+              rows={3}
+              className="resize-none"
+            />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setBulkChangeRejectOpen(false);
+                setBulkChangeRejectReason("");
+              }}
+              disabled={bulkChangeRejecting}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleBulkChangeReject}
+              disabled={bulkChangeRejecting || !bulkChangeRejectReason.trim()}
+              variant="destructive"
+            >
+              {bulkChangeRejecting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <X className="h-4 w-4 mr-2" />}
+              Reject {selectedChangeIds.size} Edit Request{selectedChangeIds.size !== 1 ? "s" : ""}
             </Button>
           </DialogFooter>
         </DialogContent>
