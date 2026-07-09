@@ -313,6 +313,8 @@ export default function NewMoviePage() {
   const [dubbingLang, setDubbingLang] = useState("");
   // Home production: jointly owned toggle (replaces nature_of_rights)
   const [jointlyOwned, setJointlyOwned] = useState(false);
+  // Home production: sold flag — moves movie into the Expired bucket
+  const [homeSold, setHomeSold] = useState(false);
   // Clip rights (standalone — no nature/territory breakdown)
   const [clipRights, setClipRights] = useState("");
   const [clipRightsDuration, setClipRightsDuration] = useState("");
@@ -421,9 +423,10 @@ export default function NewMoviePage() {
         wtp_library: wtpLibrary || undefined,
         // Home production joint ownership
         jointly_owned: isHomeProdSave ? jointlyOwned : undefined,
-        revenue_share: isHomeProdSave && jointlyOwned ? revenueShare : undefined,
-        joint_prod_buy_back_date: isHomeProdSave && jointlyOwned ? jointProdBuyBackDate : undefined,
-        jointly_exploitation_rights: isHomeProdSave && jointlyOwned ? jointlyExploitationRights : undefined,
+        revenue_share: isHomeProdSave && jointlyOwned ? (revenueShare || undefined) : undefined,
+        joint_prod_buy_back_date: isHomeProdSave && jointlyOwned ? (jointProdBuyBackDate || undefined) : undefined,
+        jointly_exploitation_rights: isHomeProdSave && jointlyOwned ? (jointlyExploitationRights || undefined) : undefined,
+        home_sold: isHomeProdSave ? homeSold : undefined,
       };
       const createdMovie = await createMovie(movieData);
 
@@ -645,6 +648,18 @@ export default function NewMoviePage() {
                         setSelectedHouseIds(ids => [ids[0] === svfId ? (svfId ?? "") : (ids[0] || "")]);
                       }
                     }} />
+                  </FormField>
+                </div>
+              )}
+
+              {/* Sold — ONLY for home production. Marks the movie as expired. */}
+              {isHomeProd && (
+                <div className="md:col-span-2">
+                  <FormField label="Sold">
+                    <TogglePill value={homeSold ? "Yes" : "No"} onChange={v => setHomeSold(v === "Yes")} />
+                    {homeSold && (
+                      <p className="text-xs text-(--text-faint) mt-1.5">This movie will appear in the Expired section.</p>
+                    )}
                   </FormField>
                 </div>
               )}

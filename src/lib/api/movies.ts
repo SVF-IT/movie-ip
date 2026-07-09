@@ -511,8 +511,9 @@ export async function getGroupedMovies(options?: {
     // EXPIRED: acquired movies with a past agreement_end_date
     query = query.eq("source", "acquired").lt("agreement_end_date", now);
   } else if (options?.source === 'home_production') {
-    // HOME: all home_production movies
-    query = query.eq("source", "home_production");
+    // HOME: all home_production movies, excluding sold (those live in the Expired bucket)
+    query = query.eq("source", "home_production")
+      .or(`home_sold.is.null,home_sold.eq.false`);
   } else if (options?.source === 'acquired') {
     // ACQUIRED: non-expired acquired movies (no end date, or end date >= today)
     query = query.eq("source", "acquired")
@@ -521,12 +522,13 @@ export async function getGroupedMovies(options?: {
     // BANGLADESHI: all movies flagged as bangladeshi — no agreement date filtering
     query = query.eq("is_bangladeshi", true);
   } else if (options?.source === 'sold') {
-    // SOLD: home movies where jointly_exploitation_rights contains "Sold"
-    query = query.eq("source", "home_production").ilike("jointly_exploitation_rights", "%Sold%");
+    // SOLD: home movies explicitly flagged home_sold, or (legacy) with "Sold" in jointly_exploitation_rights
+    query = query.eq("source", "home_production")
+      .or(`home_sold.eq.true,jointly_exploitation_rights.ilike.%Sold%`);
   } else {
-    // ALL: all home + acquired (not expired)
+    // ALL: all home (not sold) + acquired (not expired)
     query = query.or(
-      `source.eq.home_production,` +
+      `and(source.eq.home_production,or(home_sold.is.null,home_sold.eq.false)),` +
       `and(source.eq.acquired,or(agreement_end_date.is.null,agreement_end_date.gte.${now}))`
     );
   }

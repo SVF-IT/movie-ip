@@ -270,6 +270,7 @@ export default function EditMoviePage() {
   const [dubbingRights, setDubbingRights] = useState("");
   const [dubbingLang, setDubbingLang] = useState("");
   const [jointlyOwned, setJointlyOwned] = useState(false);
+  const [homeSold, setHomeSold] = useState(false);
   const [remarks, setRemarks] = useState("");
   const [actionables, setActionables] = useState("");
   const [jointProdBuyBackDate, setJointProdBuyBackDate] = useState("");
@@ -358,6 +359,7 @@ export default function EditMoviePage() {
           setDubbingRights("Yes"); setDubbingLang(dubRaw.split(":").slice(1).join(":").trim());
         } else { setDubbingRights(dubRaw); setDubbingLang(""); }
         setJointlyOwned(movie.jointly_owned ?? (!!movie.jointly_exploitation_rights));
+        setHomeSold(movie.home_sold ?? false);
         setRemarks(movie.remarks || "");
         setActionables(movie.actionables || "");
         setWtpLibrary(movie.wtp_library || "");
@@ -396,6 +398,7 @@ export default function EditMoviePage() {
           subtitling_rights: movie.subtitling_rights || "",
           dubbing_rights: movie.dubbing_rights || "",
           jointly_owned: movie.jointly_owned ?? (!!movie.jointly_exploitation_rights),
+          home_sold: movie.home_sold ?? false,
           remarks: movie.remarks || "",
           actionables: movie.actionables || "",
           wtp_library: movie.wtp_library || "",
@@ -552,6 +555,7 @@ export default function EditMoviePage() {
         subtitling_rights: isHomeProd ? "Yes" : (subtitlingLang ? `${subtitlingRights}(${subtitlingLang})` : subtitlingRights || ""),
         dubbing_rights: isHomeProd ? "Yes" : (dubbingLang ? `${dubbingRights}(${dubbingLang})` : dubbingRights || ""),
         jointly_owned: isHomeProd ? jointlyOwned : false,
+        home_sold: isHomeProd ? homeSold : false,
         remarks: remarks || "",
         actionables: actionables || "",
         wtp_library: wtpLibrary || "",
@@ -599,9 +603,10 @@ export default function EditMoviePage() {
         actionables: actionables || undefined,
         wtp_library: wtpLibrary || undefined,
         jointly_owned: isHomeProd ? jointlyOwned : undefined,
-        revenue_share: isHomeProd && isJointlyOwned ? revenueShare : undefined,
-        joint_prod_buy_back_date: isHomeProd && isJointlyOwned ? jointProdBuyBackDate : undefined,
-        jointly_exploitation_rights: isHomeProd && isJointlyOwned ? jointlyExploitationRights : undefined,
+        home_sold: isHomeProd ? homeSold : undefined,
+        revenue_share: isHomeProd && isJointlyOwned ? (revenueShare || undefined) : undefined,
+        joint_prod_buy_back_date: isHomeProd && isJointlyOwned ? (jointProdBuyBackDate || undefined) : undefined,
+        jointly_exploitation_rights: isHomeProd && isJointlyOwned ? (jointlyExploitationRights || undefined) : undefined,
         recensor_flag: recensorFlag,
         clip_rights_duration: isHomeProd ? undefined : clipRightsDuration || undefined,
       };
@@ -793,6 +798,18 @@ export default function EditMoviePage() {
                           setSelectedHouseIds(ids => [ids[0] === svfId ? "" : (ids[0] || "")]);
                         }
                       }} />
+                    </FormField>
+                  </div>
+                )}
+
+                {/* Sold toggle — only for home production. Marks movie as expired. */}
+                {isHomeProd && (
+                  <div className="md:col-span-2">
+                    <FormField label="Sold">
+                      <TogglePill value={homeSold ? "Yes" : "No"} onChange={v => setHomeSold(v === "Yes")} />
+                      {homeSold && (
+                        <p className="text-xs text-(--text-faint) mt-1.5">This movie will appear in the Expired section.</p>
+                      )}
                     </FormField>
                   </div>
                 )}

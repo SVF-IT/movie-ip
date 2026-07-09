@@ -930,7 +930,7 @@ async function processHomeRow(
 
   const jointlyOwnedRaw = jointlyOwnedKey ? cleanString(row[jointlyOwnedKey]) : null
   const isJointlyOwned = jointlyOwnedRaw?.toLowerCase() === 'yes'
-  // "Sold to Grassroot" (or similar) in the Jointly Owned column — store as a note in jointly_exploitation_rights
+  // "Sold to Grassroot" (or similar) in the Jointly Owned column → flags home_sold, not jointly_owned
   const isSoldEntry = jointlyOwnedRaw && !isJointlyOwned && jointlyOwnedRaw.toLowerCase().startsWith('sold')
 
   // Home productions always require legal approval — never auto-approve on import
@@ -951,12 +951,12 @@ async function processHomeRow(
     remarks: cleanString(row['Remarks']),
     actionables: cleanString(row['Actionables'] ?? row['Actionable']),
     jointly_owned: isJointlyOwned,
-    // "Sold to Grassroot" in the Jointly Owned column → store the sold note here
     jointly_exploitation_rights: isJointlyOwned && jointlyOwnedByKey
       ? preserveRawText(row[jointlyOwnedByKey])
-      : isSoldEntry ? jointlyOwnedRaw : null,
+      : null,
     revenue_share: isJointlyOwned && revenueShareKey ? preserveRawText(row[revenueShareKey]) : null,
     joint_prod_buy_back_date: isJointlyOwned && buyBackKey ? parseDate(row[buyBackKey]) : null,
+    home_sold: !!isSoldEntry,
     clip_rights: 'Yes',
     character_rights: 'Yes',
     prequel_sequel_rights: 'Yes',

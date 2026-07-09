@@ -479,6 +479,9 @@ export default function MovieDetailPage() {
                   {movie.source === "home_production" ? "Home Production" : "Acquired"}
                 </Badge>
                 {isExpired && <Badge variant="outline" className="text-xs font-semibold px-2.5 py-0.5 bg-red-500/10 text-red-400 border-red-500/25">Agreement Expired</Badge>}
+                {movie.source === "home_production" && currentVersion.home_sold && (
+                  <Badge variant="outline" className="text-xs font-semibold px-2.5 py-0.5 bg-red-500/10 text-red-400 border-red-500/25">Sold — Expired</Badge>
+                )}
                 {movie.release_year && (
                   <div className="flex items-center gap-1.5 text-(--text-faint)"><Calendar className="h-3.5 w-3.5" /><span className="text-sm font-medium">{movie.release_year}</span></div>
                 )}
@@ -610,11 +613,38 @@ export default function MovieDetailPage() {
                     if (!groups.has(r.right_type)) groups.set(r.right_type, []);
                     groups.get(r.right_type)!.push(r);
                   });
-                  const natureColor = (n: string) => {
+                  const natureStyle = (n: string) => {
                     const l = n.toLowerCase();
-                    if (l.includes("exclusive") && !l.includes("non") && !l.includes("shared")) return "bg-emerald-500/10 text-emerald-400 border-emerald-500/25";
-                    if (l.includes("shared")) return "bg-blue-500/10 text-blue-400 border-blue-500/25";
-                    return "bg-(--bg-deep) text-(--text-faint) border-(--svf-border)";
+                    if (l.includes("non") && l.includes("exclusive")) {
+                      return {
+                        border: "border-amber-500/40",
+                        glow: "shadow-[0_0_0_1px_rgba(245,158,11,0.15)]",
+                        badge: "bg-amber-500/15 text-amber-300 border-amber-500/40",
+                        bar: "bg-amber-500",
+                      };
+                    }
+                    if (l.includes("exclusive") && !l.includes("shared")) {
+                      return {
+                        border: "border-emerald-500/40",
+                        glow: "shadow-[0_0_0_1px_rgba(16,185,129,0.15)]",
+                        badge: "bg-emerald-500/15 text-emerald-300 border-emerald-500/40",
+                        bar: "bg-emerald-500",
+                      };
+                    }
+                    if (l.includes("shared")) {
+                      return {
+                        border: "border-blue-500/40",
+                        glow: "shadow-[0_0_0_1px_rgba(59,130,246,0.15)]",
+                        badge: "bg-blue-500/15 text-blue-300 border-blue-500/40",
+                        bar: "bg-blue-500",
+                      };
+                    }
+                    return {
+                      border: "border-(--svf-border)",
+                      glow: "",
+                      badge: "bg-(--bg-deep) text-(--text-faint) border-(--svf-border)",
+                      bar: "bg-(--text-faint)",
+                    };
                   };
                   return Array.from(groups.entries()).map(([type, rows]) => (
                     <div key={type} className="mb-4 last:mb-0">
@@ -624,44 +654,49 @@ export default function MovieDetailPage() {
                         <div className="flex-1 h-px bg-(--svf-border)" />
                         <span className="text-[10px] text-(--text-faint)">{rows.length} right{rows.length > 1 ? "s" : ""}</span>
                       </div>
-                      <div className="space-y-2 pl-1">
-                        {rows.map(r => (
-                          <div key={r.id} className="rounded-[10px] border border-(--svf-border) bg-(--bg-raise)/60 p-3.5">
-                            {/* Row 1: nature badge + classification */}
-                            <div className="flex items-center gap-2 flex-wrap mb-2">
-                              <Badge variant="outline" className={`text-[10px] font-semibold px-2 py-0.5 ${natureColor(r.nature)}`}>{r.nature}</Badge>
-                              {r.classification && (
-                                <span className="text-[10px] font-medium text-(--text-faint) bg-(--bg-deep) border border-(--svf-border) rounded px-1.5 py-0.5">{r.classification}</span>
-                              )}
-                            </div>
-                            {/* Row 2: Territory + dates in a mini grid */}
-                            <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
-                              {r.territory && (
-                                <div>
-                                  <span className="text-[9px] font-bold uppercase tracking-widest text-(--text-faint) block mb-0.5">Territory</span>
-                                  <div className="flex items-center gap-1 text-xs text-(--text)">
-                                    <Globe className="h-3 w-3 text-(--text-faint) shrink-0" />
-                                    {r.territory}
-                                  </div>
-                                </div>
-                              )}
-                              {(r.start_date || r.end_date) && (
-                                <div>
-                                  <span className="text-[9px] font-bold uppercase tracking-widest text-(--text-faint) block mb-0.5">Period</span>
-                                  <span className="text-xs font-mono text-(--text-faint)">
-                                    {formatDate(r.start_date) || "—"} <span className="opacity-50">→</span> {formatDate(r.end_date) || "Perpetual"}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                            {r.holdbacks && (
-                              <div className="mt-2 pt-2 border-t border-(--svf-border)">
-                                <span className="text-[9px] font-bold uppercase tracking-widest text-amber-500/70 block mb-0.5">Holdbacks</span>
-                                <span className="text-xs text-amber-400">{r.holdbacks}</span>
+                      <div className="space-y-2.5 pl-1">
+                        {rows.map(r => {
+                          const style = natureStyle(r.nature);
+                          return (
+                            <div key={r.id} className={`relative overflow-hidden rounded-[10px] border ${style.border} ${style.glow} bg-(--bg-raise)/60 pl-4 pr-3.5 py-3.5`}>
+                              {/* Accent bar */}
+                              <div className={`absolute left-0 top-0 bottom-0 w-1 ${style.bar}`} />
+                              {/* Row 1: nature badge, bold & prominent + classification */}
+                              <div className="flex items-center gap-2 flex-wrap mb-2.5">
+                                <Badge variant="outline" className={`text-xs font-extrabold uppercase tracking-wide px-2.5 py-1 ${style.badge}`}>{r.nature}</Badge>
+                                {r.classification && (
+                                  <span className="text-[10px] font-medium text-(--text-faint) bg-(--bg-deep) border border-(--svf-border) rounded px-1.5 py-0.5">{r.classification}</span>
+                                )}
                               </div>
-                            )}
-                          </div>
-                        ))}
+                              {/* Row 2: Territory + dates in a mini grid */}
+                              <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
+                                {r.territory && (
+                                  <div>
+                                    <span className="text-[9px] font-bold uppercase tracking-widest text-(--text-faint) block mb-0.5">Territory</span>
+                                    <div className="flex items-center gap-1 text-xs text-(--text)">
+                                      <Globe className="h-3 w-3 text-(--text-faint) shrink-0" />
+                                      {r.territory}
+                                    </div>
+                                  </div>
+                                )}
+                                {(r.start_date || r.end_date) && (
+                                  <div>
+                                    <span className="text-[9px] font-bold uppercase tracking-widest text-(--text-faint) block mb-0.5">Period</span>
+                                    <span className="text-xs font-mono text-(--text-faint)">
+                                      {formatDate(r.start_date) || "—"} <span className="opacity-50">→</span> {formatDate(r.end_date) || "Perpetual"}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                              {r.holdbacks && (
+                                <div className="mt-2 pt-2 border-t border-(--svf-border)">
+                                  <span className="text-[9px] font-bold uppercase tracking-widest text-amber-500/70 block mb-0.5">Holdbacks</span>
+                                  <span className="text-xs text-amber-400">{r.holdbacks}</span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   ));
@@ -673,28 +708,28 @@ export default function MovieDetailPage() {
             {(currentVersion.clip_rights || currentVersion.clip_rights_duration ||
               currentVersion.prequel_sequel_rights || currentVersion.character_rights ||
               currentVersion.subtitling_rights || currentVersion.dubbing_rights) && (
-              <div className="pt-4 border-t border-(--svf-border)">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Derivative Rights</span>
-                  <div className="flex-1 h-px bg-(--svf-border)" />
+                <div className="pt-4 border-t border-(--svf-border)">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Derivative Rights</span>
+                    <div className="flex-1 h-px bg-(--svf-border)" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { label: "Clip Rights", value: currentVersion.clip_rights },
+                      { label: "Clip Duration", value: currentVersion.clip_rights_duration },
+                      { label: "Prequel / Sequel", value: currentVersion.prequel_sequel_rights },
+                      { label: "Character Rights", value: currentVersion.character_rights },
+                      { label: "Sub-Titling", value: currentVersion.subtitling_rights },
+                      { label: "Dubbing Rights", value: currentVersion.dubbing_rights },
+                    ].filter(f => f.value).map(({ label, value }) => (
+                      <div key={label} className="rounded-[10px] border border-(--svf-border) bg-(--bg-raise)/60 px-3.5 py-2.5">
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-(--text-faint) block mb-1">{label}</span>
+                        <span className="text-sm text-(--text) font-medium">{value}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { label: "Clip Rights", value: currentVersion.clip_rights },
-                    { label: "Clip Duration", value: currentVersion.clip_rights_duration },
-                    { label: "Prequel / Sequel", value: currentVersion.prequel_sequel_rights },
-                    { label: "Character Rights", value: currentVersion.character_rights },
-                    { label: "Sub-Titling", value: currentVersion.subtitling_rights },
-                    { label: "Dubbing Rights", value: currentVersion.dubbing_rights },
-                  ].filter(f => f.value).map(({ label, value }) => (
-                    <div key={label} className="rounded-[10px] border border-(--svf-border) bg-(--bg-raise)/60 px-3.5 py-2.5">
-                      <span className="text-[9px] font-bold uppercase tracking-widest text-(--text-faint) block mb-1">{label}</span>
-                      <span className="text-sm text-(--text) font-medium">{value}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+              )}
           </div>
         )}
       </div>
@@ -703,11 +738,10 @@ export default function MovieDetailPage() {
       {movie.source === "acquired" && (
         <div className="bg-(--panel-solid) border border-(--svf-border) rounded-[12px] p-6">
           <SectionTitle icon={Calendar} title="Acquisition Details" accent />
-          <div className="grid grid-cols-2 gap-x-8 gap-y-5">
+          <div className="grid grid-cols-3 gap-x-10 gap-y-5">
             <InfoRow label="Assignor / Licensor" value={currentVersion.assignor_licensor} />
             <InfoRow label="Licensee" value={currentVersion.licensee} />
-            <InfoRow label="Agreement Date" value={formatDate(currentVersion.agreement_date)} />
-            <div className="col-span-2">
+            <div>
               <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-1.5">Agreement Period</span>
               <span className="text-sm text-(--text) font-mono tracking-tight">
                 {formatDate(currentVersion.agreement_start_date)} <span className="text-(--text-faint) mx-1">→</span> {formatDate(currentVersion.agreement_end_date)}
