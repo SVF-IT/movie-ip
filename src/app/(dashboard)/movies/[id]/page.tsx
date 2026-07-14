@@ -323,6 +323,7 @@ export default function MovieDetailPage() {
               <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Start</TableHead>
               <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">End</TableHead>
               <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Territory</TableHead>
+              <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Holdbacks</TableHead>
               {!expired && <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Status</TableHead>}
               {!expired && <TableHead className="text-right text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Actions</TableHead>}
             </TableRow>
@@ -352,6 +353,9 @@ export default function MovieDetailPage() {
                   <div className="flex items-center gap-1 text-xs text-(--text-faint)">
                     <Globe className="h-3 w-3 text-(--text-faint)" />{right.territory || "World"}
                   </div>
+                </TableCell>
+                <TableCell className="text-xs text-amber-400 max-w-50 truncate" title={right.holdbacks || undefined}>
+                  {right.holdbacks || <span className="text-(--text-faint)">—</span>}
                 </TableCell>
                 {!expired && (
                   <TableCell>
@@ -656,14 +660,14 @@ export default function MovieDetailPage() {
                       </div>
                       <div className="space-y-2.5 pl-1">
                         {rows.map(r => {
-                          const style = natureStyle(r.nature);
+                          const style = natureStyle(r.nature || "");
                           return (
                             <div key={r.id} className={`relative overflow-hidden rounded-[10px] border ${style.border} ${style.glow} bg-(--bg-raise)/60 pl-4 pr-3.5 py-3.5`}>
                               {/* Accent bar */}
                               <div className={`absolute left-0 top-0 bottom-0 w-1 ${style.bar}`} />
                               {/* Row 1: nature badge, bold & prominent + classification */}
                               <div className="flex items-center gap-2 flex-wrap mb-2.5">
-                                <Badge variant="outline" className={`text-xs font-extrabold uppercase tracking-wide px-2.5 py-1 ${style.badge}`}>{r.nature}</Badge>
+                                {r.nature && <Badge variant="outline" className={`text-xs font-extrabold uppercase tracking-wide px-2.5 py-1 ${style.badge}`}>{r.nature}</Badge>}
                                 {r.classification && (
                                   <span className="text-[10px] font-medium text-(--text-faint) bg-(--bg-deep) border border-(--svf-border) rounded px-1.5 py-0.5">{r.classification}</span>
                                 )}
@@ -688,10 +692,20 @@ export default function MovieDetailPage() {
                                   </div>
                                 )}
                               </div>
-                              {r.holdbacks && (
-                                <div className="mt-2 pt-2 border-t border-(--svf-border)">
-                                  <span className="text-[9px] font-bold uppercase tracking-widest text-amber-500/70 block mb-0.5">Holdbacks</span>
-                                  <span className="text-xs text-amber-400">{r.holdbacks}</span>
+                              {(r.holdbacks || r.syndication) && (
+                                <div className="mt-2 pt-2 border-t border-(--svf-border) grid grid-cols-2 gap-x-6 gap-y-1.5">
+                                  {r.holdbacks && (
+                                    <div>
+                                      <span className="text-[9px] font-bold uppercase tracking-widest text-amber-500/70 block mb-0.5">Holdbacks</span>
+                                      <span className="text-xs text-amber-400">{r.holdbacks}</span>
+                                    </div>
+                                  )}
+                                  {r.syndication && (
+                                    <div>
+                                      <span className="text-[9px] font-bold uppercase tracking-widest text-(--text-faint) block mb-0.5">Syndication</span>
+                                      <span className="text-xs text-(--text)">{r.syndication}</span>
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -752,7 +766,7 @@ export default function MovieDetailPage() {
       )}
 
       {/* ── Notes (only when data exists) ── */}
-      {(currentVersion.wtp_library || currentVersion.remarks || currentVersion.actionables || movie.is_bangladeshi != null) && (
+      {(currentVersion.wtp_library || currentVersion.remarks || currentVersion.actionables || currentVersion.syndication_holdback || movie.is_bangladeshi != null) && (
         <div className="bg-(--panel-solid) border border-(--svf-border) rounded-[12px] p-6">
           <SectionTitle icon={Info} title="Notes & Additional Information" accent />
           <div className="space-y-5">
@@ -784,7 +798,25 @@ export default function MovieDetailPage() {
                 <p className="text-sm text-(--text) bg-amber-500/5 border border-amber-500/20 px-4 py-3 rounded-[12px] leading-relaxed">{currentVersion.actionables}</p>
               </div>
             )}
+            {currentVersion.syndication_holdback && (
+              <div className={(movie.is_bangladeshi != null || currentVersion.wtp_library || currentVersion.remarks || currentVersion.actionables) ? "pt-4 border-t border-(--svf-border)" : ""}>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-red-400/80 block mb-2">Syndication Holdback</span>
+                <p className="text-sm text-(--text) bg-red-500/5 border border-red-500/20 px-4 py-3 rounded-[12px] leading-relaxed whitespace-pre-line">{currentVersion.syndication_holdback}</p>
+              </div>
+            )}
           </div>
+        </div>
+      )}
+
+      {/* ── Syndication Holdback (movie-wide exploitation restriction) ── */}
+      {currentVersion.syndication_holdback && (
+        <div className="rounded-[12px] border border-red-500/25 bg-red-500/5 p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <AlertTriangle className="h-4 w-4 text-red-400 shrink-0" />
+            <span className="text-[10px] font-bold uppercase tracking-widest text-red-400/80">Syndication Holdback — Permanently Restricted</span>
+          </div>
+          <p className="text-sm leading-relaxed whitespace-pre-line">{currentVersion.syndication_holdback}</p>
+          <p className="text-[11px] text-(--text-faint) mt-2">These types cannot be exploited for this movie regardless of individual platform availability.</p>
         </div>
       )}
 

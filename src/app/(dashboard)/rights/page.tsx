@@ -309,6 +309,7 @@ export default function RightsPage() {
                       <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden lg:table-cell">Nature</TableHead>
                       <SortableHeader column="start_date" label="Start Date" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden lg:table-cell" />
                       <SortableHeader column="end_date" label="End Date" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)" />
+                      <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden lg:table-cell">Holdbacks</TableHead>
                       <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Status</TableHead>
                       <TableHead className="text-right text-[10px] font-bold uppercase tracking-widest text-(--text-faint) pr-6">Actions</TableHead>
                     </TableRow>
@@ -349,6 +350,9 @@ export default function RightsPage() {
                                 ? <span className="text-(--st-active) font-semibold">Perpetual</span>
                                 : format(new Date(right.end_date), "dd MMM yy")
                               : "—"}
+                          </TableCell>
+                          <TableCell className="hidden lg:table-cell text-xs text-amber-400 max-w-50 truncate py-3.5" title={right.holdbacks || undefined}>
+                            {right.holdbacks || <span className="text-(--text-faint)">—</span>}
                           </TableCell>
                           <TableCell className="py-3.5">
                             <Badge variant="outline" className={cn("text-[10px] font-semibold px-2 py-0.5 whitespace-nowrap", status.color)}>

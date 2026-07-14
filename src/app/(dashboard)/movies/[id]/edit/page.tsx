@@ -273,6 +273,7 @@ export default function EditMoviePage() {
   const [homeSold, setHomeSold] = useState(false);
   const [remarks, setRemarks] = useState("");
   const [actionables, setActionables] = useState("");
+  const [syndicationHoldback, setSyndicationHoldback] = useState("");
   const [jointProdBuyBackDate, setJointProdBuyBackDate] = useState("");
   const [jointlyExploitationRights, setJointlyExploitationRights] = useState("");
   const [recensorFlag, setRecensorFlag] = useState(false);
@@ -362,6 +363,7 @@ export default function EditMoviePage() {
         setHomeSold(movie.home_sold ?? false);
         setRemarks(movie.remarks || "");
         setActionables(movie.actionables || "");
+        setSyndicationHoldback(movie.syndication_holdback || "");
         setWtpLibrary(movie.wtp_library || "");
         setRevenueShare(movie.revenue_share || "");
         setJointProdBuyBackDate(movie.joint_prod_buy_back_date || "");
@@ -401,6 +403,7 @@ export default function EditMoviePage() {
           home_sold: movie.home_sold ?? false,
           remarks: movie.remarks || "",
           actionables: movie.actionables || "",
+          syndication_holdback: movie.syndication_holdback || "",
           wtp_library: movie.wtp_library || "",
           revenue_share: movie.revenue_share || "",
           joint_prod_buy_back_date: movie.joint_prod_buy_back_date || "",
@@ -558,6 +561,7 @@ export default function EditMoviePage() {
         home_sold: isHomeProd ? homeSold : false,
         remarks: remarks || "",
         actionables: actionables || "",
+        syndication_holdback: syndicationHoldback || "",
         wtp_library: wtpLibrary || "",
         revenue_share: isJointlyOwned ? revenueShare : "",
         joint_prod_buy_back_date: isJointlyOwned ? jointProdBuyBackDate : "",
@@ -601,6 +605,7 @@ export default function EditMoviePage() {
         clip_rights: isHomeProd ? "Yes" : clipRights || undefined,
         remarks: remarks || undefined,
         actionables: actionables || undefined,
+        syndication_holdback: syndicationHoldback || undefined,
         wtp_library: wtpLibrary || undefined,
         jointly_owned: isHomeProd ? jointlyOwned : undefined,
         home_sold: isHomeProd ? homeSold : undefined,
@@ -612,7 +617,7 @@ export default function EditMoviePage() {
       };
       await updateMovie(movieId, movieData);
       if (source === "acquired") {
-        const validRights = rightsOwned.filter(r => r.nature.trim());
+        const validRights = rightsOwned.filter(r => r.nature?.trim());
         await syncMovieRights(movieId, validRights, existingRights);
       }
       toast.success("Movie saved successfully.");
@@ -995,6 +1000,9 @@ export default function EditMoviePage() {
           {activeTab === "notes" && <div className="space-y-4">
             <SectionCard title="Notes">
               <div className="space-y-4">
+                <FormField label="Syndication Holdback" hint="Comma-separated platform/exploitation types permanently restricted for this movie (e.g. AVOD, FVOD) — overrides individual platform availability.">
+                  <Textarea value={syndicationHoldback} onChange={(e) => setSyndicationHoldback(e.target.value)} rows={2} className={textareaCls} placeholder="e.g. AVOD, FVOD" />
+                </FormField>
                 <FormField label="Remarks">
                   <Textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} rows={3} className={textareaCls} />
                 </FormField>

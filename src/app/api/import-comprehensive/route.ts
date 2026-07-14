@@ -505,10 +505,6 @@ class CacheStore {
 
   async insertMovieRightsRows(rows: Record<string, unknown>[]): Promise<void> {
     for (const row of rows) {
-      // Skip rows where nature is null/empty — the movie_rights.nature column
-      // is NOT NULL in the base schema (relaxed only after migration 27).
-      // Rather than fail the whole movie, skip unpopulated rights rows.
-      if (!row.nature) continue
       const { error } = await this.supabase.from('movie_rights').insert(row)
       if (error) throw new Error(`Could not insert movie_rights (${row.right_type}): ${error.message}`)
     }
@@ -602,13 +598,14 @@ interface PlatformSlot {
  *   typeRow    — platform_type labels: "Satellite TV", "Satellite TV History", "DTH VOD",
  *                "Terrestrial TV", "SVOD", "TVOD", "AVOD", "Airborne Rights", ...
  *                Each label spans 6 columns until the next label appears.
- *   fieldRow   — 6-column slot headers starting with Platform/License or Platform - <Name> or Type - <Name>:
+ *   fieldRow   — 7-column slot headers starting with Platform/License or Platform - <Name> or Type - <Name>:
  *                [0] Platform/License  (or "Platform - Name" or "Type - TypeName")
  *                [1] Category
  *                [2] Nature Of Rights
  *                [3] Start Date
  *                [4] End Date
  *                [5] Territory
+ *                [6] Holdbacks
  *
  * Generic design: no platform names or right types are hardcoded. Any typeRow label
  * that isn't in the canonical alias map passes through as-is so future sheet additions
@@ -723,8 +720,8 @@ interface PlatformRightsRowError {
  * For a single data row (plus optional continuation rows), iterate every slot
  * in the slot map and insert platform_rights rows where the slot is active.
  *
- * Acquired slots: 6 columns — [platform/license, category, start, end, territory, nature]
- * Home slots:     7 columns — [platform/license, category, nature, start, end, territory, holdbacks]
+ * Both Acquired and Home slots: 7 columns —
+ * [platform/license, category, nature, start, end, territory, holdbacks]
  *
  * slotErrors is populated (not thrown) on per-slot failures.
  */
@@ -738,7 +735,7 @@ async function extractPlatformRights(
   continuationColArrays?: string[][],
 ): Promise<void> {
   const today = new Date().toISOString().split('T')[0]
-  const slotWidth = isHome ? 7 : 6
+  const slotWidth = 7
 
   for (const slot of slots) {
     const { colIndex, platformType, isHistory, hardcodedName, row2Label, slotIndex } = slot
@@ -768,26 +765,15 @@ async function extractPlatformRights(
       }
 
       // Helper: insert one platform_rights record from a column array.
-      // Acquired: [platform, category, start, end, territory, nature]
-      // Home:     [platform, category, nature, start, end, territory, holdbacks]
+      // [platform, category, nature, start, end, territory, holdbacks]
       const insertSlotRow = async (cols: string[]) => {
-        let categoryRaw: string, startRaw: string, endRaw: string, territoryRaw: string, natureRaw: string, holdbacksRaw: string
-        if (isHome) {
-          categoryRaw   = (cols[colIndex + 1] ?? '').trim()
-          natureRaw     = (cols[colIndex + 2] ?? '').trim()
-          startRaw      = (cols[colIndex + 3] ?? '').trim()
-          endRaw        = (cols[colIndex + 4] ?? '').trim()
-          territoryRaw  = (cols[colIndex + 5] ?? '').trim()
-          holdbacksRaw  = (cols[colIndex + 6] ?? '').trim()
-        } else {
-          // Acquired slot: [Platform/License, Category, Nature Of Rights, Start Date, End Date, Territory]
-          categoryRaw   = (cols[colIndex + 1] ?? '').trim()
-          natureRaw     = (cols[colIndex + 2] ?? '').trim()
-          startRaw      = (cols[colIndex + 3] ?? '').trim()
-          endRaw        = (cols[colIndex + 4] ?? '').trim()
-          territoryRaw  = (cols[colIndex + 5] ?? '').trim()
-          holdbacksRaw  = ''
-        }
+        // Both Home and Acquired slots: [Platform/License, Category, Nature Of Rights, Start Date, End Date, Territory, Holdbacks]
+        const categoryRaw   = (cols[colIndex + 1] ?? '').trim()
+        const natureRaw     = (cols[colIndex + 2] ?? '').trim()
+        const startRaw      = (cols[colIndex + 3] ?? '').trim()
+        const endRaw        = (cols[colIndex + 4] ?? '').trim()
+        const territoryRaw  = (cols[colIndex + 5] ?? '').trim()
+        const holdbacksRaw  = (cols[colIndex + 6] ?? '').trim()
 
         const startDate = parseDate(startRaw)
         const endDate   = parseDate(endRaw)
@@ -936,6 +922,11 @@ async function processHomeRow(
   // Home productions always require legal approval — never auto-approve on import
   const approvalStatus = 'pending'
 
+  // Movie-wide list of platform/exploitation types permanently restricted for this
+  // title (e.g. "AVOD, FVOD") — takes precedence over any individual right/platform
+  // slot showing as available.
+  const syndicationHoldbackKey = findColumnByPattern(keys, ['Syndication Holdback', 'Syndication Holdbacks'])
+
   const movieData: Record<string, unknown> = {
     title,
     production_no: productionNo,
@@ -950,6 +941,7 @@ async function processHomeRow(
     trailer_link: cleanString(row['YT Trailer Link'] ?? row['YT Link']),
     remarks: cleanString(row['Remarks']),
     actionables: cleanString(row['Actionables'] ?? row['Actionable']),
+    syndication_holdback: syndicationHoldbackKey ? preserveRawText(row[syndicationHoldbackKey]) : null,
     jointly_owned: isJointlyOwned,
     jointly_exploitation_rights: isJointlyOwned && jointlyOwnedByKey
       ? preserveRawText(row[jointlyOwnedByKey])
@@ -1048,17 +1040,21 @@ interface MovieRightsPayload {
 /**
  * Column key cache for movie_rights extraction — computed once per import, reused per row.
  *
- * The acquired sheet primary rights section has:
- *   - Flags:          Satellite Rights | Internet Rights | Negative Rights | Other Rights
- *   - Classification: Satellite Rights Classification | Internet Classification
- *   - Nature:         Nature of Satellite Rights | Nature of Internet Rights |
- *                     Nature of Negative Rights | Nature of Other Rights
- *   - Dates:          Satellite Rights Start/End Date | Internet Rights Start/End Date |
- *                     Negative Rights Start/End Date | Other Rights Start/End Date
- *   - Shared:         Territory (one column for all) | Holdbacks | Syndication- Internet Rights
+ * The acquired sheet primary rights section repeats the same 8-column pattern for every
+ * right type (Satellite, Internet, Negative, Airborne, Ship, Other — new types added to
+ * the sheet in future need no code changes as long as they follow this pattern):
+ *   [Type] Rights | [Type] Rights Classification | Nature of [Type] Rights |
+ *   [Type] Rights Territory | [Type] Rights Start Date | [Type] Rights End Date |
+ *   [Type] Rights Syndication | Holdbacks
  *
- * Airborne and Ship rights appear only in the platform rights section (cols 112+),
- * not in the primary rights flags, so they are NOT included here.
+ * Satellite/Internet/Negative/Other are resolved individually below to preserve their
+ * existing special-cased behavior exactly (e.g. Internet is the only type whose
+ * syndication is written to the DB; Other's flag column doubles as free-text
+ * classification). Any additional sections (Airborne, Ship, and future ones) are
+ * discovered generically by `findRightSections` and processed uniformly.
+ *
+ * Territory is shared across all types via a single `territoryKey` (existing behavior,
+ * unchanged) even though each section also has its own "[Type] Rights Territory" column.
  */
 interface MovieRightsColKeys {
   satRightsKey: string | null
@@ -1069,7 +1065,10 @@ interface MovieRightsColKeys {
   intClassKey: string | null
   othClassKey: string | null
   syndicationIntKey: string | null
-  holdbacksKey: string | null
+  satHoldbacksKey: string | null
+  intHoldbacksKey: string | null
+  negHoldbacksKey: string | null
+  othHoldbacksKey: string | null
   natSatKey: string | null
   natIntKey: string | null
   natNegKey: string | null
@@ -1083,19 +1082,119 @@ interface MovieRightsColKeys {
   othStartKey: string | null
   othEndKey: string | null
   territoryKey: string | null
+  /** Generic sections beyond Satellite/Internet/Negative/Other (e.g. Airborne, Ship). */
+  extraSections: RightSection[]
+}
+
+interface RightSection {
+  /** DB right_type value, e.g. "Airborne", "Ship" — Title Case, derived from the header. */
+  rightType: string
+  rightsKey: string | null
+  classKey: string | null
+  natureKey: string | null
+  startKey: string | null
+  endKey: string | null
+  syndicationKey: string | null
+  holdbacksKey: string | null
+}
+
+/**
+ * Each right-type section has its own "Holdbacks" column immediately after its
+ * Syndication column (sheet has duplicate "Holdbacks" headers, de-duplicated by the
+ * CSV parser as Holdbacks, Holdbacks_2, Holdbacks_3, ...). Resolve per-type by first
+ * trying a type-qualified header name, then falling back to the column right after
+ * that type's Syndication column.
+ */
+function findHoldbacksKeyForType(keys: string[], typePatterns: string[], syndicationPattern: string): string | null {
+  const direct = findColumnByPattern(keys, typePatterns)
+  if (direct) return direct
+  const synKey = findColumnByPattern(keys, [syndicationPattern])
+  if (!synKey) return null
+  const synIndex = keys.indexOf(synKey)
+  return keys[synIndex + 1] ?? null
+}
+
+// Right types with dedicated, individually-resolved keys (special-cased behavior below).
+const KNOWN_RIGHT_TYPES = ['satellite', 'internet', 'negative', 'other', 'others']
+
+/**
+ * Scans headers for "<Type> Rights" flag columns not already covered by the known/hardcoded
+ * types above, and derives the rest of that section's columns (Classification, Nature,
+ * Start/End Date, Syndication, Holdbacks) by pattern + positional fallback — the same
+ * approach used for the hardcoded types. Lets new right-type sections (Airborne, Ship, or
+ * anything added later) work without code changes, as long as they follow the sheet's
+ * repeating column pattern.
+ */
+function findRightSections(keys: string[]): RightSection[] {
+  const sections: RightSection[] = []
+  const seenTypes = new Set<string>()
+
+  for (const key of keys) {
+    const trimmed = key.trim()
+    // Match a bare "<Type> Rights" flag column (single-word type) — excludes multi-word
+    // variants like "Nature of X Rights", "X Rights Classification/Syndication/Territory/...".
+    const match = /^([A-Za-z]+)\s+Rights$/.exec(trimmed)
+    if (!match) continue
+
+    const typeNameRaw = match[1].trim()
+    const typeKey = typeNameRaw.toLowerCase()
+    if (KNOWN_RIGHT_TYPES.includes(typeKey) || seenTypes.has(typeKey)) continue
+    seenTypes.add(typeKey)
+
+    const natureKey = findColumnByPattern(keys, [`Nature of ${typeNameRaw} Rights`, `Nature of ${typeNameRaw}`])
+    const startKey = findColumnByPattern(keys, [`${typeNameRaw} Rights Start Date`, `${typeNameRaw} Start Date`])
+    const endKey = findColumnByPattern(keys, [`${typeNameRaw} Rights End Date`, `${typeNameRaw} End Date`])
+    // Standalone flags like "Clip Rights", "Character Rights", "Dubbing Rights" match the
+    // "<Type> Rights" pattern too but aren't movie_rights sections — they have no
+    // Nature/Start/End columns following them (handled elsewhere as flat movie fields).
+    if (!natureKey && !startKey && !endKey) continue
+
+    const rightType = typeNameRaw.replace(/\b\w/g, (c) => c.toUpperCase())
+
+    sections.push({
+      rightType,
+      rightsKey: key,
+      classKey: findColumnByPattern(keys, [`${typeNameRaw} Rights Classification`, `${typeNameRaw} Classification`]),
+      natureKey,
+      startKey,
+      endKey,
+      syndicationKey: findColumnByPattern(keys, [`${typeNameRaw} Rights Syndication`, `${typeNameRaw} Syndication`]),
+      holdbacksKey: findHoldbacksKeyForType(
+        keys,
+        [`${typeNameRaw} Rights Holdbacks`, `${typeNameRaw} Holdbacks`],
+        `${typeNameRaw} Rights Syndication`,
+      ),
+    })
+  }
+
+  return sections
 }
 
 function buildMovieRightsColKeys(keys: string[]): MovieRightsColKeys {
+  const othRightsKey = findColumnByPattern(keys, ['Other Rights', 'Others'])
+  // The "Other Rights" section reuses the exact header text "Other Rights" for both
+  // its flag column and its classification-text column (unlike every other section,
+  // which has a distinctly-named "<Type> Rights Classification" header), so the
+  // dedup pass renames the second one to "Other Rights_2" — no pattern match works.
+  // Fall back to the column immediately after the flag when no differently-named
+  // classification header exists.
+  const othClassKey =
+    findColumnByPattern(keys, ['Other Rights Classification', 'Other Classification']) ??
+    (othRightsKey ? keys[keys.indexOf(othRightsKey) + 1] ?? null : null)
+
   return {
     satRightsKey:     findColumnByPattern(keys, ['Satellite Rights']),
     intRightsKey:     findColumnByPattern(keys, ['Internet Rights']),
     negRightsKey:     findColumnByPattern(keys, ['Negative Rights']),
-    othRightsKey:     findColumnByPattern(keys, ['Other Rights', 'Others']),
+    othRightsKey,
     satClassKey:      findColumnByPattern(keys, ['Satellite Rights Classification', 'Satellite Classification']),
     intClassKey:      findColumnByPattern(keys, ['Internet Classification', 'Internet Rights - Classification', 'Internet Rights Classification']),
-    othClassKey:      findColumnByPattern(keys, ['Other Rights Classification', 'Other Classification']),
-    syndicationIntKey: findColumnByPattern(keys, ['Syndication- Internet Rights', 'Syndication - Internet Rights', 'Internet Rights Syndication', 'Syndication']),
-    holdbacksKey:     findColumnByPattern(keys, ['Holdbacks', 'Holdback']),
+    othClassKey,
+    syndicationIntKey: findColumnByPattern(keys, ['Syndication- Internet Rights', 'Syndication - Internet Rights', 'Internet Rights Syndication']),
+    satHoldbacksKey:  findHoldbacksKeyForType(keys, ['Satellite Rights Holdbacks', 'Satellite Holdbacks'], 'Satellite Rights Syndication'),
+    intHoldbacksKey:  findHoldbacksKeyForType(keys, ['Internet Rights Holdbacks', 'Internet Holdbacks'], 'Internet Rights Syndication'),
+    negHoldbacksKey:  findHoldbacksKeyForType(keys, ['Negative Rights Holdbacks', 'Negative Holdbacks'], 'Negative Rights Syndication'),
+    othHoldbacksKey:  findHoldbacksKeyForType(keys, ['Other Rights Holdbacks', 'Other Holdbacks'], 'Other Rights Syndication'),
     natSatKey:        findColumnByPattern(keys, ['Nature of Satellite Rights', 'Nature of Satellite']),
     natIntKey:        findColumnByPattern(keys, ['Nature of Internet Rights', 'Nature of Internet']),
     natNegKey:        findColumnByPattern(keys, ['Nature of Negative Rights', 'Nature of Negative']),
@@ -1109,6 +1208,7 @@ function buildMovieRightsColKeys(keys: string[]): MovieRightsColKeys {
     othStartKey:      findColumnByPattern(keys, ['Other Rights Start Date',     'Other Start Date']),
     othEndKey:        findColumnByPattern(keys, ['Other Rights End Date',       'Other End Date']),
     territoryKey:     findColumnByPattern(keys, ['Territory']),
+    extraSections:    findRightSections(keys),
   }
 }
 
@@ -1140,7 +1240,10 @@ function buildMovieRightsRows(
   const othVal = parseYesNoDefault(col(row, k.othRightsKey))
 
   const territory = cleanString(col(row, k.territoryKey)) ?? null
-  const holdbacks = parseHoldbacks(cleanString(col(row, k.holdbacksKey)))
+  const satHoldbacks = parseHoldbacks(cleanString(col(row, k.satHoldbacksKey)))
+  const intHoldbacks = parseHoldbacks(cleanString(col(row, k.intHoldbacksKey)))
+  const negHoldbacks = parseHoldbacks(cleanString(col(row, k.negHoldbacksKey)))
+  const othHoldbacks = parseHoldbacks(cleanString(col(row, k.othHoldbacksKey)))
 
   // ── Primary row: one record per active right type ──────────────────────
   const satNature = preserveRawText(col(row, k.natSatKey))
@@ -1151,13 +1254,13 @@ function buildMovieRightsRows(
     rows.push({
       movie_id: movieId,
       right_type: 'Satellite',
-      nature: satNature || (satVal === 'Yes' ? 'Owned' : null),
+      nature: satNature,
       classification: satClass,
       territory,
       start_date: satStartDate,
       end_date: satEndDate,
       syndication: null,
-      holdbacks,
+      holdbacks: satHoldbacks,
     })
   }
 
@@ -1166,18 +1269,17 @@ function buildMovieRightsRows(
   const intStartDate = parseDate(col(row, k.intStartKey))
   const intEndDate = parseDate(col(row, k.intEndKey))
   // Create Internet row if the Yes flag is set OR if detailed data exists.
-  // Default nature to 'Owned' when flag=Yes but no nature text — satisfies NOT NULL.
   if (intVal === 'Yes' || intNature || intClass || intStartDate || intEndDate) {
     rows.push({
       movie_id: movieId,
       right_type: 'Internet',
-      nature: intNature || (intVal === 'Yes' ? 'Owned' : null),
+      nature: intNature,
       classification: intClass,
       territory,
       start_date: intStartDate,
       end_date: intEndDate,
       syndication: preserveRawText(col(row, k.syndicationIntKey)),
-      holdbacks,
+      holdbacks: intHoldbacks,
     })
   }
 
@@ -1186,13 +1288,13 @@ function buildMovieRightsRows(
     rows.push({
       movie_id: movieId,
       right_type: 'Negative',
-      nature: negNature || (negVal === 'Yes' ? 'Owned' : null),
+      nature: negNature,
       classification: null,
       territory,
       start_date: parseDate(col(row, k.negStartKey)),
       end_date: parseDate(col(row, k.negEndKey)),
       syndication: null,
-      holdbacks,
+      holdbacks: negHoldbacks,
     })
   }
 
@@ -1209,8 +1311,35 @@ function buildMovieRightsRows(
       start_date: parseDate(col(row, k.othStartKey)),
       end_date: parseDate(col(row, k.othEndKey)),
       syndication: null,
-      holdbacks,
+      holdbacks: othHoldbacks,
     })
+  }
+
+  // ── Generic sections (Airborne, Ship, and any future right types that follow
+  //    the sheet's standard 8-column pattern) — discovered by findRightSections. ──
+  const extraHoldbacksByType = new Map<string, string | null>()
+  for (const section of k.extraSections) {
+    const val = parseYesNoDefault(col(row, section.rightsKey))
+    const nature = preserveRawText(col(row, section.natureKey))
+    const classification = cleanString(col(row, section.classKey))
+    const startDate = parseDate(col(row, section.startKey))
+    const endDate = parseDate(col(row, section.endKey))
+    const holdbacks = parseHoldbacks(cleanString(col(row, section.holdbacksKey)))
+    extraHoldbacksByType.set(section.rightType, holdbacks)
+
+    if (val === 'Yes' || nature || classification || startDate || endDate) {
+      rows.push({
+        movie_id: movieId,
+        right_type: section.rightType,
+        nature,
+        classification,
+        territory,
+        start_date: startDate,
+        end_date: endDate,
+        syndication: preserveRawText(col(row, section.syndicationKey)),
+        holdbacks,
+      })
+    }
   }
 
   // ── Continuation rows: additional natures for the same right types ─────
@@ -1219,7 +1348,10 @@ function buildMovieRightsRows(
   if (continuationRows) {
     for (const contRow of continuationRows) {
       const contTerritory = cleanString(col(contRow, k.territoryKey)) ?? territory
-      const contHoldbacks = parseHoldbacks(cleanString(col(contRow, k.holdbacksKey))) ?? holdbacks
+      const contSatHoldbacks = parseHoldbacks(cleanString(col(contRow, k.satHoldbacksKey))) ?? satHoldbacks
+      const contIntHoldbacks = parseHoldbacks(cleanString(col(contRow, k.intHoldbacksKey))) ?? intHoldbacks
+      const contNegHoldbacks = parseHoldbacks(cleanString(col(contRow, k.negHoldbacksKey))) ?? negHoldbacks
+      const contOthHoldbacks = parseHoldbacks(cleanString(col(contRow, k.othHoldbacksKey))) ?? othHoldbacks
 
       const pushIfData = (
         rightType: string,
@@ -1228,6 +1360,7 @@ function buildMovieRightsRows(
         endKey: string | null,
         classKey: string | null,
         synKey: string | null,
+        holdbacks: string | null,
       ) => {
         const nature = preserveRawText(col(contRow, natKey))
         const startDate = parseDate(col(contRow, startKey))
@@ -1242,14 +1375,20 @@ function buildMovieRightsRows(
           start_date: startDate,
           end_date: endDate,
           syndication: synKey ? preserveRawText(col(contRow, synKey)) : null,
-          holdbacks: contHoldbacks,
+          holdbacks,
         })
       }
 
-      pushIfData('Satellite', k.natSatKey, k.satStartKey, k.satEndKey, k.satClassKey, null)
-      pushIfData('Internet',  k.natIntKey, k.intStartKey, k.intEndKey, k.intClassKey, k.syndicationIntKey)
-      pushIfData('Negative',  k.natNegKey, k.negStartKey, k.negEndKey, null, null)
-      pushIfData('Other',     k.natOthKey, k.othStartKey, k.othEndKey, k.othClassKey, null)
+      pushIfData('Satellite', k.natSatKey, k.satStartKey, k.satEndKey, k.satClassKey, null, contSatHoldbacks)
+      pushIfData('Internet',  k.natIntKey, k.intStartKey, k.intEndKey, k.intClassKey, k.syndicationIntKey, contIntHoldbacks)
+      pushIfData('Negative',  k.natNegKey, k.negStartKey, k.negEndKey, null, null, contNegHoldbacks)
+      pushIfData('Other',     k.natOthKey, k.othStartKey, k.othEndKey, k.othClassKey, null, contOthHoldbacks)
+
+      for (const section of k.extraSections) {
+        const contHoldbacks =
+          parseHoldbacks(cleanString(col(contRow, section.holdbacksKey))) ?? extraHoldbacksByType.get(section.rightType) ?? null
+        pushIfData(section.rightType, section.natureKey, section.startKey, section.endKey, section.classKey, section.syndicationKey, contHoldbacks)
+      }
     }
   }
 
@@ -1346,6 +1485,10 @@ async function processAcquiredRow(
   const actionablesKey = findColumnByPattern(keys, ['Actionables', 'Actionable'])
   const castKey = findColumnByPattern(keys, ['Cast Details', 'Cast'])
   const directorKey = findColumnByPattern(keys, ['Director'])
+  // Movie-wide list of platform/exploitation types permanently restricted for this
+  // title (e.g. "AVOD, FVOD") — takes precedence over any individual right/platform
+  // slot showing as available.
+  const syndicationHoldbackKey = findColumnByPattern(keys, ['Syndication Holdback', 'Syndication Holdbacks'])
 
   // ── Build movie record (no flat rights columns — they live in movie_rights) ─
   const movieData: Record<string, unknown> = {
@@ -1365,13 +1508,14 @@ async function processAcquiredRow(
     // Clip rights (standalone — no nature/territory)
     clip_rights: parseYesNoDefault(col(row, clipRightsKey)),
     clip_rights_duration: cleanString(col(row, clipDurKey)),
-    // Derivative / secondary
-    prequel_sequel_rights: preserveRawText(col(row, preqSeqKey)),
-    character_rights: preserveRawText(col(row, charRightsKey)),
-    subtitling_rights: preserveRawText(col(row, subtitleKey)),
-    dubbing_rights: preserveRawText(col(row, dubbingKey)),
+    // Derivative / secondary — Yes/No flags; blank means not licensed, stored as 'No'
+    prequel_sequel_rights: parseYesNoDefault(col(row, preqSeqKey)),
+    character_rights: parseYesNoDefault(col(row, charRightsKey)),
+    subtitling_rights: parseYesNoDefault(col(row, subtitleKey)),
+    dubbing_rights: parseYesNoDefault(col(row, dubbingKey)),
     remarks: cleanString(col(row, remarksKey)),
     actionables: cleanString(col(row, actionablesKey)),
+    syndication_holdback: preserveRawText(col(row, syndicationHoldbackKey)),
     approval_status: userRole === 'admin' ? 'approved' : 'pending',
   }
 

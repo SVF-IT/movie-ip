@@ -322,6 +322,7 @@ export default function NewMoviePage() {
   const [rightsOwned, setRightsOwned] = useState<DraftMovieRight[]>([]);
   const [remarks, setRemarks] = useState("");
   const [actionables, setActionables] = useState("");
+  const [syndicationHoldback, setSyndicationHoldback] = useState("");
   const [saving, setSaving] = useState(false);
   const toast = useAppToast();
 
@@ -420,6 +421,7 @@ export default function NewMoviePage() {
         clip_rights_duration: isHomeProdSave ? undefined : clipRightsDuration || undefined,
         remarks: remarks || undefined,
         actionables: actionables || undefined,
+        syndication_holdback: syndicationHoldback || undefined,
         wtp_library: wtpLibrary || undefined,
         // Home production joint ownership
         jointly_owned: isHomeProdSave ? jointlyOwned : undefined,
@@ -822,6 +824,9 @@ export default function NewMoviePage() {
       {activeTab === "notes" && (
         <SectionCard icon={Info} title="Notes">
           <div className="space-y-5">
+            <FormField label="Syndication Holdback" hint="Comma-separated platform/exploitation types permanently restricted for this movie (e.g. AVOD, FVOD) — overrides individual platform availability.">
+              <Textarea value={syndicationHoldback} onChange={e => setSyndicationHoldback(e.target.value)} rows={2} className={textareaCls} placeholder="e.g. AVOD, FVOD" />
+            </FormField>
             <FormField label="Remarks">
               <Textarea value={remarks} onChange={e => setRemarks(e.target.value)} rows={3} className={textareaCls} placeholder="Any additional notes or context…" />
             </FormField>

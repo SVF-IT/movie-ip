@@ -33,6 +33,10 @@ export interface Movie {
   remarks?: string
   actionables?: string
   wtp_library?: string
+  // Comma-separated list of platform/exploitation types permanently restricted
+  // for this movie (e.g. "AVOD, FVOD") — takes precedence over any individual
+  // platform_rights/movie_rights slot showing as available.
+  syndication_holdback?: string
   jointly_owned?: boolean
   joint_prod_buy_back_date?: string
   revenue_share?: string
@@ -128,7 +132,7 @@ export interface MovieRight {
   movie_id: string
   right_type: MovieRightType | string
   classification?: string
-  nature: MovieRightNature
+  nature?: MovieRightNature | null
   territory?: string
   start_date?: string
   end_date?: string

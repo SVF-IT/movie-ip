@@ -211,7 +211,7 @@ function NatureEntryRow({
         {/* Nature */}
         <div>
           <p className={`${labelCls} mb-1.5`}>Nature of Rights *</p>
-          <NatureSelect value={entry.nature} onChange={v => onUpdate({ nature: v })} />
+          <NatureSelect value={entry.nature ?? ""} onChange={v => onUpdate({ nature: v })} />
         </div>
 
         {/* Territory + Dates — only when nature is set */}
