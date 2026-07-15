@@ -64,12 +64,14 @@ export default function RecensorPage() {
   const fetchMovies = useCallback(async () => {
     setLoading(true);
     try {
+      const today = new Date().toISOString().split("T")[0];
+
       let query = supabase
         .from("movies")
         .select(`
           id, title, certification, release_year, source, production_house_name, recensor_flag, updated_at,
-          language
-        `, { count: "exact" })
+          language, home_sold, agreement_end_date
+        `)
         .ilike("certification", "A");
 
       if (debouncedSearch) {
@@ -91,16 +93,23 @@ export default function RecensorPage() {
         .order("title")
         .range(0, 9999);
 
-      const { data, error: fetchError, count } = await query;
+      const { data, error: fetchError } = await query;
       if (fetchError) throw fetchError;
 
-      const rows: RecensorMovie[] = (data || []).map((m: any) => ({
+      // Always exclude sold (home) and expired-agreement (acquired) movies from the tracker
+      const validRows = (data || []).filter((m: any) => {
+        if (m.source === "home_production") return m.home_sold !== true;
+        if (m.agreement_end_date && m.agreement_end_date < today) return false;
+        return true;
+      });
+
+      const rows: RecensorMovie[] = validRows.map((m: any) => ({
         ...m,
         language_name: m.language ?? undefined,
       }));
 
       setMovies(rows);
-      setTotalCount(count || 0);
+      setTotalCount(rows.length);
     } catch (err) {
       toast.error(sanitizeError(err instanceof Error ? err : new Error(String(err))).message);
     } finally {

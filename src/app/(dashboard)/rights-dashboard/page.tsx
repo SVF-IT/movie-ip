@@ -70,13 +70,19 @@ export default function RightsDashboardPage() {
   const [intExpiryFrom, setIntExpiryFrom] = useState<string>('')
   const [intExpiryTo, setIntExpiryTo] = useState<string>('')
 
+  // ── open-titles date range filters (per-mode) ──
+  const [satOpenFrom, setSatOpenFrom] = useState<string>('')
+  const [satOpenTo, setSatOpenTo] = useState<string>('')
+  const [intOpenFrom, setIntOpenFrom] = useState<string>('')
+  const [intOpenTo, setIntOpenTo] = useState<string>('')
+
   // Load pending approvals count for legal/admin banner
   useEffect(() => {
     if (!isLegalOrAdmin) return
     getPendingMovies({ status: 'pending', limit: 1 }).then(({ count }) => setPendingCount(count)).catch(() => { })
   }, [isLegalOrAdmin])
 
-  // Initial load
+  // Initial load — fetch languages/default language, stats are fetched by the effect below
   useEffect(() => {
     async function fetchData() {
       try {
@@ -87,15 +93,6 @@ export default function RightsDashboardPage() {
         const bengali = langs.find((l) => l.toLowerCase() === 'bengali')
         const defaultLang = bengali ?? ''
         if (defaultLang) setLanguage(defaultLang)
-
-        const [satS, intS, ac] = await Promise.all([
-          getRightsModeStats('satellite', defaultLang || undefined),
-          getRightsModeStats('internet', defaultLang || undefined),
-          getActiveInternetTitlesCount(defaultLang || undefined),
-        ])
-        setSatStats(satS)
-        setIntStats(intS)
-        setIntActiveCount(ac)
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Failed to load dashboard data')
       } finally {
@@ -108,23 +105,35 @@ export default function RightsDashboardPage() {
   const handleLanguageChange = useCallback(async (val: string) => {
     const newLang = val === 'all' ? '' : val
     setLanguage(newLang)
-    setStatsLoading(true)
-    try {
-      const langParam = newLang || undefined
-      const [satS, intS, ac] = await Promise.all([
-        getRightsModeStats('satellite', langParam),
-        getRightsModeStats('internet', langParam),
-        getActiveInternetTitlesCount(langParam),
-      ])
-      setSatStats(satS)
-      setIntStats(intS)
-      setIntActiveCount(ac)
-    } catch (err) {
-      console.error('Failed to refresh stats', err)
-    } finally {
-      setStatsLoading(false)
-    }
   }, [])
+
+  // Refetch stat-card numbers whenever language or either mode's Open Titles date range changes,
+  // so the card numbers stay consistent with the tables below them.
+  useEffect(() => {
+    if (loading) return
+    let cancelled = false
+    async function refreshStats() {
+      setStatsLoading(true)
+      try {
+        const langParam = language || undefined
+        const [satS, intS, ac] = await Promise.all([
+          getRightsModeStats('satellite', langParam, satOpenTo || undefined),
+          getRightsModeStats('internet', langParam, intOpenTo || undefined),
+          getActiveInternetTitlesCount(langParam),
+        ])
+        if (cancelled) return
+        setSatStats(satS)
+        setIntStats(intS)
+        setIntActiveCount(ac)
+      } catch (err) {
+        console.error('Failed to refresh stats', err)
+      } finally {
+        if (!cancelled) setStatsLoading(false)
+      }
+    }
+    refreshStats()
+    return () => { cancelled = true }
+  }, [language, satOpenTo, intOpenTo, loading])
 
   const handleSatYearChange = useCallback((year: string) => {
     setSatExpiryYear(year)
@@ -303,6 +312,10 @@ export default function RightsDashboardPage() {
               expiryTo={satExpiryTo}
               onExpiryFromChange={(v) => { setSatExpiryFrom(v); setSatExpiryYear('custom') }}
               onExpiryToChange={(v) => { setSatExpiryTo(v); setSatExpiryYear('custom') }}
+              openFrom={satOpenFrom}
+              openTo={satOpenTo}
+              onOpenFromChange={setSatOpenFrom}
+              onOpenToChange={setSatOpenTo}
               yearOptions={yearOptions}
               fullPage
             />
@@ -316,6 +329,10 @@ export default function RightsDashboardPage() {
               expiryTo={intExpiryTo}
               onExpiryFromChange={(v) => { setIntExpiryFrom(v); setIntExpiryYear('custom') }}
               onExpiryToChange={(v) => { setIntExpiryTo(v); setIntExpiryYear('custom') }}
+              openFrom={intOpenFrom}
+              openTo={intOpenTo}
+              onOpenFromChange={setIntOpenFrom}
+              onOpenToChange={setIntOpenTo}
               yearOptions={yearOptions}
               fullPage
             />
@@ -513,6 +530,10 @@ export default function RightsDashboardPage() {
             expiryTo={satExpiryTo}
             onExpiryFromChange={(v) => { setSatExpiryFrom(v); setSatExpiryYear('custom') }}
             onExpiryToChange={(v) => { setSatExpiryTo(v); setSatExpiryYear('custom') }}
+            openFrom={satOpenFrom}
+            openTo={satOpenTo}
+            onOpenFromChange={setSatOpenFrom}
+            onOpenToChange={setSatOpenTo}
             yearOptions={yearOptions}
           />
         ) : (
@@ -525,6 +546,10 @@ export default function RightsDashboardPage() {
             expiryTo={intExpiryTo}
             onExpiryFromChange={(v) => { setIntExpiryFrom(v); setIntExpiryYear('custom') }}
             onExpiryToChange={(v) => { setIntExpiryTo(v); setIntExpiryYear('custom') }}
+            openFrom={intOpenFrom}
+            openTo={intOpenTo}
+            onOpenFromChange={setIntOpenFrom}
+            onOpenToChange={setIntOpenTo}
             yearOptions={yearOptions}
           />
         )}

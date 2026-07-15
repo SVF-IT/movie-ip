@@ -23,6 +23,7 @@ import type { MovieWithDetails } from '@/lib/types/database'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { DataExportDialog, type ExportFieldDef } from '@/components/import-export/data-export-dialog'
+import { HoldbackInfoIcon } from '@/components/dashboard/holdback-info-icon'
 
 function isoToDisplay(iso: string): string {
   if (!iso) return ''
@@ -83,6 +84,10 @@ interface SatelliteDashboardTableProps {
   expiryTo: string
   onExpiryFromChange: (v: string) => void
   onExpiryToChange: (v: string) => void
+  openFrom: string
+  openTo: string
+  onOpenFromChange: (v: string) => void
+  onOpenToChange: (v: string) => void
   yearOptions: number[]
   fullPage?: boolean
 }
@@ -129,6 +134,10 @@ export function SatelliteDashboardTable({
   expiryTo,
   onExpiryFromChange,
   onExpiryToChange,
+  openFrom,
+  openTo,
+  onOpenFromChange,
+  onOpenToChange,
   yearOptions,
   fullPage = false,
 }: SatelliteDashboardTableProps) {
@@ -144,13 +153,15 @@ export function SatelliteDashboardTable({
   const [certOpen, setCertOpen] = useState(false)
   const [sortBy, setSortBy] = useState<SortOption>('title_asc')
   const [wtpFilter, setWtpFilter] = useState<'all' | 'wtp' | 'wtp_bd' | 'library'>('all')
+  const [showHoldback, setShowHoldback] = useState(false)
+  const [bangladeshiOnly, setBangladeshiOnly] = useState(false)
   const [showExportDialog, setShowExportDialog] = useState(false)
   const [exportData, setExportData] = useState<Record<string, unknown>[]>([])
   const [exportLoading, setExportLoading] = useState(false)
   const [totalCount, setTotalCount] = useState(0)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
-  useEffect(() => { setSelectedIds(new Set()) }, [activeCard, language, expiryFrom, expiryTo, sourceFilter, certFilter, wtpFilter])
+  useEffect(() => { setSelectedIds(new Set()) }, [activeCard, language, expiryFrom, expiryTo, openFrom, openTo, sourceFilter, certFilter, wtpFilter, bangladeshiOnly])
 
   useEffect(() => {
     const timer = setTimeout(() => { setDebouncedSearch(search) }, 300)
@@ -193,6 +204,9 @@ export function SatelliteDashboardTable({
           sortBy: safeSortBy,
           certification: certFilter.length > 0 ? certFilter : undefined,
           wtpFilter: wtpFilter !== 'all' ? wtpFilter : undefined,
+          bangladeshiOnly: bangladeshiOnly || undefined,
+          openFrom: openFrom || undefined,
+          openTo: openTo || undefined,
           limit,
           offset,
         })
@@ -235,7 +249,7 @@ export function SatelliteDashboardTable({
     } finally {
       if (!forExport) setIsLoading(false)
     }
-  }, [activeCard, debouncedSearch, language, sourceFilter, certFilter, expiryFrom, expiryTo, sortBy, wtpFilter])
+  }, [activeCard, debouncedSearch, language, sourceFilter, certFilter, expiryFrom, expiryTo, openFrom, openTo, sortBy, wtpFilter, bangladeshiOnly])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -255,7 +269,7 @@ export function SatelliteDashboardTable({
         for (const movie of sourceData || []) {
           const rights = movie.satellite_rights_list || []
           if (rights.length === 0) {
-            rows.push({ sl_no: idx++, title: movie.title, source: movie.source, certification: movie.certification, release_date: movie.release_date, language: (movie as any).language })
+            rows.push({ sl_no: idx++, title: movie.title, source: movie.source, certification: movie.certification, release_date: movie.release_date || (movie as any).release_year || '', language: (movie as any).language })
           } else {
             for (const right of rights) {
               const days = right.end_date ? Math.ceil((new Date(right.end_date).getTime() - Date.now()) / 86400000) : null
@@ -271,7 +285,7 @@ export function SatelliteDashboardTable({
                 days_remaining: days !== null ? days : '',
                 territory: right.territory || 'World',
                 certification: movie.certification || '',
-                release_date: (movie as any).release_date || '',
+                release_date: (movie as any).release_date || (movie as any).release_year || '',
                 language: (movie as any).language || '',
               })
             }
@@ -282,7 +296,11 @@ export function SatelliteDashboardTable({
         const sourceData = selectedIds.size > 0
           ? (data as any[]).filter((m: any) => selectedIds.has(m.id))
           : (data as any[])
-        preparedData = (sourceData || []).map((row, idx) => ({ ...row, sl_no: idx + 1 }))
+        preparedData = (sourceData || []).map((row, idx) => ({
+          ...row,
+          release_date: row.release_date || row.release_year || '',
+          sl_no: idx + 1,
+        }))
       }
       setExportData(preparedData)
       setShowExportDialog(true)
@@ -327,9 +345,10 @@ export function SatelliteDashboardTable({
   const showExpiryFilters = activeCard === 'expiring'
   const showWtpCol = activeCard === 'open_titles'
   const showLicensorCol = activeCard === 'open_titles' && sourceFilter === 'acquired'
+  const showHoldbackCol = activeCard === 'open_titles' && showHoldback
   // Expiring card: flat per-right rows (no expand/collapse)
   const flatExpiryRows = activeCard === 'expiring'
-  const colSpan = flatExpiryRows ? 9 : showWtpCol ? (showLicensorCol ? 11 : 10) : 7
+  const colSpan = flatExpiryRows ? 9 : showWtpCol ? (showLicensorCol ? 11 : 10) + (showHoldbackCol ? 1 : 0) : 7
 
   // ── row / cell sizing based on mode ──
   const rowCls = fullPage ? 'border-(--svf-border)/30 hover:bg-(--hover)' : 'border-(--svf-border)/30 hover:bg-(--hover)'
@@ -446,7 +465,7 @@ export function SatelliteDashboardTable({
           </>
         )}
 
-        {/* Open titles filters: WTP */}
+        {/* Open titles filters: WTP + date range */}
         {activeCard === 'open_titles' && (
           <>
             <Select value={wtpFilter} onValueChange={(v) => { setWtpFilter(v as typeof wtpFilter) }}>
@@ -460,6 +479,35 @@ export function SatelliteDashboardTable({
                 <SelectItem value="library">Library</SelectItem>
               </SelectContent>
             </Select>
+
+            <div className="flex items-center gap-1 bg-(--bg-raise) border border-(--svf-border) rounded-md px-2 h-9 hover:border-(--svf-border-strong) transition-colors">
+              <span className="text-[10px] font-medium text-(--text-faint) uppercase px-1">From</span>
+              <DateInput value={openFrom} onChange={onOpenFromChange} />
+              <span className="text-(--svf-border-strong) px-1">|</span>
+              <span className="text-[10px] font-medium text-(--text-faint) uppercase px-1">To</span>
+              <DateInput value={openTo} onChange={onOpenToChange} />
+              {(openFrom || openTo) && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onOpenFromChange(''); onOpenToChange('') }}
+                  className="ml-1 p-0.5 text-(--text-faint) hover:text-red-400 transition-colors"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+
+            <label className="flex items-center gap-1.5 h-9 px-2.5 rounded-md border border-(--svf-border) bg-(--bg-raise) hover:border-(--svf-border-strong) transition-colors cursor-pointer">
+              <Checkbox checked={showHoldback} onCheckedChange={(v) => setShowHoldback(v === true)} className="h-3.5 w-3.5" />
+              <span className="text-xs text-(--text)">Show Holdback</span>
+            </label>
+
+            <label className={cn(
+              'flex items-center gap-1.5 h-9 px-2.5 rounded-md border transition-colors cursor-pointer',
+              bangladeshiOnly ? 'border-emerald-500/60 bg-emerald-500/5' : 'border-(--svf-border) bg-(--bg-raise) hover:border-(--svf-border-strong)'
+            )}>
+              <Checkbox checked={bangladeshiOnly} onCheckedChange={(v) => setBangladeshiOnly(v === true)} className="h-3.5 w-3.5" />
+              <span className={cn('text-xs', bangladeshiOnly ? 'text-emerald-400' : 'text-(--text)')}>Bangladeshi</span>
+            </label>
           </>
         )}
 
@@ -565,8 +613,8 @@ export function SatelliteDashboardTable({
                 <SortableHeader column="language" label="Language" currentSort={sortConfig} onSort={requestSort} className={headCls} />
                 {showWtpCol && <TableHead className={headCls}>WTP Library</TableHead>}
                 {showLicensorCol && <TableHead className={headCls}>Licensor</TableHead>}
-                {activeCard === 'open_titles' && <TableHead className={headCls}>Satellite Rights</TableHead>}
                 {activeCard === 'open_titles' && <TableHead className={headCls}>Sunset Date</TableHead>}
+                {showHoldbackCol && <TableHead className={cn('w-10', headCls)}>Holdback</TableHead>}
               </>
             )}
           </TableRow>
@@ -678,13 +726,6 @@ export function SatelliteDashboardTable({
                   </TableCell>
                 )}
                 {activeCard === 'open_titles' && (
-                  <TableCell className={cn('whitespace-nowrap text-xs', cellCls)} style={{ color: 'var(--text-faint)' }}>
-                    {movie.satellite_rights_start_date || movie.satellite_rights_end_date ? (
-                      <span>{movie.satellite_rights_start_date ? movie.satellite_rights_start_date.split('-').reverse().join('/') : '—'} → {movie.satellite_rights_end_date ? movie.satellite_rights_end_date.split('-').reverse().join('/') : '∞'}</span>
-                    ) : '—'}
-                  </TableCell>
-                )}
-                {activeCard === 'open_titles' && (
                   <TableCell className={cn('whitespace-nowrap text-xs', cellCls)}>
                     {movie.agreement_end_date ? (
                       <span style={{ color: new Date(movie.agreement_end_date) < new Date() ? 'var(--st-expired)' : 'var(--text-faint)' }}>
@@ -693,6 +734,11 @@ export function SatelliteDashboardTable({
                     ) : movie.agreement_start_date ? (
                       <span style={{ color: 'var(--text-faint)' }}>{movie.agreement_start_date.split('-').reverse().join('/')} → ∞</span>
                     ) : <span style={{ color: 'var(--text-faint)' }}>—</span>}
+                  </TableCell>
+                )}
+                {showHoldbackCol && (
+                  <TableCell className={cellCls}>
+                    <HoldbackInfoIcon info={movie.holdback_info || { hasAny: false, entries: [] }} />
                   </TableCell>
                 )}
               </TableRow>

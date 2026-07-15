@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/client'
 import type { DashboardStats, MovieWithDetails, Person, Platform, RightsNatureType } from '@/lib/types/database'
+import { buildHoldbackInfo, flattenHoldbackInfo, hasHoldbackToken, type HoldbackInfo } from '@/lib/utils/holdbacks'
 
 const supabase = createClient()
 
@@ -68,6 +69,38 @@ async function fetchMovieRightsEndDates(movieIds: string[], rightTypes: string[]
     }
   }
   return map
+}
+
+/** Returns a Map<movie_id, raw holdback strings[]> — one entry per matching movie_rights row. */
+async function fetchMovieRightsHoldbacks(movieIds: string[], rightTypes: string[]): Promise<Map<string, string[]>> {
+  if (movieIds.length === 0) return new Map()
+  const map = new Map<string, string[]>()
+  for (let i = 0; i < movieIds.length; i += CHUNK_SIZE) {
+    const chunk = movieIds.slice(i, i + CHUNK_SIZE)
+    const { data } = await supabase
+      .from('movie_rights')
+      .select('movie_id, holdbacks')
+      .in('movie_id', chunk)
+      .in('right_type', rightTypes)
+    for (const row of data || []) {
+      if (!row.holdbacks) continue
+      const existing = map.get(row.movie_id) || []
+      existing.push(row.holdbacks)
+      map.set(row.movie_id, existing)
+    }
+  }
+  return map
+}
+
+/**
+ * A movie should never appear on the rights dashboard if it's sold (home_sold=true) or its
+ * agreement has expired (acquired movies whose agreement_end_date has passed). Applied
+ * consistently across every rights-dashboard query so cards and stat numbers stay in sync.
+ */
+function isSoldOrExpired(m: any, referenceDate: string): boolean {
+  if (m.source === 'home_production') return m.home_sold === true
+  if (m.agreement_end_date && m.agreement_end_date < referenceDate) return true
+  return false
 }
 
 function isSatellitePlatformType(pt: string): boolean {
@@ -360,9 +393,13 @@ export interface RightsModeStats {
   upcomingMoviesCount: number
 }
 
-export async function getRightsModeStats(mode: RightsMode, language?: string): Promise<RightsModeStats> {
+export async function getRightsModeStats(mode: RightsMode, language?: string, openTo?: string): Promise<RightsModeStats> {
   try {
     const today = new Date().toISOString().split('T')[0]
+    // Same semantics as getOpenTitlesForMode: when an "open until" date is supplied, open-title
+    // eligibility is evaluated as of that date instead of today, so the stat card and the table
+    // stay consistent.
+    const referenceDate = openTo || today
     const currentYear = new Date().getFullYear()
     // Stat card always shows current-year expiring
     const currentYearStart = `${currentYear}-01-01`
@@ -371,18 +408,13 @@ export async function getRightsModeStats(mode: RightsMode, language?: string): P
     // Fetch all approved movies (language-filtered) — no flat rights columns needed
     let moviesQuery = supabase
       .from('movies')
-      .select('id, source, certification, jointly_exploitation_rights, agreement_end_date, wtp_library')
+      .select('id, source, certification, home_sold, agreement_end_date, wtp_library, syndication_holdback')
       .eq('approval_status', 'approved')
     if (language) moviesQuery = moviesQuery.eq('language', language)
     const { data: allMovies } = await moviesQuery
 
-    const validMovies = (allMovies || []).filter((m: any) => {
-      if (m.source === 'home_production') {
-        const jer = (m.jointly_exploitation_rights || '').toLowerCase()
-        return !jer.startsWith('sold')
-      }
-      return true
-    })
+    // Always exclude sold (home) and expired-agreement (acquired) movies
+    const validMovies = (allMovies || []).filter((m: any) => !isSoldOrExpired(m, referenceDate))
 
     let openHomeCount = 0
     let openAcquiredCount = 0
@@ -440,7 +472,7 @@ export async function getRightsModeStats(mode: RightsMode, language?: string): P
       const homeMovies = validMovies.filter((m: any) => m.source === 'home_production')
       const homeMovieIds = homeMovies.map((m: any) => m.id)
 
-      // Home open: no active internet platform_right (excluding Hoichoi)
+      // Home open: no active internet platform_right (excluding Hoichoi), no SVOD syndication holdback
       let moviesWithActiveIntRights = new Set<string>()
       if (homeMovieIds.length > 0) {
         const intRights = await fetchPlatformRightsChunked(
@@ -449,41 +481,59 @@ export async function getRightsModeStats(mode: RightsMode, language?: string): P
         )
         moviesWithActiveIntRights = new Set(
           intRights
-            .filter((r: any) => isInternetPlatform(r.platforms?.platform_type || '') && !isHoichoiPlatform(r.platforms?.name || '') && (!r.end_date || r.end_date >= today))
+            .filter((r: any) => isInternetPlatform(r.platforms?.platform_type || '') && !isHoichoiPlatform(r.platforms?.name || '') && (!r.end_date || r.end_date >= referenceDate))
             .map((r: any) => r.movie_id)
         )
       }
-      openHomeCount = homeMovies.filter((m: any) => !moviesWithActiveIntRights.has(m.id)).length
+      const homeMoviesWithSvodHoldback = new Set(
+        homeMovies.filter((m: any) => hasHoldbackToken(m.syndication_holdback, 'svod')).map((m: any) => m.id)
+      )
+      openHomeCount = homeMovies.filter((m: any) => !moviesWithActiveIntRights.has(m.id) && !homeMoviesWithSvodHoldback.has(m.id)).length
 
       // Acquired open: has an Internet or Negative movie_rights row that hasn't expired,
-      // and no active internet platform_right (excluding Hoichoi)
+      // no active internet platform_right (excluding Hoichoi), and no SVOD holdback (movie-wide,
+      // movie_rights, or platform_rights)
       const acquiredMovies = validMovies.filter((m: any) => m.source === 'acquired')
       const acquiredMovieIds = acquiredMovies.map((m: any) => m.id)
 
       const acqWithIntRight = await fetchMovieRightsIdsByType(acquiredMovieIds, ['Internet', 'Negative'])
       const acqIntEndDates = await fetchMovieRightsEndDates(acquiredMovieIds, ['Internet', 'Negative'])
+      const acqIntHoldbacks = await fetchMovieRightsHoldbacks(acquiredMovieIds, ['Internet', 'Negative'])
 
       const eligibleAcquired = acquiredMovies.filter((m: any) => {
         if (!acqWithIntRight.has(m.id)) return false
         const mrEnd = acqIntEndDates.get(m.id)
         const endDate = mrEnd ?? m.agreement_end_date ?? null
-        if (endDate && endDate < today) return false
+        if (endDate && endDate < referenceDate) return false
         return true
       })
       const eligibleAcquiredIds = eligibleAcquired.map((m: any) => m.id)
 
       const moviesWithActiveIntPlatformRight = new Set<string>()
+      let acqIntRights: any[] = []
       if (eligibleAcquiredIds.length > 0) {
-        const acqIntRights = await fetchPlatformRightsChunked(
-          eligibleAcquiredIds, 'movie_id, platforms(name, platform_type), end_date',
+        acqIntRights = await fetchPlatformRightsChunked(
+          eligibleAcquiredIds, 'movie_id, platforms(name, platform_type), end_date, holdbacks',
           (q) => q.eq('is_current', true)
         )
         acqIntRights.forEach((r: any) => {
           if (!isInternetPlatform(r.platforms?.platform_type || '') || isHoichoiPlatform(r.platforms?.name || '')) return
-          if (!r.end_date || r.end_date >= today) moviesWithActiveIntPlatformRight.add(r.movie_id)
+          if (!r.end_date || r.end_date >= referenceDate) moviesWithActiveIntPlatformRight.add(r.movie_id)
         })
       }
-      openAcquiredCount = eligibleAcquired.filter((m: any) => !moviesWithActiveIntPlatformRight.has(m.id)).length
+      const eligibleAcquiredWithSvodHoldback = new Set(
+        eligibleAcquired
+          .filter((m: any) => {
+            if (hasHoldbackToken(m.syndication_holdback, 'svod')) return true
+            if ((acqIntHoldbacks.get(m.id) || []).some((h) => hasHoldbackToken(h, 'svod'))) return true
+            if (acqIntRights.some((r: any) => r.movie_id === m.id && hasHoldbackToken(r.holdbacks, 'svod'))) return true
+            return false
+          })
+          .map((m: any) => m.id)
+      )
+      openAcquiredCount = eligibleAcquired.filter(
+        (m: any) => !moviesWithActiveIntPlatformRight.has(m.id) && !eligibleAcquiredWithSvodHoldback.has(m.id)
+      ).length
     }
 
     const openTitlesCount = openHomeCount + openAcquiredCount
@@ -544,15 +594,21 @@ export async function getOpenTitlesForMode(
     search?: string
     language?: string
     sourceFilter?: 'all' | 'home' | 'acquired' | 'bangladeshi'
+    bangladeshiOnly?: boolean
     certification?: string[]
     sortBy?: 'title_asc' | 'title_desc' | 'created_at_desc' | 'release_date_desc' | 'release_date_asc'
     openFrom?: string
     openTo?: string
     wtpFilter?: 'all' | 'wtp' | 'wtp_bd' | 'library'
   },
-): Promise<{ data: MovieWithDetails[]; count: number }> {
+): Promise<{ data: (MovieWithDetails & { holdback_info: HoldbackInfo; holdback_summary: string })[]; count: number }> {
   try {
     const today = new Date().toISOString().split('T')[0]
+    // Reference date for expiry comparisons: when an "open until" date is supplied, a right
+    // is only "active" if it stays active through that date — this lets titles whose current
+    // right lapses inside the selected window count as open-in-range. `openFrom` doesn't
+    // independently affect gating; it exists for UI symmetry with the date-range picker.
+    const referenceDate = options?.openTo || today
     const sortBy = options?.sortBy || 'title_asc'
 
     let query = supabase.from('movies_with_details').select('*').eq('approval_status', 'approved')
@@ -587,12 +643,8 @@ export async function getOpenTitlesForMode(
 
     const { data: movies } = await query
 
-    // Filter valid home movies: exclude sold/grassroot
-    const validMovies = ((movies || []) as any[]).filter((m: any) => {
-      if (m.source !== 'home_production') return true
-      const jer = (m.jointly_exploitation_rights || '').toLowerCase()
-      return !jer.startsWith('sold')
-    })
+    // Always exclude sold (home) and expired-agreement (acquired) movies from the rights dashboard
+    const validMovies = ((movies || []) as any[]).filter((m: any) => !isSoldOrExpired(m, referenceDate))
 
     let openTitles: any[] = []
 
@@ -619,7 +671,7 @@ export async function getOpenTitlesForMode(
         if (!acqWithSatRight2.has(m.id)) return false
         const mrEnd = acqSatEndDates2.get(m.id)
         const endDate = mrEnd ?? m.agreement_end_date ?? null
-        if (endDate && endDate < today) return false
+        if (endDate && endDate < referenceDate) return false
         return true
       })
       const acquiredMovieIds = acquiredMovies.map((m: any) => m.id)
@@ -628,7 +680,7 @@ export async function getOpenTitlesForMode(
         const acqSatRights = await fetchPlatformRightsChunked(acquiredMovieIds, 'movie_id, platforms(platform_type), end_date')
         acqSatRights.forEach((r: any) => {
           if (!isAcquiredSatellitePlatform(r.platforms?.platform_type || '')) return
-          if (!r.end_date || r.end_date >= today) moviesWithActiveSatPlatformRight2.add(r.movie_id)
+          if (!r.end_date || r.end_date >= referenceDate) moviesWithActiveSatPlatformRight2.add(r.movie_id)
         })
       }
       const openAcquiredMovies = acquiredMovies.filter((m: any) => !moviesWithActiveSatPlatformRight2.has(m.id))
@@ -644,67 +696,108 @@ export async function getOpenTitlesForMode(
       const homeMovieIds = homeMovies.map((m: any) => m.id)
 
       // Home: no active internet platform_right (excluding Hoichoi)
-      // platform_type in (SVOD, TVOD, AVOD, FVOD), is_current=true, (end_date is null or >= today)
+      // platform_type in (SVOD, TVOD, AVOD, FVOD), is_current=true, (end_date is null or >= referenceDate)
       let moviesWithActiveIntRights = new Set<string>()
+      let homeIntRights: any[] = []
       if (homeMovieIds.length > 0) {
-        const intRights = await fetchPlatformRightsChunked(
-          homeMovieIds, 'movie_id, platforms(name, platform_type), end_date',
+        homeIntRights = await fetchPlatformRightsChunked(
+          homeMovieIds, 'movie_id, platforms(name, platform_type), end_date, holdbacks',
           (q) => q.eq('is_current', true)
         )
         moviesWithActiveIntRights = new Set(
-          intRights
-            .filter((r: any) => isInternetPlatform(r.platforms?.platform_type || '') && !isHoichoiPlatform(r.platforms?.name || '') && (!r.end_date || r.end_date >= today))
+          homeIntRights
+            .filter((r: any) => isInternetPlatform(r.platforms?.platform_type || '') && !isHoichoiPlatform(r.platforms?.name || '') && (!r.end_date || r.end_date >= referenceDate))
             .map((r: any) => r.movie_id)
         )
       }
-      const openHomeMovies = homeMovies.filter((m: any) => !moviesWithActiveIntRights.has(m.id))
+      // Home movies with a movie-wide SVOD syndication holdback can never be "open" for internet
+      const homeMoviesWithSvodHoldback = new Set(
+        homeMovies.filter((m: any) => hasHoldbackToken(m.syndication_holdback, 'svod')).map((m: any) => m.id)
+      )
+      const openHomeMovies = homeMovies.filter((m: any) => !moviesWithActiveIntRights.has(m.id) && !homeMoviesWithSvodHoldback.has(m.id))
 
       // Acquired: has Internet or Negative movie_rights row, not expired, no active internet platform_right (excl. Hoichoi)
       const acquiredCandidatesInt = validMovies.filter((m: any) => m.source === 'acquired')
       const acquiredCandidateIdsInt = acquiredCandidatesInt.map((m: any) => m.id)
       const acqWithIntRight2 = await fetchMovieRightsIdsByType(acquiredCandidateIdsInt, ['Internet', 'Negative'])
       const acqIntEndDates2 = await fetchMovieRightsEndDates(acquiredCandidateIdsInt, ['Internet', 'Negative'])
+      const acqIntHoldbacks = await fetchMovieRightsHoldbacks(acquiredCandidateIdsInt, ['Internet', 'Negative'])
       const acquiredMovies = acquiredCandidatesInt.filter((m: any) => {
         if (!acqWithIntRight2.has(m.id)) return false
         const mrEnd = acqIntEndDates2.get(m.id)
         const endDate = mrEnd ?? m.agreement_end_date ?? null
-        if (endDate && endDate < today) return false
+        if (endDate && endDate < referenceDate) return false
         return true
       })
       const acquiredMovieIds = acquiredMovies.map((m: any) => m.id)
       const moviesWithActiveIntPlatformRight2 = new Set<string>()
+      let acqIntRights: any[] = []
       if (acquiredMovieIds.length > 0) {
-        const acqIntRights = await fetchPlatformRightsChunked(acquiredMovieIds, 'movie_id, platforms(name, platform_type), end_date', (q) => q.eq('is_current', true))
+        acqIntRights = await fetchPlatformRightsChunked(acquiredMovieIds, 'movie_id, platforms(name, platform_type), end_date, holdbacks', (q) => q.eq('is_current', true))
         acqIntRights.forEach((r: any) => {
           if (!isInternetPlatform(r.platforms?.platform_type || '') || isHoichoiPlatform(r.platforms?.name || '')) return
-          if (!r.end_date || r.end_date >= today) moviesWithActiveIntPlatformRight2.add(r.movie_id)
+          if (!r.end_date || r.end_date >= referenceDate) moviesWithActiveIntPlatformRight2.add(r.movie_id)
         })
       }
-      const openAcquiredMovies = acquiredMovies.filter((m: any) => !moviesWithActiveIntPlatformRight2.has(m.id))
+      // SVOD holdback can come from the movie-wide field, any matching movie_rights row,
+      // or any matching platform_rights row — any of the three blocks "open" status.
+      const acquiredMoviesWithSvodHoldback = new Set(
+        acquiredMovies
+          .filter((m: any) => {
+            if (hasHoldbackToken(m.syndication_holdback, 'svod')) return true
+            if ((acqIntHoldbacks.get(m.id) || []).some((h) => hasHoldbackToken(h, 'svod'))) return true
+            if (acqIntRights.some((r: any) => r.movie_id === m.id && hasHoldbackToken(r.holdbacks, 'svod'))) return true
+            return false
+          })
+          .map((m: any) => m.id)
+      )
+      const openAcquiredMovies = acquiredMovies.filter(
+        (m: any) => !moviesWithActiveIntPlatformRight2.has(m.id) && !acquiredMoviesWithSvodHoldback.has(m.id)
+      )
 
       const sf2 = options?.sourceFilter || 'all'
       if (sf2 === 'home') openTitles = openHomeMovies
       else if (sf2 === 'acquired') openTitles = openAcquiredMovies
       else if (sf2 === 'bangladeshi') openTitles = [...openHomeMovies, ...openAcquiredMovies].filter((m: any) => m.is_bangladeshi === true)
       else openTitles = [...openHomeMovies, ...openAcquiredMovies]
+
+      // Attach holdback_info for display — informational, independent of the SVOD gate above
+      const holdbackContext = new Map<string, { movieRights: string[]; platformRights: { platformName: string; raw: string }[] }>()
+      for (const m of [...homeMovies, ...acquiredMovies]) {
+        holdbackContext.set(m.id, { movieRights: acqIntHoldbacks.get(m.id) || [], platformRights: [] })
+      }
+      for (const r of [...homeIntRights, ...acqIntRights]) {
+        if (!r.holdbacks) continue
+        const ctx = holdbackContext.get(r.movie_id)
+        if (ctx) ctx.platformRights.push({ platformName: r.platforms?.name || 'Platform', raw: r.holdbacks })
+      }
+      openTitles = openTitles.map((m: any) => {
+        const ctx = holdbackContext.get(m.id) || { movieRights: [], platformRights: [] }
+        const info = buildHoldbackInfo([
+          { label: 'Movie-wide', raw: m.syndication_holdback },
+          { label: 'Rights-level (movie_rights)', raw: ctx.movieRights.join(', ') },
+          ...ctx.platformRights.map((pr) => ({ label: `Platform right (${pr.platformName})`, raw: pr.raw })),
+        ])
+        return { ...m, holdback_info: info, holdback_summary: flattenHoldbackInfo(info) }
+      })
+    }
+
+    // Satellite mode rows don't compute holdback_info above — attach an empty one for a consistent shape
+    if (mode === 'satellite') {
+      openTitles = openTitles.map((m: any) => {
+        const info = buildHoldbackInfo([{ label: 'Movie-wide', raw: m.syndication_holdback }])
+        return { ...m, holdback_info: info, holdback_summary: flattenHoldbackInfo(info) }
+      })
+    }
+
+    // Independent Bangladeshi checkbox — combinable with sourceFilter (all/home/acquired)
+    if (options?.bangladeshiOnly) {
+      openTitles = openTitles.filter((m: any) => m.is_bangladeshi === true)
     }
 
     // Re-sort combined list by title
     if (sortBy === 'title_asc') openTitles.sort((a, b) => (a.title || '').localeCompare(b.title || ''))
     else if (sortBy === 'title_desc') openTitles.sort((a, b) => (b.title || '').localeCompare(a.title || ''))
-
-    // Filter by open date range: title must be open (rights end date within or after openFrom, before openTo)
-    if (options?.openFrom || options?.openTo) {
-      openTitles = openTitles.filter((m: any) => {
-        // For acquired movies, the effective expiry is the agreement_end_date
-        // (per-right expiry is already filtered above via movie_rights lookup)
-        const endDate = m.agreement_end_date ?? null
-        if (!endDate) return true
-        if (options.openFrom && endDate < options.openFrom) return false
-        if (options.openTo && endDate > options.openTo) return false
-        return true
-      })
-    }
 
     const totalCount = openTitles.length
     const limit = options?.limit || 10
@@ -792,14 +885,7 @@ export async function getExpiringSatelliteTitles(options?: {
       production_house_name: m.production_house_name,
     }))
 
-    const validMovies = allMovies.filter((m: any) => {
-      if (m.source === 'home_production') {
-        const jer = (m.jointly_exploitation_rights || '').toLowerCase()
-        return !jer.startsWith('sold')
-      }
-      if (!m.agreement_end_date) return true
-      return m.agreement_end_date >= today
-    })
+    const validMovies = allMovies.filter((m: any) => !isSoldOrExpired(m, today))
 
     const results: (MovieWithDetails & { satellite_expiry_date?: string; satellite_rights_list?: SatelliteRight[] })[] = []
 
@@ -945,14 +1031,7 @@ export async function getExpiringInternetTitles(options?: {
       language_name: m.language,
       production_house_name: m.production_house_name,
     }))
-    const validMovies = allMovies.filter((m: any) => {
-      if (m.source === 'home_production') {
-        const jer = (m.jointly_exploitation_rights || '').toLowerCase()
-        return !jer.startsWith('sold')
-      }
-      if (!m.agreement_end_date) return true
-      return m.agreement_end_date >= today
-    })
+    const validMovies = allMovies.filter((m: any) => !isSoldOrExpired(m, today))
 
     // Apply source filter early
     let filteredMovies = validMovies
@@ -1055,11 +1134,7 @@ export async function getActiveInternetTitles(options?: {
       language_name: m.language,
       production_house_name: m.production_house_name,
     }))
-    const validMovies = allMovies.filter((m: any) => {
-      if (m.source !== 'home_production') return true
-      const jer = (m.jointly_exploitation_rights || '').toLowerCase()
-      return !jer.startsWith('sold')
-    })
+    const validMovies = allMovies.filter((m: any) => !isSoldOrExpired(m, today))
 
     let filteredMovies = validMovies
     const sf = options?.sourceFilter || 'all'
@@ -1128,18 +1203,12 @@ export async function getActiveInternetTitlesCount(language?: string): Promise<{
     // Fetch all approved movies (language-filtered) — no flat rights columns needed
     let moviesQuery = supabase
       .from('movies')
-      .select('id, source, jointly_exploitation_rights, agreement_end_date')
+      .select('id, source, home_sold, agreement_end_date')
       .eq('approval_status', 'approved')
     if (language) moviesQuery = moviesQuery.eq('language', language)
     const { data: allMovies } = await moviesQuery
 
-    const validMovies = (allMovies || []).filter((m: any) => {
-      if (m.source === 'home_production') {
-        const jer = (m.jointly_exploitation_rights || '').toLowerCase()
-        return !jer.startsWith('sold')
-      }
-      return true
-    })
+    const validMovies = (allMovies || []).filter((m: any) => !isSoldOrExpired(m, today))
 
     const movieIds = validMovies.map((m: any) => m.id)
     if (movieIds.length === 0) return { total: 0, home: 0, acquired: 0 }
@@ -1324,16 +1393,8 @@ export async function getMoviesForDashboard(options?: {
 
     // For special categories (open_titles, wtp), filter the movies
     if (options?.category === 'open_titles') {
-      // Exclude expired movies (agreement_end_date < today) and "Sold to Grassroot" movies
-      filteredMovies = filteredMovies.filter((m: { source?: string; jointly_exploitation_rights?: string; agreement_end_date?: string }) => {
-        if (m.source === 'home_production') {
-          const jer = (m.jointly_exploitation_rights || '').toLowerCase()
-          return !jer.startsWith('sold')
-        }
-        // Acquired: exclude if agreement_end_date is in the past
-        if (m.agreement_end_date && m.agreement_end_date < today) return false
-        return true
-      })
+      // Always exclude sold (home) and expired-agreement (acquired) movies from the rights dashboard
+      filteredMovies = filteredMovies.filter((m: any) => !isSoldOrExpired(m, today))
 
       // Get ALL movies without current rights
       const movieIds = filteredMovies.map((m: { id: string }) => m.id)
@@ -1353,6 +1414,9 @@ export async function getMoviesForDashboard(options?: {
     }
 
     if (options?.category === 'wtp') {
+      // Always exclude sold (home) and expired-agreement (acquired) movies from the rights dashboard
+      filteredMovies = filteredMovies.filter((m: any) => !isSoldOrExpired(m, today))
+
       // Apply source filter
       const sf = options?.sourceFilter || 'all'
       if (sf === 'home') filteredMovies = filteredMovies.filter((m: any) => m.source === 'home_production')

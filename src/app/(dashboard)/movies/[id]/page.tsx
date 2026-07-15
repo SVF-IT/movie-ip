@@ -798,12 +798,6 @@ export default function MovieDetailPage() {
                 <p className="text-sm text-(--text) bg-amber-500/5 border border-amber-500/20 px-4 py-3 rounded-[12px] leading-relaxed">{currentVersion.actionables}</p>
               </div>
             )}
-            {currentVersion.syndication_holdback && (
-              <div className={(movie.is_bangladeshi != null || currentVersion.wtp_library || currentVersion.remarks || currentVersion.actionables) ? "pt-4 border-t border-(--svf-border)" : ""}>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-red-400/80 block mb-2">Syndication Holdback</span>
-                <p className="text-sm text-(--text) bg-red-500/5 border border-red-500/20 px-4 py-3 rounded-[12px] leading-relaxed whitespace-pre-line">{currentVersion.syndication_holdback}</p>
-              </div>
-            )}
           </div>
         </div>
       )}
