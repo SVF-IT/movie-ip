@@ -35,6 +35,7 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/admin/users": { title: "User Management", subtitle: "Manage user accounts and permissions" },
   "/settings": { title: "Settings", subtitle: "Account and application preferences" },
   "/reports": { title: "Reports", subtitle: "Generated reports and exports" },
+  "/access-denied": { title: "Access Denied", subtitle: "" },
 };
 
 function getPageMeta(pathname: string) {

@@ -3,6 +3,7 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { createUserSchema } from "@/lib/validations/schemas";
 import { adminLimiter } from "@/lib/utils/rate-limiter";
+import { notifyUserCreated } from "@/lib/email/notification-service";
 
 export async function POST(request: Request) {
   try {
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
     // Check if current user is admin
     const { data: adminProfile } = await serverClient
       .from("user_profiles")
-      .select("role")
+      .select("role, full_name")
       .eq("id", currentUser.id)
       .single();
 
@@ -138,6 +139,21 @@ export async function POST(request: Request) {
       new_values: { email, full_name, employee_id, role, department: department || null },
       ip_address: clientIp,
     });
+
+    // Best-effort welcome notification — don't fail user creation if this errors
+    try {
+      await notifyUserCreated({
+        userId: authData.user.id,
+        userName: full_name,
+        email,
+        employeeId: employee_id,
+        role,
+        temporaryPassword: password,
+        createdBy: adminProfile.full_name || "An administrator",
+      });
+    } catch (notifyError) {
+      console.error("Failed to send user-created notification:", notifyError);
+    }
 
     return NextResponse.json({
       message: "User created successfully",

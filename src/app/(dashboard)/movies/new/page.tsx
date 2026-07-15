@@ -448,6 +448,19 @@ export default function NewMoviePage() {
       setCreatedMovieId(createdMovie.id);
       setActiveTab("people");
       toast.success("Movie saved", "Now add cast & crew below.");
+
+      // Best-effort notification — don't block or fail the save flow if this errors
+      fetch("/api/notifications/movie-created", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          movieId: createdMovie.id,
+          movieTitle: createdMovie.title,
+          source: createdMovie.source,
+          releaseYear: createdMovie.release_year,
+          language: createdMovie.language,
+        }),
+      }).catch(() => {});
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create movie");
     } finally {

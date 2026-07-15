@@ -6,52 +6,64 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /**
- * POST /api/notifications/recensor-reminders
  * Send monthly recensor reminders for A-certified movies with recensor_flag = true.
- * Called by Vercel Cron on the 1st of each month.
+ *
+ * Triggered automatically by Vercel Cron (GET, via vercel.json) or manually
+ * (POST, e.g. for testing) — both paths run the same authorized logic.
+ * Protected by CRON_SECRET / Vercel's x-vercel-cron header / an authenticated session.
  */
-export async function POST(request: Request) {
+async function isAuthorizedRequest(): Promise<boolean> {
+  const headersList = await headers();
+  const authHeader = headersList.get("authorization");
+  const cronSecret = process.env.CRON_SECRET;
+
+  if (cronSecret && authHeader === `Bearer ${cronSecret}`) return true;
+  if (headersList.get("x-vercel-cron")) return true;
+
+  const { createClient } = await import("@/lib/supabase/server");
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  return !!user;
+}
+
+async function handleRecensorReminders() {
+  const result = await sendRecensorReminders();
+  return NextResponse.json({
+    success: true,
+    sent: result.sent,
+    errors: result.errors,
+    timestamp: new Date().toISOString(),
+  });
+}
+
+/**
+ * GET /api/notifications/recensor-reminders
+ * Invoked automatically by Vercel Cron (see vercel.json).
+ */
+export async function GET() {
   try {
-    const headersList = await headers();
-    const authHeader = headersList.get("authorization");
-    const cronSecret = process.env.CRON_SECRET;
-
-    let isAuthorized = false;
-
-    if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
-      isAuthorized = true;
-    } else if (headersList.get("x-vercel-cron")) {
-      isAuthorized = true;
-    } else {
-      const { createClient } = await import("@/lib/supabase/server");
-      const supabase = await createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) isAuthorized = true;
-    }
-
-    if (!isAuthorized) {
+    if (!(await isAuthorizedRequest())) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const result = await sendRecensorReminders();
-
-    return NextResponse.json({
-      success: true,
-      sent: result.sent,
-      errors: result.errors,
-      timestamp: new Date().toISOString(),
-    });
+    return await handleRecensorReminders();
   } catch (error) {
     console.error("Error sending recensor reminders:", error);
     return NextResponse.json({ error: "Failed to send recensor reminders" }, { status: 500 });
   }
 }
 
-export async function GET() {
-  return NextResponse.json({
-    status: "ok",
-    endpoint: "/api/notifications/recensor-reminders",
-    method: "POST",
-    description: "Monthly recensor reminders for A-certified movies",
-  });
+/**
+ * POST /api/notifications/recensor-reminders
+ * Manual/test trigger — same logic and auth as GET.
+ */
+export async function POST() {
+  try {
+    if (!(await isAuthorizedRequest())) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    return await handleRecensorReminders();
+  } catch (error) {
+    console.error("Error sending recensor reminders:", error);
+    return NextResponse.json({ error: "Failed to send recensor reminders" }, { status: 500 });
+  }
 }

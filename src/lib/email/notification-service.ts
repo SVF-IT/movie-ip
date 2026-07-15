@@ -362,7 +362,6 @@ export async function notifyMovieCreated(
 ): Promise<void> {
   const users = await getUsersForNotification("movie_created", {
     excludeUserIds: [createdByUserId],
-    roleFilter: ["admin", "legal", "editor"],
   });
 
   if (users.length === 0) return;
@@ -568,7 +567,7 @@ export async function sendExpiringRightsAlerts(
 
   // Send 90-Day Milestone Alerts
   if (milestone90Items.length > 0) {
-    const users = await getUsersForNotification("rights_expiring_upcoming", { roleFilter: ["admin", "legal", "editor"] });
+    const users = await getUsersForNotification("rights_expiring_upcoming");
     for (const user of users) {
       try {
         await notifyRightsExpiring({
@@ -587,7 +586,7 @@ export async function sendExpiringRightsAlerts(
 
   // Send 30-Day Milestone Alerts
   if (milestone30Items.length > 0) {
-    const users = await getUsersForNotification("rights_expiring_urgent", { roleFilter: ["admin", "legal", "editor"] });
+    const users = await getUsersForNotification("rights_expiring_urgent");
     for (const user of users) {
       try {
         await notifyRightsExpiring({
@@ -606,7 +605,7 @@ export async function sendExpiringRightsAlerts(
 
   // Send Daily Final Week Alerts
   if (dailyAlertItems.length > 0) {
-    const users = await getUsersForNotification("rights_expiring_critical", { roleFilter: ["admin", "legal", "editor"] });
+    const users = await getUsersForNotification("rights_expiring_critical");
     for (const user of users) {
       try {
         await notifyRightsExpiring({
@@ -737,8 +736,8 @@ export async function sendRecensorReminders(): Promise<{ sent: number; errors: n
 
   if (error || !movies || movies.length === 0) return { sent, errors };
 
-  // Get all admin users (recensor reminders go to admins only)
-  const users = await getUsersForNotification("recensor_reminder", { roleFilter: ["admin", "legal", "editor"] });
+  // Recipients determined by notification_settings.role_filters (defaults to admin-only, per migration)
+  const users = await getUsersForNotification("recensor_reminder");
   if (users.length === 0) return { sent, errors };
 
   // Build a single notification per admin covering all flagged movies

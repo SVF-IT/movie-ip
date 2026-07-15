@@ -3,6 +3,7 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import { resetPasswordSchema } from "@/lib/validations/schemas";
 import { adminLimiter } from "@/lib/utils/rate-limiter";
+import { notifyPasswordReset } from "@/lib/email/notification-service";
 
 export async function POST(request: Request) {
   try {
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
     // Check if current user is admin
     const { data: adminProfile } = await serverClient
       .from("user_profiles")
-      .select("role")
+      .select("role, full_name")
       .eq("id", currentUser.id)
       .single();
 
@@ -118,13 +119,15 @@ export async function POST(request: Request) {
       }
 
       // Mark that user must change password
-      await supabaseAdmin
+      const { data: targetProfile } = await supabaseAdmin
         .from("user_profiles")
         .update({
           must_change_password: true,
           updated_at: new Date().toISOString(),
         })
-        .eq("id", targetUser.id);
+        .eq("id", targetUser.id)
+        .select("full_name")
+        .single();
 
       // Audit log
       await supabaseAdmin.from("audit_logs").insert({
@@ -136,6 +139,18 @@ export async function POST(request: Request) {
         new_values: { must_change_password: true },
         ip_address: clientIp,
       });
+
+      // Best-effort notification — don't fail the reset if this errors
+      try {
+        await notifyPasswordReset({
+          email,
+          userName: targetProfile?.full_name || email,
+          newPassword,
+          resetBy: adminProfile.full_name || "An administrator",
+        });
+      } catch (notifyError) {
+        console.error("Failed to send password-reset notification:", notifyError);
+      }
 
       return NextResponse.json({
         message: "Password has been reset. User will need to change it on next login.",

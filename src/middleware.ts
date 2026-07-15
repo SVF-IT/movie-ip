@@ -107,27 +107,21 @@ export async function middleware(request: NextRequest) {
     // ── Admin-only routes ──────────────────────────────────────────────────
     if (adminRoutes.some((route) => pathname.startsWith(route))) {
       if (role !== "admin") {
-        const url = request.nextUrl.clone();
-        url.pathname = "/";
-        return NextResponse.redirect(url);
+        return redirectToAccessDenied(request, "admin", pathname);
       }
     }
 
     // ── Legal-only routes (legal + admin) ─────────────────────────────────
     if (pathname.startsWith("/legal-approvals")) {
       if (role !== "legal" && role !== "admin") {
-        const url = request.nextUrl.clone();
-        url.pathname = "/";
-        return NextResponse.redirect(url);
+        return redirectToAccessDenied(request, "legal", pathname);
       }
     }
 
     // ── Editor-only routes ────────────────────────────────────────────────
     if (pathname.startsWith("/my-submissions")) {
       if (role !== "editor") {
-        const url = request.nextUrl.clone();
-        url.pathname = "/";
-        return NextResponse.redirect(url);
+        return redirectToAccessDenied(request, "editor", pathname);
       }
     }
   }
@@ -138,6 +132,15 @@ export async function middleware(request: NextRequest) {
 function isValidRedirect(path: string): boolean {
   // Must start with exactly one slash, no protocol, no double slashes
   return /^\/[^/]/.test(path) && !path.includes("://");
+}
+
+function redirectToAccessDenied(request: NextRequest, reason: string, from: string): NextResponse {
+  const url = request.nextUrl.clone();
+  url.pathname = "/access-denied";
+  url.search = "";
+  url.searchParams.set("reason", reason);
+  if (isValidRedirect(from)) url.searchParams.set("from", from);
+  return NextResponse.redirect(url);
 }
 
 export const config = {

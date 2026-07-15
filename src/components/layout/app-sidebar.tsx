@@ -92,7 +92,7 @@ const NAV_BASE = [
     groupIcon: ShieldCheck,
     roleCheck: "admin",
     items: [
-      { title: "Notification Setting", icon: Bell, href: "/notifications" },
+      { title: "Notification Setting", icon: Bell, href: "/settings/notifications" },
       { title: "Audit Log", icon: ScrollText, href: "/audit-log" },
     ],
   },
