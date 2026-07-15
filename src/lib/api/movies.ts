@@ -9,7 +9,6 @@ import type {
   MovieLanguageVersion,
 } from "@/lib/types/database";
 import { sanitizeError } from "@/lib/utils/sanitize-error";
-import { generateNextCode, CODE_PREFIXES } from "@/lib/utils/code-generator";
 
 const supabase = createClient();
 const MAX_LIMIT = 200;
@@ -342,7 +341,6 @@ export async function getAvailableForRights(): Promise<MovieWithDetails[]> {
 export async function createMovie(
   movie: Partial<MovieWithDetails>
 ): Promise<MovieWithDetails> {
-  const code = await generateNextCode(CODE_PREFIXES.movies, "movies");
   const { data: { user } } = await supabase.auth.getUser();
 
   // Fetch the creator's role to determine approval status
@@ -356,7 +354,6 @@ export async function createMovie(
     .from("movies")
     .insert({
       ...movie,
-      code,
       wtp_library: movie.wtp_library || "WTP",
       approval_status: approvalStatus,
       created_by: user?.id ?? null,
