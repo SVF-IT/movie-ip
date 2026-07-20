@@ -40,6 +40,7 @@ import {
   ArrowLeft,
   Calendar,
   CheckCircle2,
+  Download,
   Edit,
   ExternalLink,
   FileText,
@@ -66,8 +67,27 @@ function PosterImage({ title, posterUrl }: { title: string; posterUrl?: string }
   const [failed, setFailed] = useState(false);
   const initials = title.split(" ").slice(0, 2).map(w => w[0]?.toUpperCase() ?? "").join("");
   const src = posterUrl || `https://fileapi.mni.agency/api/FileFolderManager/PreviewFile?path=%2Fmnt%2Fmni%2FMoviePoster%2F${encodeURIComponent(title)}.jpg&userId=1&platform=WebMicrosoft%20Windows%20NT%2010.0.20348.0`;
+
+  const handleDownload = async () => {
+    try {
+      const res = await fetch(src);
+      const blob = await res.blob();
+      const ext = blob.type.split("/")[1] || "jpg";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${title}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      window.open(src, "_blank");
+    }
+  };
+
   return (
-    <div className="relative w-28 aspect-2/3 rounded-[12px] overflow-hidden shadow-2xl ring-1 ring-(--svf-border)">
+    <div className="relative w-28 aspect-2/3 rounded-[12px] overflow-hidden shadow-2xl ring-1 ring-(--svf-border) group">
       {!failed ? (
         <img
           src={src}
@@ -82,6 +102,16 @@ function PosterImage({ title, posterUrl }: { title: string; posterUrl?: string }
         </div>
       )}
       {!failed && <div className="absolute inset-0 bg-linear-to-t from-black/40 to-transparent pointer-events-none" />}
+      {!failed && (
+        <button
+          type="button"
+          onClick={handleDownload}
+          title="Download poster"
+          className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/50 opacity-0 group-hover:opacity-100 transition-all duration-150 cursor-pointer"
+        >
+          <Download className="h-6 w-6 text-white drop-shadow" />
+        </button>
+      )}
     </div>
   );
 }
