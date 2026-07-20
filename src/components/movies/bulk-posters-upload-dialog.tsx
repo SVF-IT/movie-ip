@@ -53,6 +53,7 @@ export function BulkPostersUploadDialog({
     const [matches, setMatches] = useState<MatchResult[]>([]);
     const [isProcessing, setIsProcessing] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
+    const [uploadSummary, setUploadSummary] = useState<{ successCount: number; skipped: MatchResult[]; failed: MatchResult[] } | null>(null);
 
     const normalize = (str: string) => {
         return str
@@ -85,33 +86,14 @@ export function BulkPostersUploadDialog({
                 const normalizedFileName = normalize(fullFileName);
                 const tightFileName = tightNormalize(fullFileName);
 
-                // Extract base title by removing trailing numeric IDs and years
-                const cleanedFileName = normalize(fullFileName.replace(/[-\s]\d+$/, "").replace(/\s*\([^)]*\)\s*$/, "").trim());
-                const tightCleanedFileName = tightNormalize(fullFileName.replace(/[-\s]\d+$/, "").replace(/\s*\([^)]*\)\s*$/, "").trim());
-
                 const matched = (movies || []).find((m: { id: string; title: string }) => {
                     const dbTitle = m.title;
                     const normTitle = normalize(dbTitle);
                     const tightTitle = tightNormalize(dbTitle);
 
-                    // Remove year for base title matching
-                    const baseTitleStr = dbTitle.replace(/\s*\([^)]*\)\s*$/, "").trim();
-                    const normBaseTitle = normalize(baseTitleStr);
-                    const tightBaseTitle = tightNormalize(baseTitleStr);
-
                     return (
-                        normBaseTitle === normalizedFileName ||
-                        tightBaseTitle === tightFileName ||
-                        normBaseTitle === cleanedFileName ||
-                        tightBaseTitle === tightCleanedFileName ||
-                        normalizedFileName.includes(normBaseTitle) ||
-                        cleanedFileName.includes(normBaseTitle) ||
-                        tightFileName.includes(tightBaseTitle) ||
-                        tightCleanedFileName.includes(tightBaseTitle) ||
-                        normBaseTitle.includes(normalizedFileName) ||
-                        normBaseTitle.includes(cleanedFileName) ||
-                        tightBaseTitle.includes(tightFileName) ||
-                        tightBaseTitle.includes(tightCleanedFileName)
+                        normTitle === normalizedFileName ||
+                        tightTitle === tightFileName
                     );
                 });
 
@@ -140,6 +122,7 @@ export function BulkPostersUploadDialog({
 
         setIsProcessing(true);
         setUploadProgress(0);
+        setUploadSummary(null);
         let successCount = 0;
 
         for (let i = 0; i < toUpload.length; i++) {
@@ -176,7 +159,12 @@ export function BulkPostersUploadDialog({
         }
 
         setIsProcessing(false);
-        alert(`Upload Complete: Successfully updated ${successCount} movie posters.`);
+        setMatches(prev => {
+            const skipped = prev.filter(m => m.status === "no-match");
+            const failed = prev.filter(m => m.status === "error");
+            setUploadSummary({ successCount, skipped, failed });
+            return prev;
+        });
 
         if (successCount > 0) {
             onSuccess();
@@ -195,9 +183,11 @@ export function BulkPostersUploadDialog({
         setMatches([]);
         setUploadProgress(0);
         setIsProcessing(false);
+        setUploadSummary(null);
     };
 
-    const selectedCount = matches.filter(m => m.selected).length;
+    const selectedCount = matches.filter(m => m.selected && m.status !== "success").length;
+    const allDone = uploadSummary !== null && selectedCount === 0;
 
     return (
         <Dialog open={open} onOpenChange={(val) => {
@@ -206,7 +196,7 @@ export function BulkPostersUploadDialog({
                 if (!val) reset();
             }
         }}>
-            <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
+            <DialogContent className="max-w-4xl h-[90vh] flex flex-col p-0 overflow-hidden">
                 <DialogHeader className="p-6 pb-2">
                     <DialogTitle className="text-2xl flex items-center gap-2">
                         <ImageIcon className="h-6 w-6 text-primary" />
@@ -217,7 +207,7 @@ export function BulkPostersUploadDialog({
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="flex-1 overflow-hidden flex flex-col p-6 pt-2">
+                <div className="flex-1 overflow-hidden flex flex-col p-6 pt-2 min-h-0">
                     {matches.length === 0 ? (
                         <div className="flex-1 border-2 border-dashed border-muted-foreground/20 rounded-[12px] flex flex-col items-center justify-center p-12 bg-muted/5">
                             <div className="p-4 rounded-full bg-primary/10 mb-4 text-primary">
@@ -262,8 +252,8 @@ export function BulkPostersUploadDialog({
                             </div>
                         </div>
                     ) : (
-                        <div className="flex-1 flex flex-col gap-4 overflow-hidden">
-                            <div className="flex items-center justify-between">
+                        <div className="flex-1 flex flex-col gap-4 min-h-0 overflow-hidden">
+                            <div className="flex items-center justify-between shrink-0">
                                 <div className="flex items-center gap-4">
                                     <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 text-sm py-1">
                                         {matches.length} Files Selected
@@ -277,8 +267,8 @@ export function BulkPostersUploadDialog({
                                 </Button>
                             </div>
 
-                            <div className="border border-border/60 rounded-[12px] overflow-hidden flex-1 bg-background/50">
-                                <ScrollArea className="h-full">
+                            <div className="border border-border/60 rounded-[12px] overflow-hidden flex-1 min-h-0 bg-background/50">
+                                <ScrollArea className="h-full max-h-[45vh]">
                                     <Table>
                                         <TableHeader className="bg-muted/50 sticky top-0 z-10">
                                             <TableRow>
@@ -343,7 +333,7 @@ export function BulkPostersUploadDialog({
                             </div>
 
                             {isProcessing && (
-                                <div className="space-y-2">
+                                <div className="space-y-2 shrink-0">
                                     <div className="flex justify-between text-xs font-medium">
                                         <span>Uploading posters...</span>
                                         <span>{uploadProgress}%</span>
@@ -351,28 +341,65 @@ export function BulkPostersUploadDialog({
                                     <Progress value={uploadProgress} className="h-2" />
                                 </div>
                             )}
+
+                            {uploadSummary && (
+                                <div className="border border-border/60 rounded-[12px] p-4 bg-muted/20 space-y-3 shrink-0 max-h-64 overflow-y-auto">
+                                    <div className="flex items-center gap-2 text-sm font-semibold">
+                                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                                        Uploaded {uploadSummary.successCount} poster{uploadSummary.successCount === 1 ? "" : "s"}
+                                    </div>
+                                    {(uploadSummary.skipped.length > 0 || uploadSummary.failed.length > 0) && (
+                                        <div className="space-y-1.5">
+                                            <div className="flex items-center gap-2 text-sm font-semibold text-amber-500">
+                                                <AlertCircle className="h-4 w-4" />
+                                                {uploadSummary.skipped.length + uploadSummary.failed.length} file{uploadSummary.skipped.length + uploadSummary.failed.length === 1 ? "" : "s"} not uploaded
+                                            </div>
+                                            <ul className="max-h-40 overflow-y-auto text-xs text-muted-foreground space-y-1 pl-6 list-disc">
+                                                {uploadSummary.skipped.map((m, i) => (
+                                                    <li key={`skip-${i}`}>
+                                                        <span className="font-medium">{m.file.name}</span> — no matching movie title
+                                                    </li>
+                                                ))}
+                                                {uploadSummary.failed.map((m, i) => (
+                                                    <li key={`fail-${i}`}>
+                                                        <span className="font-medium">{m.file.name}</span> — {m.error || "upload failed"}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
 
                 <DialogFooter className="p-6 pt-2 border-t border-border/40 bg-muted/20">
-                    <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={isProcessing}>
-                        Cancel
-                    </Button>
-                    <Button
-                        onClick={handleUpload}
-                        disabled={isProcessing || selectedCount === 0 || matches.length === 0}
-                        className="px-8 shadow-md shadow-primary/20"
-                    >
-                        {isProcessing ? (
-                            <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Processing...
-                            </>
-                        ) : (
-                            `Upload & Link ${selectedCount} Posters`
-                        )}
-                    </Button>
+                    {allDone ? (
+                        <Button onClick={() => onOpenChange(false)} className="px-8 shadow-md shadow-primary/20">
+                            Done
+                        </Button>
+                    ) : (
+                        <>
+                            <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={isProcessing}>
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={handleUpload}
+                                disabled={isProcessing || selectedCount === 0 || matches.length === 0}
+                                className="px-8 shadow-md shadow-primary/20"
+                            >
+                                {isProcessing ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Processing...
+                                    </>
+                                ) : (
+                                    `Upload & Link ${selectedCount} Posters`
+                                )}
+                            </Button>
+                        </>
+                    )}
                 </DialogFooter>
             </DialogContent>
         </Dialog>

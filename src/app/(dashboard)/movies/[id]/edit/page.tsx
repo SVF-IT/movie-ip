@@ -4,6 +4,7 @@ import { LanguageSelector } from "@/components/forms/language-selector";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { FileUpload } from "@/components/ui/file-upload";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -258,6 +259,7 @@ export default function EditMoviePage() {
   const [colorOrBw, setColorOrBw] = useState("");
   const [isBangladeshi, setIsBangladeshi] = useState(false);
   const [trailerLink, setTrailerLink] = useState("");
+  const [posterUrl, setPosterUrl] = useState("");
   const [assignorLicensor, setAssignorLicensor] = useState("");
   const [licensee, setLicensee] = useState("");
   const [agreementDate, setAgreementDate] = useState("");
@@ -339,6 +341,7 @@ export default function EditMoviePage() {
         setColorOrBw(movie.color_or_bw || "");
         setIsBangladeshi(movie.is_bangladeshi ?? false);
         setTrailerLink(movie.trailer_link || "");
+        setPosterUrl(movie.poster_url || "");
         setAssignorLicensor(movie.assignor_licensor || "");
         setLicensee(movie.licensee || "");
         setAgreementDate(movie.agreement_date || "");
@@ -390,6 +393,7 @@ export default function EditMoviePage() {
           color_or_bw: movie.color_or_bw || "",
           is_bangladeshi: movie.is_bangladeshi ?? false,
           trailer_link: movie.trailer_link || "",
+          poster_url: movie.poster_url || "",
           assignor_licensor: movie.assignor_licensor || "",
           licensee: movie.licensee || "",
           agreement_date: movie.agreement_date || "",
@@ -548,6 +552,7 @@ export default function EditMoviePage() {
         color_or_bw: colorOrBw || "",
         is_bangladeshi: isBangladeshi,
         trailer_link: trailerLink || "",
+        poster_url: posterUrl || "",
         assignor_licensor: assignorLicensor || "",
         licensee: licensee || "",
         agreement_date: agreementDate || "",
@@ -595,6 +600,7 @@ export default function EditMoviePage() {
         language: language.replace(/\s*[Dd]ubbed\s*/g, "").trim() || undefined,
         production_house_name: finalProductionHouseName,
         color_or_bw: colorOrBw || undefined, is_bangladeshi: isBangladeshi, trailer_link: trailerLink || undefined,
+        poster_url: posterUrl || undefined,
         assignor_licensor: assignorLicensor || undefined,
         licensee: licensee || undefined, agreement_date: agreementDate || undefined,
         agreement_start_date: agreementStartDate || undefined, agreement_end_date: agreementEndDate || undefined,
@@ -911,6 +917,24 @@ export default function EditMoviePage() {
                           </button>
                         );
                       })}
+                    </div>
+                  </FormField>
+                </div>
+
+                <div className="md:col-span-2">
+                  <FormField label="Poster">
+                    <div className="space-y-3">
+                      <FileUpload
+                        bucket="images"
+                        folder="posters"
+                        variant="image"
+                        label="Upload Poster"
+                        currentUrl={posterUrl || undefined}
+                        onUpload={setPosterUrl}
+                        onRemove={() => setPosterUrl("")}
+                      />
+                      <Input value={posterUrl} onChange={(e) => setPosterUrl(e.target.value)}
+                        placeholder="Or paste a poster image link" className={inputCls} />
                     </div>
                   </FormField>
                 </div>

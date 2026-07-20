@@ -62,14 +62,15 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-function PosterImage({ title }: { title: string }) {
+function PosterImage({ title, posterUrl }: { title: string; posterUrl?: string }) {
   const [failed, setFailed] = useState(false);
   const initials = title.split(" ").slice(0, 2).map(w => w[0]?.toUpperCase() ?? "").join("");
+  const src = posterUrl || `https://fileapi.mni.agency/api/FileFolderManager/PreviewFile?path=%2Fmnt%2Fmni%2FMoviePoster%2F${encodeURIComponent(title)}.jpg&userId=1&platform=WebMicrosoft%20Windows%20NT%2010.0.20348.0`;
   return (
     <div className="relative w-28 aspect-2/3 rounded-[12px] overflow-hidden shadow-2xl ring-1 ring-(--svf-border)">
       {!failed ? (
         <img
-          src={`https://fileapi.mni.agency/api/FileFolderManager/PreviewFile?path=%2Fmnt%2Fmni%2FMoviePoster%2F${encodeURIComponent(title)}.jpg&userId=1&platform=WebMicrosoft%20Windows%20NT%2010.0.20348.0`}
+          src={src}
           alt={title}
           className="w-full h-full object-cover"
           onError={() => setFailed(true)}
@@ -214,13 +215,17 @@ export default function MovieDetailPage() {
       try {
         setLoading(true);
         const movieData = await getMovieById(movieId);
-        setMovie(movieData);
         if (movieData?.production_no) {
           const versions = await getMovieVersions(movieData.production_no);
           setLanguageVersions(versions);
+          if (movieData && !movieData.poster_url) {
+            const parentPoster = versions.find(v => v.is_primary)?.poster_url;
+            if (parentPoster) movieData.poster_url = parentPoster;
+          }
         } else {
           setLanguageVersions([]);
         }
+        setMovie(movieData);
         const [rightsData, expiredData, ownedData] = await Promise.all([
           getMovieRights(movieId),
           getMovieExpiredRights(movieId),
@@ -249,6 +254,10 @@ export default function MovieDetailPage() {
         getMovieRights(versionId),
         getMovieExpiredRights(versionId),
       ]);
+      if (movieData && !movieData.poster_url) {
+        const parentPoster = languageVersions.find(v => v.is_primary)?.poster_url;
+        if (parentPoster) movieData.poster_url = parentPoster;
+      }
       setMovie(movieData);
       setRights(rightsData as RightWithDetails[]);
       setExpiredRights(expiredData as RightWithDetails[]);
@@ -467,7 +476,7 @@ export default function MovieDetailPage() {
 
           {/* Poster */}
           <div className="mt-8 ml-2 shrink-0">
-            <PosterImage title={movie.title} />
+            <PosterImage title={movie.title} posterUrl={movie.poster_url} />
           </div>
 
           {/* Title block */}

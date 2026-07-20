@@ -686,6 +686,16 @@ export async function getGroupedMovies(options?: {
     }
   }
 
+  // Dubbed/language versions without their own poster fall back to the primary version's poster
+  groupsMap.forEach(group => {
+    const parentPoster = group.primary_version?.poster_url;
+    if (parentPoster) {
+      group.versions.forEach(version => {
+        if (!version.poster_url) version.poster_url = parentPoster;
+      });
+    }
+  });
+
   // Convert map to array and apply sorting
   let groupedArray = Array.from(groupsMap.values());
 

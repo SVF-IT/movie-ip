@@ -16,6 +16,7 @@ export interface Movie {
   production_house_name?: string
   color_or_bw?: string
   trailer_link?: string
+  poster_url?: string
   // Acquisition info
   assignor_licensor?: string
   licensee?: string

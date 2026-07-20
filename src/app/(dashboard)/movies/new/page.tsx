@@ -4,6 +4,7 @@ import { LanguageSelector } from "@/components/forms/language-selector";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { FileUpload } from "@/components/ui/file-upload";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -300,6 +301,7 @@ export default function NewMoviePage() {
   const [colorOrBw, setColorOrBw] = useState("Color");
   const [isBangladeshi, setIsBangladeshi] = useState(false);
   const [trailerLink, setTrailerLink] = useState("");
+  const [posterUrl, setPosterUrl] = useState("");
   const [assignorLicensor, setAssignorLicensor] = useState("");
   const [licensee, setLicensee] = useState("");
   const [agreementDate, setAgreementDate] = useState("");
@@ -407,6 +409,7 @@ export default function NewMoviePage() {
         color_or_bw: colorOrBw || undefined,
         is_bangladeshi: isBangladeshi || undefined,
         trailer_link: trailerLink || undefined,
+        poster_url: posterUrl || undefined,
         assignor_licensor: assignorLicensor || undefined,
         licensee: licensee || undefined,
         agreement_date: agreementDate || undefined,
@@ -763,6 +766,24 @@ export default function NewMoviePage() {
                         </button>
                       );
                     })}
+                  </div>
+                </FormField>
+              </div>
+
+              <div className="md:col-span-2">
+                <FormField label="Poster">
+                  <div className="space-y-3">
+                    <FileUpload
+                      bucket="images"
+                      folder="posters"
+                      variant="image"
+                      label="Upload Poster"
+                      currentUrl={posterUrl || undefined}
+                      onUpload={setPosterUrl}
+                      onRemove={() => setPosterUrl("")}
+                    />
+                    <Input value={posterUrl} onChange={e => setPosterUrl(e.target.value)}
+                      placeholder="Or paste a poster image link" className={inputCls} />
                   </div>
                 </FormField>
               </div>

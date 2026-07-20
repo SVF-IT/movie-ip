@@ -41,6 +41,7 @@ import {
   Calendar,
   ChevronDown,
   Download, Edit, ExternalLink, Film,
+  Image as ImageIcon,
   Languages,
   LayoutGrid, List, Loader2, Plus, Search, Settings2, ShieldCheck,
   Upload, X
@@ -696,6 +697,9 @@ export default function MoviesPage() {
           <Button variant="outline" size="sm" className="gap-2 h-9 px-4 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover)" onClick={() => setShowImportDialog(true)}>
             <Upload className="h-4 w-4" /><span>Upload CSV</span>
           </Button>
+          <Button variant="outline" size="sm" className="gap-2 h-9 px-4 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover)" onClick={() => setShowBulkPostersDialog(true)}>
+            <ImageIcon className="h-4 w-4" /><span>Bulk Posters</span>
+          </Button>
         </RoleGate>
         {!loading && (
           <p className="text-xs" style={{ color: "var(--text-faint)" }}>
@@ -713,9 +717,6 @@ export default function MoviesPage() {
             <Download className="h-4 w-4" /><span>Export</span>
           </Button>
         </RoleGate>
-        {/* <Button variant="outline" size="sm" className="gap-2 h-9 px-4" onClick={() => setShowBulkPostersDialog(true)}>
-          <ImageIcon className="h-4 w-4" /><span>Bulk Posters</span>
-        </Button> */}
         <RoleGate action="create" resource="movie">
           <Button asChild size="sm" className="gap-2 h-9 px-4">
             <Link href="/movies/new"><Plus className="h-4 w-4" /><span>New Movie</span></Link>
@@ -770,7 +771,7 @@ export default function MoviesPage() {
                   onMouseLeave={e => (e.currentTarget as HTMLElement).style.transform = "none"}
                 >
                   <img
-                    src={`https://fileapi.mni.agency/api/FileFolderManager/PreviewFile?path=%2Fmnt%2Fmni%2FMoviePoster%2F${encodeURIComponent(movie.title)}.jpg&userId=1&platform=WebMicrosoft%20Windows%20NT%2010.0.20348.0`}
+                    src={pv?.poster_url || `https://fileapi.mni.agency/api/FileFolderManager/PreviewFile?path=%2Fmnt%2Fmni%2FMoviePoster%2F${encodeURIComponent(movie.title)}.jpg&userId=1&platform=WebMicrosoft%20Windows%20NT%2010.0.20348.0`}
                     alt={movie.title}
                     style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
                     onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
@@ -889,7 +890,7 @@ export default function MoviesPage() {
                                 border: "1px solid var(--svf-border)", position: "relative", overflow: "hidden",
                               }}>
                                 <img
-                                  src={`https://fileapi.mni.agency/api/FileFolderManager/PreviewFile?path=%2Fmnt%2Fmni%2FMoviePoster%2F${encodeURIComponent(movie.title)}.jpg&userId=1&platform=WebMicrosoft%20Windows%20NT%2010.0.20348.0`}
+                                  src={pv?.poster_url || `https://fileapi.mni.agency/api/FileFolderManager/PreviewFile?path=%2Fmnt%2Fmni%2FMoviePoster%2F${encodeURIComponent(movie.title)}.jpg&userId=1&platform=WebMicrosoft%20Windows%20NT%2010.0.20348.0`}
                                   alt={movie.title}
                                   style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
                                   onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
