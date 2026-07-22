@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { sanitizeError } from "@/lib/utils/sanitize-error";
-import type { PlatformRight } from "@/lib/types/database";
+import type { PlatformRight, MovieRight } from "@/lib/types/database";
 
 const supabase = createClient();
 
@@ -9,6 +9,9 @@ export type PendingChangeType =
   | "right_create"
   | "right_update"
   | "right_delete"
+  | "movie_right_create"
+  | "movie_right_update"
+  | "movie_right_delete"
   | "person_add"
   | "person_remove";
 
@@ -84,6 +87,38 @@ export async function submitRightChange(
   const platform = (rightData as any)?.platforms?.name || rightData.platform_id || "platform";
   const rightsType = (rightData as any)?.platforms?.platform_type || "right";
   const summary = `${verb} right — ${platform} / ${rightsType}`;
+
+  const payload: Record<string, unknown> = { after: rightData };
+  if (originalRight) payload.before = originalRight;
+  if (rightData.id) payload.right_id = rightData.id;
+
+  const { data, error } = await supabase
+    .from("movie_pending_changes")
+    .insert({
+      movie_id: movieId,
+      changed_by: changedBy || null,
+      changed_by_name: changedByName,
+      change_type: changeType,
+      change_summary: summary,
+      payload,
+    })
+    .select()
+    .single();
+
+  if (error) throw sanitizeError(error);
+  return data as PendingChange;
+}
+
+export async function submitMovieRightChange(
+  movieId: string,
+  changeType: "movie_right_create" | "movie_right_update" | "movie_right_delete",
+  rightData: Partial<MovieRight>,
+  changedByName: string,
+  changedBy?: string,
+  originalRight?: Partial<MovieRight>
+): Promise<PendingChange> {
+  const verb = changeType === "movie_right_create" ? "Create" : changeType === "movie_right_update" ? "Update" : "Delete";
+  const summary = `${verb} right owned — ${rightData.right_type || "right"}${rightData.classification ? ` / ${rightData.classification}` : ""}`;
 
   const payload: Record<string, unknown> = { after: rightData };
   if (originalRight) payload.before = originalRight;
@@ -260,6 +295,23 @@ export async function approvePendingChange(
   } else if (c.change_type === "right_delete") {
     const rightId = c.payload.right_id as string;
     const { error } = await supabase.from("platform_rights").delete().eq("id", rightId);
+    if (error) throw sanitizeError(error);
+  } else if (c.change_type === "movie_right_create") {
+    const raw = { ...(c.payload.after as Record<string, unknown>) };
+    JOIN_KEYS.forEach(k => delete raw[k]);
+    const rightData = cleanPayload(raw);
+    const { error } = await supabase.from("movie_rights").insert(rightData);
+    if (error) throw sanitizeError(error);
+  } else if (c.change_type === "movie_right_update") {
+    const rightId = c.payload.right_id as string;
+    const raw = { ...(c.payload.after as Record<string, unknown>) };
+    JOIN_KEYS.forEach(k => delete raw[k]);
+    const rightData = cleanPayload(raw);
+    const { error } = await supabase.from("movie_rights").update(rightData).eq("id", rightId);
+    if (error) throw sanitizeError(error);
+  } else if (c.change_type === "movie_right_delete") {
+    const rightId = c.payload.right_id as string;
+    const { error } = await supabase.from("movie_rights").delete().eq("id", rightId);
     if (error) throw sanitizeError(error);
   } else if (c.change_type === "person_add") {
     const { person_id, role } = c.payload as { person_id: string; role: string };

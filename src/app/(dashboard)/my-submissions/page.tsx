@@ -75,6 +75,9 @@ function changeTypeLabel(t: string) {
     right_create: "Rights Added",
     right_update: "Rights Updated",
     right_delete: "Rights Removed",
+    movie_right_create: "Right Owned Added",
+    movie_right_update: "Right Owned Updated",
+    movie_right_delete: "Right Owned Removed",
     person_add: "Cast/Crew Added",
     person_remove: "Cast/Crew Removed",
   };
@@ -282,8 +285,8 @@ function ChangeCard({ change }: { change: PendingChange }) {
           </div>
         )}
 
-        {/* Field diff toggle — only for movie_fields type */}
-        {change.change_type === "movie_fields" && changedFields.length > 0 && (
+        {/* Field diff toggle — movie_fields and movie_right_update show a before/after table */}
+        {(change.change_type === "movie_fields" || change.change_type === "movie_right_update") && changedFields.length > 0 && (
           <>
             <button onClick={() => setExpanded(v => !v)} className="flex items-center gap-1.5 text-xs text-(--text-faint) hover:text-(--text) transition-colors">
               {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
@@ -305,6 +308,25 @@ function ChangeCard({ change }: { change: PendingChange }) {
               </div>
             )}
           </>
+        )}
+
+        {/* movie_right_create — list the submitted fields (no "before" to diff against) */}
+        {change.change_type === "movie_right_create" && after && (
+          <div className="space-y-1 text-xs">
+            {(["right_type", "classification", "nature", "territory", "start_date", "end_date", "syndication", "holdbacks"] as const)
+              .filter(k => after[k])
+              .map(k => (
+                <div key={k} className="flex gap-2">
+                  <span className="text-(--text-faint) w-24 shrink-0">{k.replace(/_/g, " ")}</span>
+                  <span className="text-(--text)">{String(after[k])}</span>
+                </div>
+              ))}
+          </div>
+        )}
+
+        {/* movie_right_delete */}
+        {change.change_type === "movie_right_delete" && (
+          <p className="text-xs text-red-400/80">This will permanently remove the right record from the movie once approved.</p>
         )}
       </CardContent>
     </Card>

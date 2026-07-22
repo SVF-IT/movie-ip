@@ -317,6 +317,9 @@ const CHANGE_TYPE_LABELS: Record<string, string> = {
   right_create: "New Right",
   right_update: "Right Update",
   right_delete: "Right Deletion",
+  movie_right_create: "New Right Owned",
+  movie_right_update: "Right Owned Update",
+  movie_right_delete: "Right Owned Deletion",
   person_add: "Cast/Crew Add",
   person_remove: "Cast/Crew Remove",
 };
@@ -470,6 +473,55 @@ function PendingChangeCard({
 
         {/* Right delete */}
         {change.change_type === "right_delete" && (
+          <p className="text-xs text-red-400/80 mt-1">
+            This will permanently remove the right record from the movie.
+          </p>
+        )}
+
+        {/* Movie right (Rights We Own) create/update details */}
+        {(change.change_type === "movie_right_create" || change.change_type === "movie_right_update") && (
+          <>
+            <button onClick={() => setExpanded(e => !e)}
+              className="flex items-center gap-1.5 text-xs text-(--text-faint) hover:text-(--text) transition-colors mb-2">
+              {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              {expanded ? "Hide" : "Show"} details
+            </button>
+            {expanded && (
+              <div className="rounded-lg border border-(--svf-border) p-3 space-y-1.5 text-xs">
+                {change.change_type === "movie_right_update" && Object.keys(before).length > 0 && (
+                  <div className="rounded border border-(--svf-border) overflow-hidden mb-2">
+                    <div className="grid grid-cols-3 gap-0 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) px-3 py-1.5 bg-(--bg-raise) border-b border-(--svf-border)">
+                      <span>Field</span><span className="text-red-400">Before</span><span className="text-emerald-400">After</span>
+                    </div>
+                    {(["right_type", "classification", "nature", "territory", "start_date", "end_date", "syndication", "holdbacks"] as const).filter(k => {
+                      const bv = (before as any)[k]; const av = (after as any)[k];
+                      return bv !== av && (bv || av);
+                    }).map(k => (
+                      <div key={k} className="grid grid-cols-3 gap-0 text-xs px-3 py-1.5 border-b border-(--svf-border) last:border-0">
+                        <span className="text-(--text-faint)">{k.replace(/_/g, " ")}</span>
+                        <span className="text-red-400 truncate pr-2">{String((before as any)[k] ?? "—") || "—"}</span>
+                        <span className="text-emerald-400 truncate">{String((after as any)[k] ?? "—") || "—"}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {change.change_type === "movie_right_create" && (
+                  <div className="space-y-1">
+                    {(["right_type", "classification", "nature", "territory", "start_date", "end_date", "syndication", "holdbacks"] as const).filter(k => (after as any)[k]).map(k => (
+                      <div key={k} className="flex gap-2">
+                        <span className="text-(--text-faint) w-24 shrink-0">{k.replace(/_/g, " ")}</span>
+                        <span className="text-(--text)">{String((after as any)[k])}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Movie right delete */}
+        {change.change_type === "movie_right_delete" && (
           <p className="text-xs text-red-400/80 mt-1">
             This will permanently remove the right record from the movie.
           </p>

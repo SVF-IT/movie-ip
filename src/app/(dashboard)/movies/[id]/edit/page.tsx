@@ -33,6 +33,7 @@ import {
 import {
   getMoviePendingChanges,
   submitMovieFieldChange,
+  submitMovieRightChange,
   submitPersonChange,
   type PendingChange,
 } from "@/lib/api/pending-changes";
@@ -323,10 +324,11 @@ export default function EditMoviePage() {
 
         // Handle production houses - match by name text against production houses list
         const phName = movie.production_house_name || "";
+        let matchedHouseIds: string[] = [];
         if (phName) {
           // Preserve DB order by mapping each name to its matching house id
           const names = phName.split(",").map(s => s.trim());
-          const matchedHouseIds = names
+          matchedHouseIds = names
             .map(n => houses.find(h => h.name.toLowerCase() === n.toLowerCase())?.id ?? "")
             .filter(id => id !== "");
 
@@ -381,6 +383,15 @@ export default function EditMoviePage() {
           setActiveTab("approval");
         }
         // Capture snapshot for change diff (only relevant for approved movies)
+        // production_house_name is normalized through the same matched-id -> name join
+        // used when saving, so the diff doesn't false-trigger on formatting differences
+        // (spacing, casing, order) between the raw DB string and the reconstructed one.
+        const normalizedHouseName = matchedHouseIds.length > 0
+          ? matchedHouseIds
+              .map(id => houses.find(h => h.id === id)?.name)
+              .filter((n): n is string => !!n)
+              .join(", ")
+          : "";
         setBeforeSnapshot({
           title: movie.title || "",
           production_no: movie.production_no || "",
@@ -389,7 +400,7 @@ export default function EditMoviePage() {
           release_year: movie.release_year?.toString() || "",
           certification: movie.certification || "",
           language: movie.language || "",
-          production_house_name: movie.production_house_name || "",
+          production_house_name: normalizedHouseName,
           color_or_bw: movie.color_or_bw || "",
           is_bangladeshi: movie.is_bangladeshi ?? false,
           trailer_link: movie.trailer_link || "",
@@ -454,6 +465,7 @@ export default function EditMoviePage() {
 
   const handleAddCast = async (person: Person) => {
     try {
+      if (shouldStage && !profile?.id) { toast.error("Your profile is still loading. Please wait a moment and try again."); return; }
       if (shouldStage) {
         await submitPersonChange(movieId, "person_add", person.id, person.name, "Actor", submitterName, profile?.id);
         setPersonSearch(""); setPersonResults([]); setAddingRole(null);
@@ -469,6 +481,7 @@ export default function EditMoviePage() {
 
   const handleRemoveCast = async (entry: MoviePeople) => {
     try {
+      if (shouldStage && !profile?.id) { toast.error("Your profile is still loading. Please wait a moment and try again."); return; }
       if (shouldStage) {
         await submitPersonChange(movieId, "person_remove", entry.person_id, entry.person?.name || entry.person_id, "Actor", submitterName, profile?.id);
         setPendingChanges(await getMoviePendingChanges(movieId));
@@ -482,6 +495,7 @@ export default function EditMoviePage() {
 
   const handleAddDirector = async (person: Person) => {
     try {
+      if (shouldStage && !profile?.id) { toast.error("Your profile is still loading. Please wait a moment and try again."); return; }
       if (shouldStage) {
         await submitPersonChange(movieId, "person_add", person.id, person.name, "Director", submitterName, profile?.id);
         setPersonSearch(""); setPersonResults([]); setAddingRole(null);
@@ -497,6 +511,7 @@ export default function EditMoviePage() {
 
   const handleRemoveDirector = async (entry: MoviePeople) => {
     try {
+      if (shouldStage && !profile?.id) { toast.error("Your profile is still loading. Please wait a moment and try again."); return; }
       if (shouldStage) {
         await submitPersonChange(movieId, "person_remove", entry.person_id, entry.person?.name || entry.person_id, "Director", submitterName, profile?.id);
         setPendingChanges(await getMoviePendingChanges(movieId));
@@ -528,6 +543,10 @@ export default function EditMoviePage() {
 
   const handleSave = async () => {
     if (!title.trim()) { toast.error("Title is required"); return; }
+    if (shouldStage && !profile?.id) {
+      toast.error("Your profile is still loading. Please wait a moment and try again.");
+      return;
+    }
     setSaving(true);
     try {
       let finalProductionHouseName: string | undefined;
@@ -560,8 +579,8 @@ export default function EditMoviePage() {
         agreement_end_date: agreementEndDate || "",
         prequel_sequel_rights: prequelSequelRights || "",
         character_rights: characterRights || "",
-        subtitling_rights: isHomeProd ? "Yes" : (subtitlingLang ? `${subtitlingRights}(${subtitlingLang})` : subtitlingRights || ""),
-        dubbing_rights: isHomeProd ? "Yes" : (dubbingLang ? `${dubbingRights}(${dubbingLang})` : dubbingRights || ""),
+        subtitling_rights: subtitlingLang ? `${subtitlingRights}(${subtitlingLang})` : subtitlingRights || "",
+        dubbing_rights: dubbingLang ? `${dubbingRights}(${dubbingLang})` : dubbingRights || "",
         jointly_owned: isHomeProd ? jointlyOwned : false,
         home_sold: isHomeProd ? homeSold : false,
         remarks: remarks || "",
@@ -581,11 +600,40 @@ export default function EditMoviePage() {
         const changedFields = Object.keys(afterSnapshot).filter(
           k => JSON.stringify(beforeSnapshot[k]) !== JSON.stringify(afterSnapshot[k])
         );
-        if (changedFields.length === 0) {
+
+        const existingRightIds = new Set(existingRights.map(r => r.id));
+        const incomingRightIds = new Set(rightsOwned.filter(r => r.id).map(r => r.id));
+        const rightsToDelete = existingRights.filter(r => !incomingRightIds.has(r.id));
+        const rightsToCreate = rightsOwned.filter(r => !r.id && r.nature?.trim());
+        const rightsToUpdate = rightsOwned.filter(r => {
+          if (!r.id || !existingRightIds.has(r.id)) return false;
+          const original = existingRights.find(er => er.id === r.id);
+          if (!original) return false;
+          const fields = ["right_type", "classification", "nature", "territory", "start_date", "end_date", "syndication", "holdbacks"] as const;
+          return fields.some(f => (original[f] ?? "") !== (r[f] ?? ""));
+        });
+
+        if (changedFields.length === 0 && rightsToDelete.length === 0 && rightsToCreate.length === 0 && rightsToUpdate.length === 0) {
           toast.info("No changes detected.");
           return;
         }
-        await submitMovieFieldChange(movieId, beforeSnapshot, afterSnapshot, submitterName, profile?.id);
+
+        if (changedFields.length > 0) {
+          await submitMovieFieldChange(movieId, beforeSnapshot, afterSnapshot, submitterName, profile?.id);
+        }
+        for (const r of rightsToCreate) {
+          const { _key, id, ...rest } = r;
+          await submitMovieRightChange(movieId, "movie_right_create", { ...rest, movie_id: movieId }, submitterName, profile?.id);
+        }
+        for (const r of rightsToUpdate) {
+          const original = existingRights.find(er => er.id === r.id)!;
+          const { _key, ...rest } = r;
+          await submitMovieRightChange(movieId, "movie_right_update", rest, submitterName, profile?.id, original);
+        }
+        for (const r of rightsToDelete) {
+          await submitMovieRightChange(movieId, "movie_right_delete", r, submitterName, profile?.id);
+        }
+
         setPendingChanges(await getMoviePendingChanges(movieId));
         toast.success("Changes submitted for approval.", "They will be applied once reviewed.");
         setBeforeSnapshot(afterSnapshot);
