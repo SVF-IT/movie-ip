@@ -304,6 +304,9 @@ export default function EditMoviePage() {
   // Snapshot of field values at load time — used to build a before/after diff for approved movies
   const [beforeSnapshot, setBeforeSnapshot] = useState<Record<string, unknown>>({});
   const [pendingChanges, setPendingChanges] = useState<PendingChange[]>([]);
+  // Tracks which staged-change tasks already succeeded, so retrying after a partial
+  // failure (some rights submitted, others errored) doesn't resubmit the successful ones.
+  const submittedTaskKeys = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     async function load() {
@@ -618,23 +621,45 @@ export default function EditMoviePage() {
           return;
         }
 
+        // Submit all staged changes independently so one failure doesn't block the rest,
+        // and track successes so a retry after a partial failure doesn't resubmit them.
+        const tasks: { key: string; run: () => Promise<unknown> }[] = [];
         if (changedFields.length > 0) {
-          await submitMovieFieldChange(movieId, beforeSnapshot, afterSnapshot, submitterName, profile?.id);
+          tasks.push({ key: "movie_fields", run: () => submitMovieFieldChange(movieId, beforeSnapshot, afterSnapshot, submitterName, profile?.id) });
         }
         for (const r of rightsToCreate) {
-          const { _key, id, ...rest } = r;
-          await submitMovieRightChange(movieId, "movie_right_create", { ...rest, movie_id: movieId }, submitterName, profile?.id);
+          tasks.push({
+            key: `create:${r._key}`,
+            run: () => { const { _key, id, ...rest } = r; return submitMovieRightChange(movieId, "movie_right_create", { ...rest, movie_id: movieId }, submitterName, profile?.id); },
+          });
         }
         for (const r of rightsToUpdate) {
-          const original = existingRights.find(er => er.id === r.id)!;
-          const { _key, ...rest } = r;
-          await submitMovieRightChange(movieId, "movie_right_update", rest, submitterName, profile?.id, original);
+          tasks.push({
+            key: `update:${r.id}`,
+            run: () => { const original = existingRights.find(er => er.id === r.id)!; const { _key, ...rest } = r; return submitMovieRightChange(movieId, "movie_right_update", rest, submitterName, profile?.id, original); },
+          });
         }
         for (const r of rightsToDelete) {
-          await submitMovieRightChange(movieId, "movie_right_delete", r, submitterName, profile?.id);
+          tasks.push({ key: `delete:${r.id}`, run: () => submitMovieRightChange(movieId, "movie_right_delete", r, submitterName, profile?.id) });
         }
 
+        const pending = tasks.filter(t => !submittedTaskKeys.current.has(t.key));
+        const results = await Promise.allSettled(pending.map(t => t.run()));
+
+        const failed: string[] = [];
+        results.forEach((res, i) => {
+          if (res.status === "fulfilled") submittedTaskKeys.current.add(pending[i].key);
+          else failed.push(pending[i].key);
+        });
+
         setPendingChanges(await getMoviePendingChanges(movieId));
+
+        if (failed.length > 0) {
+          toast.error(`${failed.length} of ${pending.length} change${pending.length !== 1 ? "s" : ""} failed to submit. Try saving again.`);
+          return;
+        }
+
+        submittedTaskKeys.current.clear();
         toast.success("Changes submitted for approval.", "They will be applied once reviewed.");
         setBeforeSnapshot(afterSnapshot);
         return;
