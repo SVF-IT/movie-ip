@@ -15,6 +15,7 @@ import { useAppToast } from "@/hooks/use-app-toast";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { sanitizeError } from "@/lib/utils/sanitize-error";
+import { escapeOrSearchTerm } from "@/lib/utils/search";
 import {
   Bell,
   CheckCircle2,
@@ -75,7 +76,7 @@ export default function RecensorPage() {
         .ilike("certification", "A");
 
       if (debouncedSearch) {
-        query = query.ilike("title", `%${debouncedSearch}%`);
+        query = query.or(`title.ilike.${escapeOrSearchTerm(debouncedSearch)}%,production_no.ilike.${escapeOrSearchTerm(debouncedSearch)}%`);
       }
 
       if (statusFilter === "pending") {
@@ -198,7 +199,7 @@ export default function RecensorPage() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search movies…"
+            placeholder="Search by title or production no…"
             className="pl-9 h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint)"
           />
         </div>

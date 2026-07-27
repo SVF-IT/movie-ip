@@ -9,6 +9,7 @@ import type {
   MovieLanguageVersion,
 } from "@/lib/types/database";
 import { sanitizeError } from "@/lib/utils/sanitize-error";
+import { escapeOrSearchTerm } from "@/lib/utils/search";
 
 const supabase = createClient();
 const MAX_LIMIT = 200;
@@ -33,7 +34,7 @@ export async function getMovies(options?: {
   }
 
   if (options?.search) {
-    query = query.ilike("title", `%${options.search}%`);
+    query = query.or(`title.ilike.${escapeOrSearchTerm(options.search)}%,production_no.ilike.${escapeOrSearchTerm(options.search)}%`);
   }
 
   if (options?.language) {
@@ -93,7 +94,7 @@ async function getMoviesFromTable(options?: {
   }
 
   if (options?.search) {
-    query = query.ilike("title", `%${options.search}%`);
+    query = query.or(`title.ilike.${escapeOrSearchTerm(options.search)}%,production_no.ilike.${escapeOrSearchTerm(options.search)}%`);
   }
 
   query = query.order("title");
@@ -539,7 +540,7 @@ export async function getGroupedMovies(options?: {
   if (options?.search) {
     // Note: director_names and cast_names only exist on the movies_with_details view,
     // not the base movies table, so we only search title and production_no here.
-    query = query.or(`title.ilike.%${options.search}%,production_no.ilike.%${options.search}%`);
+    query = query.or(`title.ilike.${escapeOrSearchTerm(options.search)}%,production_no.ilike.${escapeOrSearchTerm(options.search)}%`);
   }
 
   if (options?.language) {

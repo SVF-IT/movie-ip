@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import type { ApprovalStatus, MovieApproval } from "@/lib/types/database";
 import { sanitizeError } from "@/lib/utils/sanitize-error";
+import { escapeOrSearchTerm } from "@/lib/utils/search";
 
 const supabase = createClient();
 
@@ -42,7 +43,7 @@ export async function getPendingMovies(options?: {
     }
 
     if (options?.search) {
-      query = query.ilike("title", `%${options.search}%`);
+      query = query.or(`title.ilike.${escapeOrSearchTerm(options.search)}%,production_no.ilike.${escapeOrSearchTerm(options.search)}%`);
     }
 
     query = query.order("created_at", { ascending: false });

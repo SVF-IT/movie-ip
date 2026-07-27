@@ -61,7 +61,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 function PosterImage({ title, posterUrl }: { title: string; posterUrl?: string }) {
   const [failed, setFailed] = useState(false);
@@ -194,6 +194,51 @@ export default function MovieDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [requestDeletingRight, setRequestDeletingRight] = useState<RightWithDetails | null>(null);
   const [isSubmittingDelete, setIsSubmittingDelete] = useState(false);
+
+  const SECTIONS = [
+    { id: "info", label: "Info", icon: Film },
+    { id: "cast", label: "Cast & Crew", icon: Users },
+    { id: "rights-info", label: "Rights Info", icon: ShieldCheck },
+    { id: "exploitation", label: "Exploitation Rights", icon: FileText },
+    { id: "history", label: "Rights History", icon: History },
+  ] as const;
+  const [activeSection, setActiveSection] = useState<string>("info");
+  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const isClickScrolling = useRef(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const contentScrollRef = useRef<HTMLDivElement | null>(null);
+  const getScrollEl = () => contentScrollRef.current;
+
+  useEffect(() => {
+    const scrollEl = getScrollEl();
+    if (!scrollEl) return;
+    const handleScroll = () => {
+      if (isClickScrolling.current) return;
+      const offset = 32;
+      let current = SECTIONS[0].id as string;
+      for (const { id } of SECTIONS) {
+        const el = sectionRefs.current[id];
+        if (el && el.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top - offset <= 0) {
+          current = id;
+        }
+      }
+      setActiveSection(current);
+    };
+    scrollEl.addEventListener("scroll", handleScroll, { passive: true });
+    handleScroll();
+    return () => scrollEl.removeEventListener("scroll", handleScroll);
+  }, [movie]);
+
+  const scrollToSection = (id: string) => {
+    const el = sectionRefs.current[id];
+    const scrollEl = getScrollEl();
+    if (!el || !scrollEl) return;
+    isClickScrolling.current = true;
+    setActiveSection(id);
+    const y = el.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top + scrollEl.scrollTop;
+    scrollEl.scrollTo({ top: y - 8, behavior: "smooth" });
+    window.setTimeout(() => { isClickScrolling.current = false; }, 600);
+  };
 
   const canDelete = profile?.role === "admin" || profile?.role === "legal" || (profile?.role === "editor" && movie?.approval_status !== "approved");
   const canRequestDelete = profile?.role === "admin" || profile?.role === "legal" || profile?.role === "editor";
@@ -457,7 +502,7 @@ export default function MovieDetailPage() {
   };
 
   return (
-    <div className="space-y-4 pb-10">
+    <div ref={rootRef} className="flex flex-col h-full min-h-0">
       {loading && movie && (
         <div className="fixed inset-0 bg-(--bg-deep)/70 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="flex items-center gap-3 bg-(--panel-solid) border border-(--svf-border) px-6 py-4 rounded-[12px] shadow-2xl">
@@ -467,8 +512,8 @@ export default function MovieDetailPage() {
         </div>
       )}
 
-      {/* ── Cinematic Hero ── */}
-      <div className="relative overflow-hidden rounded-[12px] bg-(--panel-solid) border border-(--svf-border) shadow-sm">
+      {/* ── Cinematic Hero (fixed, non-scrolling) ── */}
+      <div className="shrink-0 mb-4 relative overflow-hidden rounded-[12px] bg-(--panel-solid) border border-(--svf-border) shadow-sm">
         <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(to right, color-mix(in oklch, var(--bg-raise) 80%, transparent) 0%, transparent 60%)" }} />
 
         <div className="relative flex items-start gap-6 p-6">
@@ -521,6 +566,9 @@ export default function MovieDetailPage() {
                 )}>
                   {movie.source === "home_production" ? "Home Production" : "Acquired"}
                 </Badge>
+                {movie.is_bangladeshi === true && (
+                  <Badge variant="outline" className="text-xs font-semibold px-2.5 py-0.5 bg-emerald-500/10 text-emerald-400 border-emerald-500/25">Bangladesh</Badge>
+                )}
                 {isExpired && <Badge variant="outline" className="text-xs font-semibold px-2.5 py-0.5 bg-red-500/10 text-red-400 border-red-500/25">Agreement Expired</Badge>}
                 {movie.source === "home_production" && currentVersion.home_sold && (
                   <Badge variant="outline" className="text-xs font-semibold px-2.5 py-0.5 bg-red-500/10 text-red-400 border-red-500/25">Sold — Expired</Badge>
@@ -580,8 +628,31 @@ export default function MovieDetailPage() {
         </div>
       </div>
 
+      <div className="flex items-start gap-4 flex-1 min-h-0">
+        {/* ── Vertical section tabs (fixed, non-scrolling) ── */}
+        <div className="hidden lg:flex flex-col gap-1 w-48 shrink-0 bg-(--panel-solid) border border-(--svf-border) rounded-[12px] p-2">
+          {SECTIONS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => scrollToSection(id)}
+              className={cn(
+                "flex items-center gap-2.5 px-3 py-2.5 rounded-[9px] text-[13px] font-semibold text-left transition-colors",
+                activeSection === id
+                  ? "bg-(--svf-accent) text-white"
+                  : "text-(--text-faint) hover:text-(--text) hover:bg-(--hover)"
+              )}
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              <span className="truncate">{label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* ── Scrolling content ── */}
+        <div ref={contentScrollRef} className="flex-1 min-w-0 h-full overflow-y-auto space-y-4 pb-10 pr-1">
+
       {/* ── Basic Info ── */}
-      <div className="bg-(--panel-solid) border border-(--svf-border) rounded-[12px] p-6">
+      <div ref={(el) => { sectionRefs.current.info = el; }} className="bg-(--panel-solid) border border-(--svf-border) rounded-[12px] p-6">
         <SectionTitle icon={Film} title="Basic Information" accent />
         <div className="grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-5">
           {movie.source !== "acquired" && <InfoRow label="Production No" value={currentVersion.production_no} mono />}
@@ -600,7 +671,7 @@ export default function MovieDetailPage() {
       </div>
 
       {/* ── Cast & Crew ── */}
-      <div className="bg-(--panel-solid) border border-(--svf-border) rounded-[12px] p-6">
+      <div ref={(el) => { sectionRefs.current.cast = el; }} className="bg-(--panel-solid) border border-(--svf-border) rounded-[12px] p-6">
         <SectionTitle icon={Users} title="Cast & Crew" accent />
         <div className="space-y-5">
           <div>
@@ -615,7 +686,7 @@ export default function MovieDetailPage() {
       </div>
 
       {/* ── Rights Info ── */}
-      <div className="bg-(--panel-solid) border border-(--svf-border) rounded-[12px] p-6">
+      <div ref={(el) => { sectionRefs.current["rights-info"] = el; }} className="bg-(--panel-solid) border border-(--svf-border) rounded-[12px] p-6">
         <SectionTitle icon={ShieldCheck} title="Rights Information" accent />
         {movie.source === "home_production" ? (
           <div className="space-y-5">
@@ -805,34 +876,24 @@ export default function MovieDetailPage() {
       )}
 
       {/* ── Notes (only when data exists) ── */}
-      {(currentVersion.wtp_library || currentVersion.remarks || currentVersion.actionables || currentVersion.syndication_holdback || movie.is_bangladeshi != null) && (
+      {(currentVersion.wtp_library || currentVersion.remarks || currentVersion.actionables || currentVersion.syndication_holdback) && (
         <div className="bg-(--panel-solid) border border-(--svf-border) rounded-[12px] p-6">
           <SectionTitle icon={Info} title="Notes & Additional Information" accent />
           <div className="space-y-5">
-            {movie.is_bangladeshi != null && (
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2">Bangladeshi Film</span>
-                <Badge variant="outline" className={movie.is_bangladeshi
-                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25 text-xs font-semibold"
-                  : "bg-(--bg-raise) text-(--text-faint) border-(--svf-border) text-xs font-semibold"}>
-                  {movie.is_bangladeshi ? "Yes" : "No"}
-                </Badge>
-              </div>
-            )}
             {currentVersion.wtp_library && (
-              <div className={movie.is_bangladeshi != null ? "pt-4 border-t border-(--svf-border)" : ""}>
+              <div>
                 <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2">WTP / Library</span>
                 <p className="text-sm text-(--text) bg-(--bg-raise) border border-(--svf-border) px-4 py-3 rounded-[12px]">{currentVersion.wtp_library}</p>
               </div>
             )}
             {currentVersion.remarks && (
-              <div className={(movie.is_bangladeshi != null || currentVersion.wtp_library) ? "pt-4 border-t border-(--svf-border)" : ""}>
+              <div className={currentVersion.wtp_library ? "pt-4 border-t border-(--svf-border)" : ""}>
                 <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2">Remarks</span>
                 <p className="text-sm text-(--text) bg-(--bg-raise) border border-(--svf-border) px-4 py-3 rounded-[12px] leading-relaxed">{currentVersion.remarks}</p>
               </div>
             )}
             {currentVersion.actionables && (
-              <div className={(movie.is_bangladeshi != null || currentVersion.wtp_library || currentVersion.remarks) ? "pt-4 border-t border-(--svf-border)" : ""}>
+              <div className={(currentVersion.wtp_library || currentVersion.remarks) ? "pt-4 border-t border-(--svf-border)" : ""}>
                 <span className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) block mb-2">Actionables</span>
                 <p className="text-sm text-(--text) bg-amber-500/5 border border-amber-500/20 px-4 py-3 rounded-[12px] leading-relaxed">{currentVersion.actionables}</p>
               </div>
@@ -854,7 +915,7 @@ export default function MovieDetailPage() {
       )}
 
       {/* ── Exploitation Rights ── */}
-      <div className="bg-(--panel-solid) border border-(--svf-border) rounded-[12px] overflow-hidden">
+      <div ref={(el) => { sectionRefs.current.exploitation = el; }} className="bg-(--panel-solid) border border-(--svf-border) rounded-[12px] overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-(--svf-border)">
           <div className="flex items-center gap-2.5">
             <div className="p-1.5 rounded-[10px] bg-red-500/10 border border-red-500/20">
@@ -875,7 +936,7 @@ export default function MovieDetailPage() {
       </div>
 
       {/* ── Rights History ── */}
-      <div className="bg-(--panel-solid) border border-(--svf-border) rounded-[12px] overflow-hidden">
+      <div ref={(el) => { sectionRefs.current.history = el; }} className="bg-(--panel-solid) border border-(--svf-border) rounded-[12px] overflow-hidden">
         <div className="flex items-center gap-2.5 px-6 py-4 border-b border-(--svf-border)">
           <div className="p-1.5 rounded-[10px] bg-(--bg-raise) border border-(--svf-border)">
             <History className="h-4 w-4 text-(--text-faint)" />
@@ -889,6 +950,9 @@ export default function MovieDetailPage() {
           )}
         </div>
         <RightsSubTabs sat={expiredSatellite} inet={expiredInternet} other={expiredOther} expired />
+      </div>
+
+        </div>
       </div>
 
       {/* ── Dialogs ── */}

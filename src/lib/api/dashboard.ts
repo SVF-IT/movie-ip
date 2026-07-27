@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/client'
 import type { DashboardStats, MovieWithDetails, Person, Platform, RightsNatureType } from '@/lib/types/database'
 import { buildHoldbackInfo, flattenHoldbackInfo, hasHoldbackToken, type HoldbackInfo } from '@/lib/utils/holdbacks'
+import { escapeOrSearchTerm } from '@/lib/utils/search'
 
 const supabase = createClient()
 
@@ -614,7 +615,7 @@ export async function getOpenTitlesForMode(
     let query = supabase.from('movies_with_details').select('*').eq('approval_status', 'approved')
 
     if (options?.search) {
-      query = query.ilike('title', `%${options.search}%`)
+      query = query.or(`title.ilike.${escapeOrSearchTerm(options.search)}%,production_no.ilike.${escapeOrSearchTerm(options.search)}%`)
     }
 
     if (options?.language) {
@@ -868,7 +869,7 @@ export async function getExpiringSatelliteTitles(options?: {
     // Fetch all valid movies with language filter
     let moviesQuery = supabase.from('movies_with_details').select('*').eq('approval_status', 'approved')
 
-    if (options?.search) moviesQuery = moviesQuery.ilike('title', `%${options.search}%`)
+    if (options?.search) moviesQuery = moviesQuery.or(`title.ilike.${escapeOrSearchTerm(options.search)}%,production_no.ilike.${escapeOrSearchTerm(options.search)}%`)
     if (options?.language) moviesQuery = moviesQuery.eq('language', options.language)
     if (options?.certification && options.certification.length > 0) {
       const certs = [...options.certification]
@@ -1016,7 +1017,7 @@ export async function getExpiringInternetTitles(options?: {
 
     // Fetch valid movies
     let moviesQuery = supabase.from('movies_with_details').select('*').eq('approval_status', 'approved')
-    if (options?.search) moviesQuery = moviesQuery.ilike('title', `%${options.search}%`)
+    if (options?.search) moviesQuery = moviesQuery.or(`title.ilike.${escapeOrSearchTerm(options.search)}%,production_no.ilike.${escapeOrSearchTerm(options.search)}%`)
     if (options?.language) moviesQuery = moviesQuery.eq('language', options.language)
     if (options?.certification && options.certification.length > 0) {
       const certs = [...options.certification]
@@ -1119,7 +1120,7 @@ export async function getActiveInternetTitles(options?: {
     const sortBy = options?.sortBy || 'title_asc'
 
     let moviesQuery = supabase.from('movies_with_details').select('*').eq('approval_status', 'approved')
-    if (options?.search) moviesQuery = moviesQuery.ilike('title', `%${options.search}%`)
+    if (options?.search) moviesQuery = moviesQuery.or(`title.ilike.${escapeOrSearchTerm(options.search)}%,production_no.ilike.${escapeOrSearchTerm(options.search)}%`)
     if (options?.language) moviesQuery = moviesQuery.eq('language', options.language)
     if (options?.certification && options.certification.length > 0) {
       const certs = [...options.certification]
@@ -1303,7 +1304,7 @@ export async function getMoviesForDashboard(options?: {
 
     // Apply search filter
     if (options?.search) {
-      query = query.ilike('title', `%${options.search}%`)
+      query = query.or(`title.ilike.${escapeOrSearchTerm(options.search)}%,production_no.ilike.${escapeOrSearchTerm(options.search)}%`)
     }
 
     // Apply language filter

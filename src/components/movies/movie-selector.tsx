@@ -86,7 +86,7 @@ export function MovieSelector({ onSelect, selectedId }: MovieSelectorProps) {
                     <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
                     <input
                         className="flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 min-w-0"
-                        placeholder="Search movie..."
+                        placeholder="Search by title or production no…"
                         value={searchValue}
                         onChange={handleSearchChange}
                     />

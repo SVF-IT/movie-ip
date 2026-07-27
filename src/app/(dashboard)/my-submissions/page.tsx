@@ -468,7 +468,7 @@ export default function MySubmissionsPage() {
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-(--text-faint)" />
-              <Input placeholder="Search by title…" value={movieSearch} onChange={(e) => setMovieSearch(e.target.value)}
+              <Input placeholder="Search by title or production no…" value={movieSearch} onChange={(e) => setMovieSearch(e.target.value)}
                 className="pl-10 h-9 bg-(--bg-raise) border-(--svf-border) text-(--text)" />
             </div>
             <Select value={movieStatus} onValueChange={(v) => setMovieStatus(v as ApprovalStatus | "all")}>

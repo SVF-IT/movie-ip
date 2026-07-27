@@ -157,8 +157,8 @@ export default function ExpiringRightsPage() {
     if (platformFilter !== "all" && right.platform_id !== platformFilter) return false;
     if (subTypeFilter !== "all" && right.rights_type_name !== subTypeFilter) return false;
     if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      const inTitle = (right.movie_title || "").toLowerCase().includes(q);
+      const q = searchQuery.trim().toLowerCase();
+      const inTitle = (right.movie_title || "").toLowerCase().startsWith(q);
       const inPlatform = (right.platform_name || "").toLowerCase().includes(q);
       if (!inTitle && !inPlatform) return false;
     }

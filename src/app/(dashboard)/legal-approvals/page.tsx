@@ -821,7 +821,7 @@ export default function LegalApprovalsPage() {
             <div className="flex flex-wrap gap-3">
               <div className="flex-1 min-w-48 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-(--text-faint)" />
-                <Input placeholder="Search by title…" value={searchQuery}
+                <Input placeholder="Search by title or production no…" value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 h-9 bg-(--bg-raise) border-(--svf-border) text-(--text)" />
               </div>

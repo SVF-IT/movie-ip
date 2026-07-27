@@ -103,8 +103,12 @@ export default function DubbedPage() {
     let data = groups
     if (sourceFilter !== 'all') data = data.filter((g) => g.source === sourceFilter)
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase()
-      data = data.filter((g) => g.title.toLowerCase().includes(q) || g.versions.some((v) => v.title.toLowerCase().includes(q)))
+      const q = searchQuery.trim().toLowerCase()
+      data = data.filter((g) =>
+        g.title.toLowerCase().startsWith(q) ||
+        (g.production_no || '').toLowerCase().startsWith(q) ||
+        g.versions.some((v) => v.title.toLowerCase().startsWith(q))
+      )
     }
 
     const isAllDubbed = dubbedFilter.includes('all')
@@ -218,7 +222,7 @@ export default function DubbedPage() {
         {/* Search */}
         <div className="relative min-w-48 flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5" style={{ color: "var(--text-faint)" }} />
-          <Input placeholder="Search movies…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 h-9" />
+          <Input placeholder="Search by title or production no…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 h-9" />
           {searchQuery && (
             <button className="absolute right-2 top-1/2 -translate-y-1/2" style={{ color: "var(--text-faint)" }} onClick={() => setSearchQuery('')}>
               <X className="h-3.5 w-3.5" />

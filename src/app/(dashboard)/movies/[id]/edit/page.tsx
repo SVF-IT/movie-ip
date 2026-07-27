@@ -815,14 +815,14 @@ export default function EditMoviePage() {
                   </div>
                 </FormField>
 
-                {/* Bangladeshi Movie */}
-                <FormField label="Bangladeshi Movie">
+                {/* Bangladesh Movie */}
+                <FormField label="Bangladesh Movie">
                   <label className="flex items-center gap-2.5 cursor-pointer">
                     <Checkbox
                       checked={isBangladeshi}
                       onCheckedChange={(v) => setIsBangladeshi(!!v)}
                     />
-                    <span className="text-sm text-(--text)">This is a Bangladeshi movie</span>
+                    <span className="text-sm text-(--text)">This is a Bangladesh movie</span>
                   </label>
                 </FormField>
 

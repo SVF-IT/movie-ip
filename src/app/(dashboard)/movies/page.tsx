@@ -43,7 +43,7 @@ import {
   Download, Edit, ExternalLink, Film,
   Image as ImageIcon,
   Languages,
-  LayoutGrid, List, Loader2, Plus, Search, Settings2, ShieldCheck,
+  LayoutGrid, List, Loader2, Plus, Search, Settings2, ShieldCheck, Star,
   Upload, X
 } from "lucide-react";
 import Link from "next/link";
@@ -71,13 +71,9 @@ export default function MoviesPage() {
   const [certificationFilter, setCertificationFilter] = useState<string[]>([]);
   const [certificationOptions, setCertificationOptions] = useState<string[]>([]);
   const [languageFilter, setLanguageFilter] = useState<string>("all");
-  const [yearFrom, setYearFrom] = useState<string>("");
-  const [yearTo, setYearTo] = useState<string>("");
-  const [territoryFilter, setTerritoryFilter] = useState<string>("");
+  const [wtpFilter, setWtpFilter] = useState<string>("");
   const [sortBy, setSortBy] = useState<'title_asc' | 'title_desc' | 'created_at_desc' | 'release_date_asc' | 'release_date_desc'>('title_asc');
   const [agreementExpiryYear, setAgreementExpiryYear] = useState<string>("all");
-  const [agreementEndFrom, setAgreementEndFrom] = useState<string>("");
-  const [agreementEndTo, setAgreementEndTo] = useState<string>("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
@@ -127,8 +123,6 @@ export default function MoviesPage() {
         search: searchQuery || undefined,
         language: (versionFilter === "multi") ? undefined : (languageFilter !== "all" ? languageFilter : undefined),
         certification: certificationFilter.length > 0 ? certificationFilter : undefined,
-        yearFrom: yearFrom ? new Date(yearFrom).getFullYear() : undefined,
-        yearTo: yearTo ? new Date(yearTo).getFullYear() : undefined,
         sortBy,
         approvalStatus: canFilterByApproval ? approvalFilter : "approved",
       };
@@ -173,20 +167,9 @@ export default function MoviesPage() {
         });
       }
 
-      if (agreementEndFrom || agreementEndTo) {
-        const from = agreementEndFrom ? new Date(agreementEndFrom) : null;
-        const to = agreementEndTo ? new Date(agreementEndTo) : null;
-        filteredData = filteredData.filter(m => {
-          const endDate = m.primary_version?.agreement_end_date;
-          // Movies with no end date (home_production, bangladeshi) are not expired — keep them
-          if (!endDate) return sourceFilter !== "acquired" && sourceFilter !== "expired";
-          const d = new Date(endDate);
-          if (from && d < from) return false;
-          if (to && d > to) return false;
-          return true;
-        });
+      if (wtpFilter) {
+        filteredData = filteredData.filter(m => m.primary_version?.wtp_library === wtpFilter);
       }
-
 
       setAllFilteredMovies(filteredData);
       setMovies(filteredData);
@@ -198,7 +181,7 @@ export default function MoviesPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, sourceFilter, versionFilter, languageFilter, certificationFilter, yearFrom, yearTo, territoryFilter, sortBy, agreementExpiryYear, agreementEndFrom, agreementEndTo, approvalFilter, canFilterByApproval]);
+  }, [searchQuery, sourceFilter, versionFilter, languageFilter, certificationFilter, wtpFilter, sortBy, agreementExpiryYear, approvalFilter, canFilterByApproval]);
 
   useEffect(() => { fetchMovies(); }, [fetchMovies]);
 
@@ -437,8 +420,8 @@ export default function MoviesPage() {
   };
 
   const hasFilters = searchQuery || sourceFilter !== "all" || versionFilter !== "all"
-    || languageFilter !== "all" || certificationFilter.length > 0 || yearFrom || yearTo || territoryFilter
-    || agreementExpiryYear !== "all" || agreementEndFrom || agreementEndTo;
+    || languageFilter !== "all" || certificationFilter.length > 0 || wtpFilter
+    || agreementExpiryYear !== "all";
 
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return "—";
@@ -496,7 +479,7 @@ export default function MoviesPage() {
               <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Movie Keywords</label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5" style={{ color: "var(--text-faint)" }} />
-                <Input placeholder="Title, Director, Cast…" value={searchQuery}
+                <Input placeholder="Search by title or production no…" value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-9 h-9" />
               </div>
@@ -512,7 +495,7 @@ export default function MoviesPage() {
                   <SelectItem value="home_production">Home Production</SelectItem>
                   <SelectItem value="acquired">Acquired</SelectItem>
                   <SelectItem value="jointly_owned">Joint Production</SelectItem>
-                  <SelectItem value="bangladeshi">Bangladeshi</SelectItem>
+                  <SelectItem value="bangladeshi">Bangladesh</SelectItem>
                   <SelectItem value="expired">Expired</SelectItem>
                 </SelectContent>
               </Select>
@@ -591,34 +574,18 @@ export default function MoviesPage() {
               </Select>
             </div>
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Territory</label>
-              <Select value={territoryFilter} onValueChange={(v) => { setTerritoryFilter(v === "all" ? "" : v); }}>
+              <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>WTP / Library</label>
+              <Select value={wtpFilter || "all"} onValueChange={(v) => { setWtpFilter(v === "all" ? "" : v); }}>
                 <SelectTrigger className="h-9 w-full">
-                  <div className="flex items-center gap-2"><LayoutGrid className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} /><SelectValue placeholder="All Territories" /></div>
+                  <div className="flex items-center gap-2"><Star className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} /><SelectValue placeholder="All WTP/Library" /></div>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Territories</SelectItem>
-                  <SelectItem value="World Wide">World Wide</SelectItem>
-                  <SelectItem value="India">India</SelectItem>
-                  <SelectItem value="Others">Others</SelectItem>
+                  <SelectItem value="all">All WTP/Library</SelectItem>
+                  <SelectItem value="WTP">WTP</SelectItem>
+                  <SelectItem value="WTP/BD">WTP/BD</SelectItem>
+                  <SelectItem value="Library">Library</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Release From</label>
-              <Input type="date" value={yearFrom} onChange={(e) => { setYearFrom(e.target.value); }} className="h-9 w-full" />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Release To</label>
-              <Input type="date" value={yearTo} onChange={(e) => { setYearTo(e.target.value); }} className="h-9 w-full" />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Agreement End From</label>
-              <Input type="date" value={agreementEndFrom} onChange={(e) => { setAgreementEndFrom(e.target.value); }} className="h-9 w-full" />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Agreement End To</label>
-              <Input type="date" value={agreementEndTo} onChange={(e) => { setAgreementEndTo(e.target.value); }} className="h-9 w-full" />
             </div>
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Sort By</label>
@@ -662,8 +629,8 @@ export default function MoviesPage() {
                 <Button variant="outline" size="sm" className="h-9 gap-1.5 w-full bg-red-500/5 border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50" onClick={() => {
                   setSearchQuery(""); setSourceFilter("all"); setVersionFilter("all");
                   setLanguageFilter(languages.find(l => l.toLowerCase() === "bengali") ?? "all");
-                  setCertificationFilter([]); setYearFrom(""); setYearTo(""); setTerritoryFilter("");
-                  setAgreementExpiryYear("all"); setAgreementEndFrom(""); setAgreementEndTo("");
+                  setCertificationFilter([]); setWtpFilter("");
+                  setAgreementExpiryYear("all");
                   setApprovalFilter(canSeeAllStatuses ? "approved" : "all");
                 }}>
                   <X className="h-3.5 w-3.5" />Clear Filters

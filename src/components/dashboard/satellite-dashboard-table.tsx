@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -101,6 +101,11 @@ const EXPORT_FIELDS: ExportFieldDef[] = [
   { key: 'trailer_link', label: 'YT Trailer Link' },
   { key: 'certification', label: 'Censor' },
   { key: 'wtp_library', label: 'WTP/Library' },
+  { key: 'source', label: 'Source' },
+  { key: 'assignor_licensor', label: 'Licensor' },
+  { key: 'licensee', label: 'Licensee' },
+  { key: 'agreement_start_date', label: 'Agreement Start Date' },
+  { key: 'agreement_end_date', label: 'Agreement End Date' },
 ]
 
 const EXPORT_FIELDS_EXPIRING: ExportFieldDef[] = [
@@ -149,6 +154,9 @@ export function SatelliteDashboardTable({
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
+  const [licensorFilter, setLicensorFilter] = useState('')
+  const [licensorOpen, setLicensorOpen] = useState(false)
+  const [licensorSearch, setLicensorSearch] = useState('')
   const [certFilter, setCertFilter] = useState<string[]>([])
   const [certOpen, setCertOpen] = useState(false)
   const [sortBy, setSortBy] = useState<SortOption>('title_asc')
@@ -161,7 +169,22 @@ export function SatelliteDashboardTable({
   const [totalCount, setTotalCount] = useState(0)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
-  useEffect(() => { setSelectedIds(new Set()) }, [activeCard, language, expiryFrom, expiryTo, openFrom, openTo, sourceFilter, certFilter, wtpFilter, bangladeshiOnly])
+  const getEffectiveLicensor = (movie: any) => movie.source === 'home_production' ? 'SVF' : (movie.assignor_licensor || '')
+
+  const licensorOptions = useMemo(() => {
+    const set = new Set<string>()
+    for (const m of movies as any[]) {
+      const v = getEffectiveLicensor(m)
+      if (v) set.add(v)
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  }, [movies])
+
+  const filteredLicensorOptions = licensorSearch.trim()
+    ? licensorOptions.filter((l) => l.toLowerCase().includes(licensorSearch.trim().toLowerCase()))
+    : licensorOptions
+
+  useEffect(() => { setSelectedIds(new Set()) }, [activeCard, language, expiryFrom, expiryTo, openFrom, openTo, sourceFilter, licensorFilter, certFilter, wtpFilter, bangladeshiOnly])
 
   useEffect(() => {
     const timer = setTimeout(() => { setDebouncedSearch(search) }, 300)
@@ -256,7 +279,10 @@ export function SatelliteDashboardTable({
   const handleExportClick = useCallback(async () => {
     setExportLoading(true)
     try {
-      const data = await fetchData(true)
+      const rawData = await fetchData(true)
+      const data = (licensorFilter.trim() && activeCard !== 'expiring')
+        ? (rawData as any[]).filter((m: any) => getEffectiveLicensor(m).toLowerCase().includes(licensorFilter.trim().toLowerCase()))
+        : rawData
       let preparedData: Record<string, unknown>[]
       if (activeCard === 'expiring') {
         const rows: Record<string, unknown>[] = []
@@ -299,6 +325,11 @@ export function SatelliteDashboardTable({
         preparedData = (sourceData || []).map((row, idx) => ({
           ...row,
           release_date: row.release_date || row.release_year || '',
+          source: row.source === 'home_production' ? 'Home' : 'Acquired',
+          assignor_licensor: row.source === 'home_production' ? '' : (row.assignor_licensor || ''),
+          licensee: row.source === 'home_production' ? '' : (row.licensee || ''),
+          agreement_start_date: row.source === 'home_production' ? '' : (row.agreement_start_date || ''),
+          agreement_end_date: row.source === 'home_production' ? '' : (row.agreement_end_date || ''),
           sl_no: idx + 1,
         }))
       }
@@ -309,9 +340,13 @@ export function SatelliteDashboardTable({
     } finally {
       setExportLoading(false)
     }
-  }, [fetchData, activeCard, selectedIds])
+  }, [fetchData, activeCard, selectedIds, licensorFilter])
 
-  const { sortedData, sortConfig, requestSort } = useSortableTable(movies)
+  const licensorFilteredMovies = licensorFilter.trim()
+    ? movies.filter((m: any) => getEffectiveLicensor(m).toLowerCase().includes(licensorFilter.trim().toLowerCase()))
+    : movies
+
+  const { sortedData, sortConfig, requestSort } = useSortableTable(licensorFilteredMovies)
 
   const getSourceBadge = (source: string) =>
     source === 'home_production' ? (
@@ -344,7 +379,7 @@ export function SatelliteDashboardTable({
 
   const showExpiryFilters = activeCard === 'expiring'
   const showWtpCol = activeCard === 'open_titles'
-  const showLicensorCol = activeCard === 'open_titles' && sourceFilter === 'acquired'
+  const showLicensorCol = activeCard === 'open_titles' && (sourceFilter === 'acquired' || licensorFilter.trim().length > 0)
   const showHoldbackCol = activeCard === 'open_titles' && showHoldback
   // Expiring card: flat per-right rows (no expand/collapse)
   const flatExpiryRows = activeCard === 'expiring'
@@ -364,7 +399,7 @@ export function SatelliteDashboardTable({
         {/* Search */}
         <div className="relative flex-1 min-w-45 max-w-65">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-(--text-faint)" />
-          <Input placeholder="Search movies…" value={search} onChange={(e) => setSearch(e.target.value)}
+          <Input placeholder="Search by title or production no…" value={search} onChange={(e) => setSearch(e.target.value)}
             className={`pl-9 text-xs placeholder:text-(--text-faint) ${inputCls}`} />
         </div>
 
@@ -377,9 +412,50 @@ export function SatelliteDashboardTable({
             <SelectItem value="all">All Sources</SelectItem>
             <SelectItem value="home">Home Production</SelectItem>
             <SelectItem value="acquired">Acquired</SelectItem>
-            <SelectItem value="bangladeshi">Bangladeshi</SelectItem>
+            <SelectItem value="bangladeshi">Bangladesh</SelectItem>
           </SelectContent>
         </Select>
+
+        {/* Licensor searchable select */}
+        <Popover open={licensorOpen} onOpenChange={(o) => { setLicensorOpen(o); if (!o) setLicensorSearch('') }}>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm"
+              className={`h-9 w-40 justify-start gap-1.5 text-xs font-normal bg-(--bg-raise) border-(--svf-border) hover:bg-(--hover) hover:border-(--svf-border-strong) transition-colors ${licensorFilter ? 'border-purple-500/60 text-purple-400 bg-purple-500/5' : 'text-(--text-faint)'}`}>
+              <span className="truncate flex-1 text-left">{licensorFilter || 'Licensor'}</span>
+              {licensorFilter && (
+                <span onClick={(e) => { e.stopPropagation(); setLicensorFilter('') }}
+                  className="hover:text-red-400 transition-colors shrink-0">
+                  <X className="h-3 w-3" />
+                </span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-56 p-2 bg-(--panel-solid) border-(--svf-border)/60 shadow-xl" align="start">
+            <div className="relative mb-1.5">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-(--text-faint)" />
+              <Input autoFocus placeholder="Search licensor…" value={licensorSearch} onChange={(e) => setLicensorSearch(e.target.value)}
+                className="h-7 pl-7 text-xs placeholder:text-(--text-faint)" />
+            </div>
+            <div className="max-h-56 overflow-y-auto space-y-0.5">
+              <div className="flex items-center gap-2 px-1.5 py-1.5 rounded hover:bg-(--hover) cursor-pointer transition-colors"
+                onClick={() => { setLicensorFilter(''); setLicensorOpen(false) }}>
+                <Checkbox checked={!licensorFilter} className="h-3.5 w-3.5" />
+                <span className="text-xs text-(--text)">All Licensors</span>
+              </div>
+              {filteredLicensorOptions.length === 0 ? (
+                <p className="text-xs text-(--text-faint) px-1.5 py-2">No matches</p>
+              ) : (
+                filteredLicensorOptions.map((l) => (
+                  <div key={l} className="flex items-center gap-2 px-1.5 py-1.5 rounded hover:bg-(--hover) cursor-pointer transition-colors"
+                    onClick={() => { setLicensorFilter(l); setLicensorOpen(false) }}>
+                    <Checkbox checked={licensorFilter === l} className="h-3.5 w-3.5" />
+                    <span className="text-xs text-(--text) truncate">{l}</span>
+                  </div>
+                ))
+              )}
+            </div>
+          </PopoverContent>
+        </Popover>
 
         {/* Certification multi-select */}
         <Popover open={certOpen} onOpenChange={setCertOpen}>
@@ -506,7 +582,7 @@ export function SatelliteDashboardTable({
               bangladeshiOnly ? 'border-emerald-500/60 bg-emerald-500/5' : 'border-(--svf-border) bg-(--bg-raise) hover:border-(--svf-border-strong)'
             )}>
               <Checkbox checked={bangladeshiOnly} onCheckedChange={(v) => setBangladeshiOnly(v === true)} className="h-3.5 w-3.5" />
-              <span className={cn('text-xs', bangladeshiOnly ? 'text-emerald-400' : 'text-(--text)')}>Bangladeshi</span>
+              <span className={cn('text-xs', bangladeshiOnly ? 'text-emerald-400' : 'text-(--text)')}>Bangladesh</span>
             </label>
           </>
         )}
@@ -722,7 +798,7 @@ export function SatelliteDashboardTable({
                 )}
                 {showLicensorCol && (
                   <TableCell className={cn('max-w-35', cellCls)} style={{ color: 'var(--text-faint)' }}>
-                    <span className="line-clamp-1 text-xs">{movie.assignor_licensor || '—'}</span>
+                    <span className="line-clamp-1 text-xs">{getEffectiveLicensor(movie) || '—'}</span>
                   </TableCell>
                 )}
                 {activeCard === 'open_titles' && (

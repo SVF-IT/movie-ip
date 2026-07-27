@@ -289,7 +289,7 @@ export default function NewRightPage() {
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-(--text-faint)" />
                   <Input
-                    placeholder="Search movies by title…"
+                    placeholder="Search by title or production no…"
                     value={movieSearch}
                     onChange={(e) => handleMovieSearch(e.target.value)}
                     className="pl-9 h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-sm focus-visible:ring-red-500/40"
