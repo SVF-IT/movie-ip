@@ -55,16 +55,41 @@ export function BulkPostersUploadDialog({
     const [uploadProgress, setUploadProgress] = useState(0);
     const [uploadSummary, setUploadSummary] = useState<{ successCount: number; skipped: MatchResult[]; failed: MatchResult[] } | null>(null);
 
+    // Words/suffixes commonly appended to poster filenames that aren't part of the movie title
+    // (including common misspellings seen in uploaded files)
+    const NOISE_WORDS = [
+        "portrait", "potrait", "protrait",
+        "landscape",
+        "poster", "posters",
+        "final", "copy", "new", "hd", "web", "print",
+    ];
+
     const normalize = (str: string) => {
-        return str
+        const s = str
             .toLowerCase()
-            .replace(/[^\w\s]/g, " ") // Replace special characters with spaces
+            .replace(/[-_]+/g, " ") // Treat hyphens/underscores as spaces (used for word separation in filenames)
+            .replace(/[^\w\s]/g, " ") // Replace remaining special characters with spaces
             .replace(/\s+/g, " ")    // Normalize spaces
             .trim();
+
+        // Repeatedly strip trailing noise words and/or a trailing 4-digit year
+        // (year may or may not be present, and may appear before or after noise words,
+        // e.g. "Ghatak Portrait", "Andho Prem 2003 Potrait", "Andho Prem (2003)")
+        const words = s.split(" ");
+        while (words.length > 1) {
+            const last = words[words.length - 1];
+            if (NOISE_WORDS.includes(last) || /^(19|20)\d{2}$/.test(last)) {
+                words.pop();
+            } else {
+                break;
+            }
+        }
+
+        return words.join(" ").trim();
     };
 
     const tightNormalize = (str: string) => {
-        return str.toLowerCase().replace(/[^\w]/g, ""); // Remove everything except alphanumeric
+        return normalize(str).replace(/\s+/g, ""); // Remove spaces after noise-word/number stripping
     };
 
     const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -82,7 +107,7 @@ export function BulkPostersUploadDialog({
             if (error) throw error;
 
             const newMatches: MatchResult[] = files.map((file) => {
-                const fullFileName = file.name.split(".")[0];
+                const fullFileName = file.name.replace(/\.[^./]+$/, "");
                 const normalizedFileName = normalize(fullFileName);
                 const tightFileName = tightNormalize(fullFileName);
 

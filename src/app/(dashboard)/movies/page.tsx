@@ -743,13 +743,13 @@ export default function MoviesPage() {
                     style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
                     onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
                   />
-                  {movie.production_no && (
+                  {movie.production_no && !movie.production_no.startsWith("single_") && (
                     <span className="absolute top-2 left-2" style={{ fontFamily: "var(--font-mono)", fontSize: 9, letterSpacing: "0.07em", color: "rgba(255,255,255,0.55)" }}>
                       {movie.production_no}
                     </span>
                   )}
                   {pv?.wtp_library && (
-                    <span className="absolute top-2 right-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: "oklch(0.70 0.16 305 / 0.3)", color: "oklch(0.85 0.10 305)", backdropFilter: "blur(4px)" }}>WTP</span>
+                    <span className="absolute top-2 right-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: "oklch(0.70 0.16 305 / 0.3)", color: "oklch(0.85 0.10 305)", backdropFilter: "blur(4px)" }}>{pv?.wtp_library}</span>
                   )}
                   <div className="absolute bottom-0 left-0 right-0 px-2.5 pb-2.5 pt-8" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.82) 0%, transparent 100%)" }}>
                     <p className="leading-tight text-white line-clamp-2" style={{ fontFamily: "var(--font-serif)", fontSize: 16, textShadow: "0 2px 10px rgba(0,0,0,0.5)" }}>
@@ -869,7 +869,7 @@ export default function MoviesPage() {
                                   {movie.title}
                                   {movie.release_year && <span style={{ color: "var(--text-faint)", fontWeight: 400, marginLeft: 5 }}>({movie.release_year})</span>}
                                 </Link>
-                                {movie.production_no && movie.source !== "acquired" && (
+                                {movie.production_no && !movie.production_no.startsWith("single_") && (
                                   <span className="text-[10px] font-mono mt-0.5 block" style={{ color: "var(--text-faint)" }}>{movie.production_no}</span>
                                 )}
                               </div>
