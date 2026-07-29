@@ -577,10 +577,10 @@ export default function MoviesPage() {
               <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>WTP / Library</label>
               <Select value={wtpFilter || "all"} onValueChange={(v) => { setWtpFilter(v === "all" ? "" : v); }}>
                 <SelectTrigger className="h-9 w-full">
-                  <div className="flex items-center gap-2"><Star className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} /><SelectValue placeholder="All WTP/Library" /></div>
+                  <div className="flex items-center gap-2"><Star className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} /><SelectValue placeholder="All" /></div>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All WTP/Library</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
                   <SelectItem value="WTP">WTP</SelectItem>
                   <SelectItem value="WTP/BD">WTP/BD</SelectItem>
                   <SelectItem value="Library">Library</SelectItem>

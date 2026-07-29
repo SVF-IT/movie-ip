@@ -135,6 +135,13 @@ function isHoichoiPlatform(name: string): boolean {
   return name.toLowerCase().includes('hoichoi')
 }
 
+// Airborne/Ship/Other rights have no dedicated platform_type seed values today, but platforms
+// are free-text — if an admin ever creates one (e.g. "Airborne TV"), this lets the "not
+// currently exploited" check on the Other Rights tab recognize it.
+function isOtherExploitationPlatform(pt: string): boolean {
+  return /air|ship|surface|hotel/i.test(pt)
+}
+
 
 //test
 export async function getDashboardStats(): Promise<DashboardStats> {
@@ -394,7 +401,7 @@ export interface RightsModeStats {
   upcomingMoviesCount: number
 }
 
-export async function getRightsModeStats(mode: RightsMode, language?: string, openTo?: string): Promise<RightsModeStats> {
+export async function getRightsModeStats(mode: RightsMode, language?: string[], openTo?: string): Promise<RightsModeStats> {
   try {
     const today = new Date().toISOString().split('T')[0]
     // Same semantics as getOpenTitlesForMode: when an "open until" date is supplied, open-title
@@ -411,7 +418,7 @@ export async function getRightsModeStats(mode: RightsMode, language?: string, op
       .from('movies')
       .select('id, source, certification, home_sold, agreement_end_date, wtp_library, syndication_holdback')
       .eq('approval_status', 'approved')
-    if (language) moviesQuery = moviesQuery.eq('language', language)
+    if (language && language.length > 0) moviesQuery = moviesQuery.in('language', language)
     const { data: allMovies } = await moviesQuery
 
     // Always exclude sold (home) and expired-agreement (acquired) movies
@@ -545,7 +552,7 @@ export async function getRightsModeStats(mode: RightsMode, language?: string, op
       .select('*', { count: 'exact', head: true })
       .eq('approval_status', 'approved')
       .in('wtp_library', ['WTP', 'WTP/BD'])
-    if (language) wtpQuery = wtpQuery.eq('language', language)
+    if (language && language.length > 0) wtpQuery = wtpQuery.in('language', language)
     const { count: wtpCount } = await wtpQuery
 
     // Expiring rights — count unique movies with a matching platform_right expiring in current year
@@ -593,14 +600,14 @@ export async function getOpenTitlesForMode(
     limit?: number
     offset?: number
     search?: string
-    language?: string
+    language?: string[]
     sourceFilter?: 'all' | 'home' | 'acquired' | 'bangladeshi'
     bangladeshiOnly?: boolean
     certification?: string[]
     sortBy?: 'title_asc' | 'title_desc' | 'created_at_desc' | 'release_date_desc' | 'release_date_asc'
     openFrom?: string
     openTo?: string
-    wtpFilter?: 'all' | 'wtp' | 'wtp_bd' | 'library'
+    wtpFilter?: ('wtp' | 'wtp_bd' | 'library')[]
   },
 ): Promise<{ data: (MovieWithDetails & { holdback_info: HoldbackInfo; holdback_summary: string })[]; count: number }> {
   try {
@@ -618,8 +625,8 @@ export async function getOpenTitlesForMode(
       query = query.or(`title.ilike.${escapeOrSearchTerm(options.search)}%,production_no.ilike.${escapeOrSearchTerm(options.search)}%`)
     }
 
-    if (options?.language) {
-      query = query.eq('language', options.language)
+    if (options?.language && options.language.length > 0) {
+      query = query.in('language', options.language)
     }
 
     if (options?.certification && options.certification.length > 0) {
@@ -630,10 +637,9 @@ export async function getOpenTitlesForMode(
       query = query.in('certification', certs)
     }
 
-    if (options?.wtpFilter && options.wtpFilter !== 'all') {
-      if (options.wtpFilter === 'wtp') query = query.eq('wtp_library', 'WTP')
-      else if (options.wtpFilter === 'wtp_bd') query = query.eq('wtp_library', 'WTP/BD')
-      else if (options.wtpFilter === 'library') query = query.eq('wtp_library', 'Library')
+    if (options?.wtpFilter && options.wtpFilter.length > 0) {
+      const wtpMap = { wtp: 'WTP', wtp_bd: 'WTP/BD', library: 'Library' } as const
+      query = query.in('wtp_library', options.wtpFilter.map((f) => wtpMap[f]))
     }
 
     if (sortBy === 'title_asc') query = query.order('title', { ascending: true })
@@ -816,6 +822,487 @@ export async function getOpenTitlesForMode(
   }
 }
 
+const OTHER_RIGHT_TYPES = ['Airborne', 'Ship', 'Other']
+
+/**
+ * Open Titles for the "Other Rights" tab (Airborne + Ship + Other movie_rights combined).
+ * Unlike Satellite/Internet, these right_types have no platform_rights linkage in seed data,
+ * but platform_type is free-text, so we still check for an active matching platform_right.
+ *
+ * - Home productions always hold these rights by default (no dated movie_rights row) — "open"
+ *   means simply no active platform_right of a matching type currently exploiting them.
+ * - Acquired movies are "open" if they have an unexpired Other/Airborne/Ship movie_rights row
+ *   (falling back to agreement_end_date when the row itself has no end_date) AND no active
+ *   platform_right of a matching type.
+ */
+export async function getOpenOtherRightsTitles(options?: {
+  limit?: number
+  offset?: number
+  search?: string
+  language?: string[]
+  sourceFilter?: 'all' | 'home' | 'acquired' | 'bangladeshi'
+  bangladeshiOnly?: boolean
+  certification?: string[]
+  sortBy?: 'title_asc' | 'title_desc' | 'created_at_desc' | 'release_date_desc' | 'release_date_asc'
+  openFrom?: string
+  openTo?: string
+}): Promise<{ data: MovieWithDetails[]; count: number }> {
+  try {
+    const today = new Date().toISOString().split('T')[0]
+    const referenceDate = options?.openTo || today
+    const sortBy = options?.sortBy || 'title_asc'
+
+    let query = supabase.from('movies_with_details').select('*').eq('approval_status', 'approved')
+
+    if (options?.search) {
+      query = query.or(`title.ilike.${escapeOrSearchTerm(options.search)}%,production_no.ilike.${escapeOrSearchTerm(options.search)}%`)
+    }
+    if (options?.language && options.language.length > 0) {
+      query = query.in('language', options.language)
+    }
+    if (options?.certification && options.certification.length > 0) {
+      const certs = [...options.certification]
+      const hasUaVariant = certs.some((c) => c === 'UA' || c === 'U/A' || c.startsWith('UA '))
+      if (hasUaVariant && !certs.includes('U/A')) certs.push('U/A')
+      query = query.in('certification', certs)
+    }
+
+    if (sortBy === 'title_asc') query = query.order('title', { ascending: true })
+    else if (sortBy === 'title_desc') query = query.order('title', { ascending: false })
+    else if (sortBy === 'created_at_desc') query = query.order('created_at', { ascending: false })
+    else if (sortBy === 'release_date_desc') query = query.order('release_date', { ascending: false, nullsFirst: false })
+    else if (sortBy === 'release_date_asc') query = query.order('release_date', { ascending: true, nullsFirst: false })
+
+    const { data: movies } = await query
+    const validMovies = ((movies || []) as any[]).filter((m: any) => !isSoldOrExpired(m, referenceDate))
+
+    const homeMovies = validMovies.filter((m: any) => m.source === 'home_production')
+    const acquiredCandidates = validMovies.filter((m: any) => m.source === 'acquired')
+    const acquiredCandidateIds = acquiredCandidates.map((m: any) => m.id)
+
+    const acqWithOtherRight = await fetchMovieRightsIdsByType(acquiredCandidateIds, OTHER_RIGHT_TYPES)
+    const acqOtherEndDates = await fetchMovieRightsEndDates(acquiredCandidateIds, OTHER_RIGHT_TYPES)
+
+    const eligibleAcquired = acquiredCandidates.filter((m: any) => {
+      if (!acqWithOtherRight.has(m.id)) return false
+      const mrEnd = acqOtherEndDates.get(m.id)
+      const endDate = mrEnd ?? m.agreement_end_date ?? null
+      if (endDate && endDate < referenceDate) return false
+      return true
+    })
+
+    // "Not currently exploited" check — applies to both home (always-eligible) and acquired
+    // movies, since either can have a platform_right recorded against an Other-type platform.
+    const allCandidateIds = [...homeMovies.map((m: any) => m.id), ...eligibleAcquired.map((m: any) => m.id)]
+    const moviesWithActiveOtherPlatformRight = new Set<string>()
+    if (allCandidateIds.length > 0) {
+      const otherRights = await fetchPlatformRightsChunked(
+        allCandidateIds, 'movie_id, platforms(platform_type), end_date',
+        (q) => q.eq('is_current', true)
+      )
+      otherRights.forEach((r: any) => {
+        if (!isOtherExploitationPlatform(r.platforms?.platform_type || '')) return
+        if (!r.end_date || r.end_date >= referenceDate) moviesWithActiveOtherPlatformRight.add(r.movie_id)
+      })
+    }
+
+    const openHomeMovies = homeMovies.filter((m: any) => !moviesWithActiveOtherPlatformRight.has(m.id))
+    const openAcquiredMovies = eligibleAcquired.filter((m: any) => !moviesWithActiveOtherPlatformRight.has(m.id))
+
+    let openTitles: any[]
+    const sf = options?.sourceFilter || 'all'
+    if (sf === 'home') openTitles = openHomeMovies
+    else if (sf === 'acquired') openTitles = openAcquiredMovies
+    else if (sf === 'bangladeshi') openTitles = [...openHomeMovies, ...openAcquiredMovies].filter((m: any) => m.is_bangladeshi === true)
+    else openTitles = [...openHomeMovies, ...openAcquiredMovies]
+
+    if (options?.bangladeshiOnly) {
+      openTitles = openTitles.filter((m: any) => m.is_bangladeshi === true)
+    }
+
+    if (sortBy === 'title_asc') openTitles.sort((a, b) => (a.title || '').localeCompare(b.title || ''))
+    else if (sortBy === 'title_desc') openTitles.sort((a, b) => (b.title || '').localeCompare(a.title || ''))
+
+    const totalCount = openTitles.length
+    const limit = options?.limit || 10
+    const offset = options?.offset || 0
+    const paginated = openTitles.slice(offset, offset + limit)
+
+    return { data: paginated, count: totalCount }
+  } catch (error) {
+    console.error('Error fetching open other-rights titles:', error)
+    return { data: [], count: 0 }
+  }
+}
+
+export interface OtherRight {
+  id: string
+  right_type: string
+  nature?: string
+  territory?: string
+  start_date?: string
+  end_date?: string
+}
+
+export type MovieWithOtherRights = MovieWithDetails & {
+  other_rights_expiry_date?: string
+  other_rights_list?: OtherRight[]
+}
+
+// Movies whose Airborne/Ship/Other movie_rights are expiring in a given date range.
+// Home productions have no dated rows for these types, so this only ever returns acquired movies.
+export async function getExpiringOtherRightsTitles(options?: {
+  fromDate?: string
+  toDate?: string
+  language?: string[]
+  sourceFilter?: 'all' | 'home' | 'acquired' | 'bangladeshi'
+  search?: string
+  certification?: string[]
+  sortBy?: 'title_asc' | 'title_desc' | 'release_date_desc' | 'release_date_asc' | 'expiry_asc' | 'expiry_desc'
+  limit?: number
+  offset?: number
+}): Promise<{ data: MovieWithOtherRights[]; count: number }> {
+  try {
+    const today = new Date().toISOString().split('T')[0]
+    const sortBy = options?.sortBy || 'expiry_asc'
+    const fromDate = options?.fromDate || null
+    const toDate = options?.toDate || null
+
+    let moviesQuery = supabase.from('movies_with_details').select('*').eq('approval_status', 'approved').eq('source', 'acquired')
+    if (options?.search) moviesQuery = moviesQuery.or(`title.ilike.${escapeOrSearchTerm(options.search)}%,production_no.ilike.${escapeOrSearchTerm(options.search)}%`)
+    if (options?.language && options.language.length > 0) moviesQuery = moviesQuery.in('language', options.language)
+    if (options?.certification && options.certification.length > 0) {
+      const certs = [...options.certification]
+      const hasUaVariant = certs.some((c) => c === 'UA' || c === 'U/A' || c.startsWith('UA '))
+      if (hasUaVariant && !certs.includes('U/A')) certs.push('U/A')
+      moviesQuery = moviesQuery.in('certification', certs)
+    }
+
+    const { data: allMoviesRaw } = await moviesQuery
+    const allMovies = ((allMoviesRaw || []) as any[])
+    const validMovies = allMovies.filter((m: any) => !isSoldOrExpired(m, today))
+    const movieById = new Map<string, any>(validMovies.map((m: any) => [m.id, m]))
+    const movieIds = validMovies.map((m: any) => m.id)
+
+    const results: MovieWithOtherRights[] = []
+    if (movieIds.length > 0) {
+      const otherMovieRights: any[] = []
+      for (let i = 0; i < movieIds.length; i += CHUNK_SIZE) {
+        const chunk = movieIds.slice(i, i + CHUNK_SIZE)
+        let q = supabase
+          .from('movie_rights')
+          .select('id, movie_id, right_type, nature, territory, start_date, end_date')
+          .in('movie_id', chunk)
+          .in('right_type', OTHER_RIGHT_TYPES)
+          .not('end_date', 'is', null)
+        if (fromDate) q = q.gte('end_date', fromDate)
+        if (toDate) q = q.lte('end_date', toDate)
+        const { data } = await q
+        if (data) otherMovieRights.push(...data)
+      }
+
+      const earliestExpiryPerMovie = new Map<string, string>()
+      const rightsPerMovie = new Map<string, OtherRight[]>()
+
+      otherMovieRights.forEach((r: any) => {
+        const existing = earliestExpiryPerMovie.get(r.movie_id)
+        if (!existing || r.end_date < existing) earliestExpiryPerMovie.set(r.movie_id, r.end_date)
+        const arr = rightsPerMovie.get(r.movie_id) || []
+        arr.push({ id: r.id, right_type: r.right_type, nature: r.nature, territory: r.territory, start_date: r.start_date, end_date: r.end_date })
+        rightsPerMovie.set(r.movie_id, arr)
+      })
+
+      earliestExpiryPerMovie.forEach((expiryDate, movieId) => {
+        const movie = movieById.get(movieId)
+        if (!movie) return
+        results.push({ ...movie, other_rights_expiry_date: expiryDate, other_rights_list: rightsPerMovie.get(movieId) || [] })
+      })
+    }
+
+    let deduped = results
+
+    const sf = options?.sourceFilter || 'all'
+    if (sf === 'bangladeshi') deduped = deduped.filter((m: any) => m.is_bangladeshi === true)
+    // sf === 'home' yields nothing (home has no dated Other rights); 'acquired'/'all' both pass through since this query is acquired-only.
+
+    if (sortBy === 'expiry_asc') deduped.sort((a, b) => (a.other_rights_expiry_date || '').localeCompare(b.other_rights_expiry_date || ''))
+    else if (sortBy === 'expiry_desc') deduped.sort((a, b) => (b.other_rights_expiry_date || '').localeCompare(a.other_rights_expiry_date || ''))
+    else if (sortBy === 'title_asc') deduped.sort((a, b) => (a.title || '').localeCompare(b.title || ''))
+    else if (sortBy === 'title_desc') deduped.sort((a, b) => (b.title || '').localeCompare(a.title || ''))
+    else if (sortBy === 'release_date_desc') deduped.sort((a, b) => (b.release_date || '').localeCompare(a.release_date || ''))
+    else if (sortBy === 'release_date_asc') deduped.sort((a, b) => (a.release_date || '').localeCompare(b.release_date || ''))
+
+    const totalCount = deduped.length
+    const limit = options?.limit || 10
+    const offset = options?.offset || 0
+    return { data: deduped.slice(offset, offset + limit), count: totalCount }
+  } catch (error) {
+    console.error('Error fetching expiring other-rights titles:', error)
+    return { data: [], count: 0 }
+  }
+}
+
+export interface OtherRightsModeStats {
+  openTitlesCount: number
+  openHomeTitlesCount: number
+  openAcquiredTitlesCount: number
+  expiringRightsCount: number
+  activeRightsCount: number
+}
+
+export async function getOtherRightsModeStats(language?: string[], openTo?: string): Promise<OtherRightsModeStats> {
+  try {
+    const today = new Date().toISOString().split('T')[0]
+    const referenceDate = openTo || today
+    const currentYear = new Date().getFullYear()
+    const currentYearStart = `${currentYear}-01-01`
+    const currentYearEnd = `${currentYear}-12-31`
+
+    let moviesQuery = supabase
+      .from('movies')
+      .select('id, source, agreement_end_date')
+      .eq('approval_status', 'approved')
+    if (language && language.length > 0) moviesQuery = moviesQuery.in('language', language)
+    const { data: allMovies } = await moviesQuery
+
+    const validMovies = (allMovies || []).filter((m: any) => !isSoldOrExpired(m, referenceDate))
+    const homeMovies = validMovies.filter((m: any) => m.source === 'home_production')
+    const acquiredCandidates = validMovies.filter((m: any) => m.source === 'acquired')
+    const acquiredCandidateIds = acquiredCandidates.map((m: any) => m.id)
+
+    const acqWithOtherRight = await fetchMovieRightsIdsByType(acquiredCandidateIds, OTHER_RIGHT_TYPES)
+    const acqOtherEndDates = await fetchMovieRightsEndDates(acquiredCandidateIds, OTHER_RIGHT_TYPES)
+
+    const eligibleAcquired = acquiredCandidates.filter((m: any) => {
+      if (!acqWithOtherRight.has(m.id)) return false
+      const mrEnd = acqOtherEndDates.get(m.id)
+      const endDate = mrEnd ?? m.agreement_end_date ?? null
+      if (endDate && endDate < referenceDate) return false
+      return true
+    })
+
+    const allCandidateIds = [...homeMovies.map((m: any) => m.id), ...eligibleAcquired.map((m: any) => m.id)]
+    const moviesWithActiveOtherPlatformRight = new Set<string>()
+    if (allCandidateIds.length > 0) {
+      const otherRights = await fetchPlatformRightsChunked(
+        allCandidateIds, 'movie_id, platforms(platform_type), end_date',
+        (q) => q.eq('is_current', true)
+      )
+      otherRights.forEach((r: any) => {
+        if (!isOtherExploitationPlatform(r.platforms?.platform_type || '')) return
+        if (!r.end_date || r.end_date >= referenceDate) moviesWithActiveOtherPlatformRight.add(r.movie_id)
+      })
+    }
+
+    const openHomeCount = homeMovies.filter((m: any) => !moviesWithActiveOtherPlatformRight.has(m.id)).length
+    const openAcquiredCount = eligibleAcquired.filter((m: any) => !moviesWithActiveOtherPlatformRight.has(m.id)).length
+
+    // Expiring — unique acquired movies with an Other/Airborne/Ship movie_rights row expiring this year
+    let expiringCount = 0
+    const allValidMovieIds = validMovies.map((m: any) => m.id)
+    if (allValidMovieIds.length > 0) {
+      const expiringRights: any[] = []
+      for (let i = 0; i < allValidMovieIds.length; i += CHUNK_SIZE) {
+        const chunk = allValidMovieIds.slice(i, i + CHUNK_SIZE)
+        const { data } = await supabase
+          .from('movie_rights')
+          .select('movie_id')
+          .in('movie_id', chunk)
+          .in('right_type', OTHER_RIGHT_TYPES)
+          .gte('end_date', currentYearStart)
+          .lte('end_date', currentYearEnd)
+        if (data) expiringRights.push(...data)
+      }
+      expiringCount = new Set(expiringRights.map((r: any) => r.movie_id)).size
+    }
+
+    // Active — unique movies with a currently-live platform_rights row on an Other/Airborne/Ship
+    // -classified platform (isOtherExploitationPlatform). Mirrors "Active Internet Rights"
+    // exactly; ignores movie_rights entirely, so returns 0 until such a platform exists.
+    let activeCount = 0
+    const allMovieIds = validMovies.map((m: any) => m.id)
+    if (allMovieIds.length > 0) {
+      const activeRights = await fetchPlatformRightsChunked(
+        allMovieIds, 'movie_id, platforms(platform_type), end_date',
+        (q) => q.eq('is_current', true)
+      )
+      const activeIds = new Set<string>()
+      activeRights.forEach((r: any) => {
+        if (!isOtherExploitationPlatform(r.platforms?.platform_type || '')) return
+        if (r.end_date && r.end_date < today) return
+        activeIds.add(r.movie_id)
+      })
+      activeCount = activeIds.size
+    }
+
+    return {
+      openTitlesCount: openHomeCount + openAcquiredCount,
+      openHomeTitlesCount: openHomeCount,
+      openAcquiredTitlesCount: openAcquiredCount,
+      expiringRightsCount: expiringCount,
+      activeRightsCount: activeCount,
+    }
+  } catch (error) {
+    console.error('Error calculating other-rights mode stats:', error)
+    return { openTitlesCount: 0, openHomeTitlesCount: 0, openAcquiredTitlesCount: 0, expiringRightsCount: 0, activeRightsCount: 0 }
+  }
+}
+
+/**
+ * Movies currently holding an unexpired Other/Airborne/Ship movie_rights row — the "Active"
+ * counterpart to Open Titles. Unlike Internet/Satellite, there's no platform_rights linkage for
+ * these types, so "active" is determined purely from movie_rights dates (falling back to
+ * agreement_end_date for acquired movies when the row itself is perpetual).
+ */
+/**
+ * Movies with a currently-live platform_rights row on an Other/Airborne/Ship-classified
+ * platform (isOtherExploitationPlatform) — exact mirror of getActiveInternetTitles, just keyed
+ * off a different platform_type classifier. Ignores movie_rights entirely: since no
+ * Airborne/Ship/Other-typed platform exists in seed data today, this returns no rows until such
+ * a platform is created and a platform_right recorded against it.
+ */
+export async function getActiveOtherRightsTitles(options?: {
+  limit?: number
+  offset?: number
+  search?: string
+  language?: string[]
+  sourceFilter?: 'all' | 'home' | 'acquired' | 'bangladeshi'
+  certification?: string[]
+  sortBy?: 'title_asc' | 'title_desc' | 'release_date_desc' | 'release_date_asc'
+}): Promise<{ data: MovieWithOtherRights[]; count: number }> {
+  try {
+    const today = new Date().toISOString().split('T')[0]
+    const sortBy = options?.sortBy || 'title_asc'
+
+    let query = supabase.from('movies_with_details').select('*').eq('approval_status', 'approved')
+    if (options?.search) query = query.or(`title.ilike.${escapeOrSearchTerm(options.search)}%,production_no.ilike.${escapeOrSearchTerm(options.search)}%`)
+    if (options?.language && options.language.length > 0) query = query.in('language', options.language)
+    if (options?.certification && options.certification.length > 0) {
+      const certs = [...options.certification]
+      const hasUaVariant = certs.some((c) => c === 'UA' || c === 'U/A' || c.startsWith('UA '))
+      if (hasUaVariant && !certs.includes('U/A')) certs.push('U/A')
+      query = query.in('certification', certs)
+    }
+
+    const { data: movies } = await query
+    const validMovies = ((movies || []) as any[]).filter((m: any) => !isSoldOrExpired(m, today))
+
+    let filteredMovies = validMovies
+    const sf = options?.sourceFilter || 'all'
+    if (sf === 'home') filteredMovies = validMovies.filter((m: any) => m.source === 'home_production')
+    else if (sf === 'acquired') filteredMovies = validMovies.filter((m: any) => m.source === 'acquired')
+    else if (sf === 'bangladeshi') filteredMovies = validMovies.filter((m: any) => m.is_bangladeshi === true)
+
+    const movieIds = filteredMovies.map((m: any) => m.id)
+    if (movieIds.length === 0) return { data: [], count: 0 }
+
+    const activeRights = await fetchPlatformRightsChunked(
+      movieIds, 'movie_id, id, start_date, end_date, nature, territory, platforms(name, platform_type)',
+      (q) => q.eq('is_current', true)
+    )
+
+    const rightsPerMovie = new Map<string, OtherRight[]>()
+    activeRights.forEach((r: any) => {
+      const platformType = r.platforms?.platform_type || ''
+      if (!isOtherExploitationPlatform(platformType)) return
+      if (r.end_date && r.end_date < today) return
+      const right: OtherRight = {
+        id: r.id,
+        right_type: platformType,
+        nature: r.nature,
+        territory: r.territory,
+        start_date: r.start_date,
+        end_date: r.end_date,
+      }
+      const arr = rightsPerMovie.get(r.movie_id) || []
+      arr.push(right)
+      rightsPerMovie.set(r.movie_id, arr)
+    })
+
+    const results: MovieWithOtherRights[] = filteredMovies
+      .filter((m: any) => rightsPerMovie.has(m.id))
+      .map((m: any) => {
+        const rights = rightsPerMovie.get(m.id)!
+        rights.sort((a, b) => (a.end_date || '').localeCompare(b.end_date || ''))
+        return { ...m, other_rights_list: rights, other_rights_expiry_date: rights[0]?.end_date }
+      })
+
+    if (sortBy === 'title_asc') results.sort((a, b) => (a.title || '').localeCompare(b.title || ''))
+    else if (sortBy === 'title_desc') results.sort((a, b) => (b.title || '').localeCompare(a.title || ''))
+    else if (sortBy === 'release_date_desc') results.sort((a, b) => (b.release_date || '').localeCompare(a.release_date || ''))
+    else if (sortBy === 'release_date_asc') results.sort((a, b) => (a.release_date || '').localeCompare(b.release_date || ''))
+
+    const totalCount = results.length
+    const limit = options?.limit || 10
+    const offset = options?.offset || 0
+    return { data: results.slice(offset, offset + limit), count: totalCount }
+  } catch (error) {
+    console.error('Error fetching active other-rights titles:', error)
+    return { data: [], count: 0 }
+  }
+}
+
+/**
+ * Plain listing of movies filtered by whether Clip Rights were acquired — no rights-lifecycle
+ * concept here (clip_rights is a flat Yes/No + duration flag on the movie, not a dated
+ * movie_rights row), so this is a simple table query, not an "open titles" algorithm.
+ */
+export async function getClipRightsMovies(options?: {
+  limit?: number
+  offset?: number
+  search?: string
+  language?: string[]
+  sourceFilter?: 'all' | 'home' | 'acquired' | 'bangladeshi'
+  clipRightsFilter?: 'all' | 'yes' | 'no'
+  agreementEndBy?: string
+  sortBy?: 'title_asc' | 'title_desc' | 'release_date_desc' | 'release_date_asc'
+}): Promise<{ data: MovieWithDetails[]; count: number }> {
+  try {
+    const sortBy = options?.sortBy || 'title_asc'
+    let query = supabase.from('movies_with_details').select('*').eq('approval_status', 'approved')
+
+    if (options?.search) {
+      query = query.or(`title.ilike.${escapeOrSearchTerm(options.search)}%,production_no.ilike.${escapeOrSearchTerm(options.search)}%`)
+    }
+    if (options?.language && options.language.length > 0) {
+      query = query.in('language', options.language)
+    }
+
+    if (sortBy === 'title_asc') query = query.order('title', { ascending: true })
+    else if (sortBy === 'title_desc') query = query.order('title', { ascending: false })
+    else if (sortBy === 'release_date_desc') query = query.order('release_date', { ascending: false, nullsFirst: false })
+    else if (sortBy === 'release_date_asc') query = query.order('release_date', { ascending: true, nullsFirst: false })
+
+    const { data: movies } = await query
+    const today = new Date().toISOString().split('T')[0]
+    // Always exclude sold (home) and expired-agreement (acquired) movies from the rights dashboard
+    let filtered = ((movies || []) as any[]).filter((m: any) => !isSoldOrExpired(m, today))
+
+    const sf = options?.sourceFilter || 'all'
+    if (sf === 'home') filtered = filtered.filter((m) => m.source === 'home_production')
+    else if (sf === 'acquired') filtered = filtered.filter((m) => m.source === 'acquired')
+    else if (sf === 'bangladeshi') filtered = filtered.filter((m) => m.is_bangladeshi === true)
+
+    const cf = options?.clipRightsFilter || 'all'
+    if (cf === 'yes') filtered = filtered.filter((m) => (m.clip_rights || '').trim().toLowerCase() === 'yes')
+    else if (cf === 'no') filtered = filtered.filter((m) => (m.clip_rights || '').trim().toLowerCase() !== 'yes')
+
+    // Acquired-only: home productions have no agreement_end_date, so this filter excludes them.
+    if (options?.agreementEndBy) {
+      const by = options.agreementEndBy
+      filtered = filtered.filter((m) => m.source === 'acquired' && m.agreement_end_date && m.agreement_end_date <= by)
+    }
+
+    const totalCount = filtered.length
+    const limit = options?.limit || 10000
+    const offset = options?.offset || 0
+    return { data: filtered.slice(offset, offset + limit), count: totalCount }
+  } catch (error) {
+    console.error('Error fetching clip rights movies:', error)
+    return { data: [], count: 0 }
+  }
+}
+
 export async function getLanguages(): Promise<string[]> {
   try {
     const { data, error } = await supabase.from('movies').select('language').not('language', 'is', null)
@@ -850,7 +1337,7 @@ export type MovieWithSatelliteRights = MovieWithDetails & {
 export async function getExpiringSatelliteTitles(options?: {
   fromDate?: string
   toDate?: string
-  language?: string
+  language?: string[]
   sourceFilter?: 'all' | 'home' | 'acquired' | 'bangladeshi'
   search?: string
   certification?: string[]
@@ -870,7 +1357,7 @@ export async function getExpiringSatelliteTitles(options?: {
     let moviesQuery = supabase.from('movies_with_details').select('*').eq('approval_status', 'approved')
 
     if (options?.search) moviesQuery = moviesQuery.or(`title.ilike.${escapeOrSearchTerm(options.search)}%,production_no.ilike.${escapeOrSearchTerm(options.search)}%`)
-    if (options?.language) moviesQuery = moviesQuery.eq('language', options.language)
+    if (options?.language && options.language.length > 0) moviesQuery = moviesQuery.in('language', options.language)
     if (options?.certification && options.certification.length > 0) {
       const certs = [...options.certification]
       const hasUaVariant = certs.some((c) => c === 'UA' || c === 'U/A' || c.startsWith('UA '))
@@ -999,7 +1486,7 @@ export interface MovieWithInternetRights extends MovieWithDetails {
 export async function getExpiringInternetTitles(options?: {
   fromDate?: string
   toDate?: string
-  language?: string
+  language?: string[]
   sourceFilter?: 'all' | 'home' | 'acquired' | 'bangladeshi'
   search?: string
   certification?: string[]
@@ -1018,7 +1505,7 @@ export async function getExpiringInternetTitles(options?: {
     // Fetch valid movies
     let moviesQuery = supabase.from('movies_with_details').select('*').eq('approval_status', 'approved')
     if (options?.search) moviesQuery = moviesQuery.or(`title.ilike.${escapeOrSearchTerm(options.search)}%,production_no.ilike.${escapeOrSearchTerm(options.search)}%`)
-    if (options?.language) moviesQuery = moviesQuery.eq('language', options.language)
+    if (options?.language && options.language.length > 0) moviesQuery = moviesQuery.in('language', options.language)
     if (options?.certification && options.certification.length > 0) {
       const certs = [...options.certification]
       const hasUaVariant = certs.some((c) => c === 'UA' || c === 'U/A' || c.startsWith('UA '))
@@ -1107,7 +1594,7 @@ export async function getExpiringInternetTitles(options?: {
 
 // Movies with at least one active internet/SVOD platform right (with sub-rights details)
 export async function getActiveInternetTitles(options?: {
-  language?: string
+  language?: string[]
   sourceFilter?: 'all' | 'home' | 'acquired' | 'bangladeshi'
   search?: string
   certification?: string[]
@@ -1121,7 +1608,7 @@ export async function getActiveInternetTitles(options?: {
 
     let moviesQuery = supabase.from('movies_with_details').select('*').eq('approval_status', 'approved')
     if (options?.search) moviesQuery = moviesQuery.or(`title.ilike.${escapeOrSearchTerm(options.search)}%,production_no.ilike.${escapeOrSearchTerm(options.search)}%`)
-    if (options?.language) moviesQuery = moviesQuery.eq('language', options.language)
+    if (options?.language && options.language.length > 0) moviesQuery = moviesQuery.in('language', options.language)
     if (options?.certification && options.certification.length > 0) {
       const certs = [...options.certification]
       const hasUaVariant = certs.some((c) => c === 'UA' || c === 'U/A' || c.startsWith('UA '))
@@ -1197,7 +1684,7 @@ export async function getActiveInternetTitles(options?: {
 }
 
 // Count of movies with active internet rights (for stat card)
-export async function getActiveInternetTitlesCount(language?: string): Promise<{ total: number; home: number; acquired: number }> {
+export async function getActiveInternetTitlesCount(language?: string[]): Promise<{ total: number; home: number; acquired: number }> {
   try {
     const today = new Date().toISOString().split('T')[0]
 
@@ -1206,7 +1693,7 @@ export async function getActiveInternetTitlesCount(language?: string): Promise<{
       .from('movies')
       .select('id, source, home_sold, agreement_end_date')
       .eq('approval_status', 'approved')
-    if (language) moviesQuery = moviesQuery.eq('language', language)
+    if (language && language.length > 0) moviesQuery = moviesQuery.in('language', language)
     const { data: allMovies } = await moviesQuery
 
     const validMovies = (allMovies || []).filter((m: any) => !isSoldOrExpired(m, today))
@@ -1271,7 +1758,7 @@ export async function getMoviesForDashboard(options?: {
   rightsStatus?: 'expiring' | 'perpetual' | 'sold_to_grassroot' | 'all'
   versionFilter?: string
   search?: string
-  language?: string
+  language?: string[]
   sourceFilter?: 'all' | 'home' | 'acquired' | 'bangladeshi'
   sortBy?: 'title_asc' | 'title_desc' | 'created_at_desc' | 'release_date_desc' | 'release_date_asc'
   limit?: number
@@ -1308,8 +1795,8 @@ export async function getMoviesForDashboard(options?: {
     }
 
     // Apply language filter
-    if (options?.language) {
-      query = query.eq('language', options.language)
+    if (options?.language && options.language.length > 0) {
+      query = query.in('language', options.language)
     }
 
     // Category filtering - only apply upfront filters for non-special categories

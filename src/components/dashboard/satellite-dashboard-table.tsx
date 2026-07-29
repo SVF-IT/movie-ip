@@ -77,7 +77,7 @@ type SourceFilter = 'all' | 'home' | 'acquired' | 'bangladeshi'
 
 interface SatelliteDashboardTableProps {
   activeCard: ActiveCard
-  language: string
+  language: string[]
   expiryYear: string
   onExpiryYearChange: (year: string) => void
   expiryFrom: string
@@ -154,13 +154,20 @@ export function SatelliteDashboardTable({
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
-  const [licensorFilter, setLicensorFilter] = useState('')
+  const [licensorFilter, setLicensorFilter] = useState<string[]>([])
   const [licensorOpen, setLicensorOpen] = useState(false)
   const [licensorSearch, setLicensorSearch] = useState('')
   const [certFilter, setCertFilter] = useState<string[]>([])
   const [certOpen, setCertOpen] = useState(false)
   const [sortBy, setSortBy] = useState<SortOption>('title_asc')
-  const [wtpFilter, setWtpFilter] = useState<'all' | 'wtp' | 'wtp_bd' | 'library'>('all')
+  const [wtpFilter, setWtpFilter] = useState<('wtp' | 'wtp_bd' | 'library')[]>([])
+  const [wtpOpen, setWtpOpen] = useState(false)
+  const WTP_OPTIONS: { value: 'wtp' | 'wtp_bd' | 'library'; label: string }[] = [
+    { value: 'wtp', label: 'WTP' },
+    { value: 'wtp_bd', label: 'WTP/BD' },
+    { value: 'library', label: 'Library' },
+  ]
+  const [agreementEndBy, setAgreementEndBy] = useState('')
   const [showHoldback, setShowHoldback] = useState(false)
   const [bangladeshiOnly, setBangladeshiOnly] = useState(false)
   const [showExportDialog, setShowExportDialog] = useState(false)
@@ -184,7 +191,15 @@ export function SatelliteDashboardTable({
     ? licensorOptions.filter((l) => l.toLowerCase().includes(licensorSearch.trim().toLowerCase()))
     : licensorOptions
 
-  useEffect(() => { setSelectedIds(new Set()) }, [activeCard, language, expiryFrom, expiryTo, openFrom, openTo, sourceFilter, licensorFilter, certFilter, wtpFilter, bangladeshiOnly])
+  const toggleLicensor = (l: string) => {
+    setLicensorFilter((prev) => prev.includes(l) ? prev.filter((x) => x !== l) : [...prev, l])
+  }
+
+  const toggleWtp = (v: 'wtp' | 'wtp_bd' | 'library') => {
+    setWtpFilter((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])
+  }
+
+  useEffect(() => { setSelectedIds(new Set()) }, [activeCard, language, expiryFrom, expiryTo, openFrom, openTo, sourceFilter, licensorFilter, certFilter, wtpFilter, bangladeshiOnly, agreementEndBy])
 
   useEffect(() => {
     const timer = setTimeout(() => { setDebouncedSearch(search) }, 300)
@@ -203,7 +218,8 @@ export function SatelliteDashboardTable({
 
   useEffect(() => {
     setSortBy(activeCard === 'expiring' ? 'expiry_asc' : 'title_asc')
-    setWtpFilter('all')
+    setWtpFilter([])
+    setAgreementEndBy('')
   }, [activeCard])
 
   const toggleCert = (cert: string) => {
@@ -222,11 +238,11 @@ export function SatelliteDashboardTable({
       if (activeCard === 'open_titles') {
         const { data, count } = await getOpenTitlesForMode('satellite', {
           search: debouncedSearch || undefined,
-          language: language || undefined,
+          language: language.length > 0 ? language : undefined,
           sourceFilter,
           sortBy: safeSortBy,
           certification: certFilter.length > 0 ? certFilter : undefined,
-          wtpFilter: wtpFilter !== 'all' ? wtpFilter : undefined,
+          wtpFilter: wtpFilter.length > 0 ? wtpFilter : undefined,
           bangladeshiOnly: bangladeshiOnly || undefined,
           openFrom: openFrom || undefined,
           openTo: openTo || undefined,
@@ -240,7 +256,7 @@ export function SatelliteDashboardTable({
         const { data, count } = await getExpiringSatelliteTitles({
           fromDate: expiryFrom || undefined,
           toDate: expiryTo || undefined,
-          language: language || undefined,
+          language: language.length > 0 ? language : undefined,
           sourceFilter,
           search: debouncedSearch || undefined,
           sortBy,
@@ -256,7 +272,7 @@ export function SatelliteDashboardTable({
         const { data, count } = await getMoviesForDashboard({
           category: 'wtp',
           search: debouncedSearch || undefined,
-          language: language || undefined,
+          language: language.length > 0 ? language : undefined,
           sourceFilter,
           sortBy: safeSortBy,
           certification: certFilter.length > 0 ? certFilter : undefined,
@@ -280,8 +296,15 @@ export function SatelliteDashboardTable({
     setExportLoading(true)
     try {
       const rawData = await fetchData(true)
-      const data = (licensorFilter.trim() && activeCard !== 'expiring')
-        ? (rawData as any[]).filter((m: any) => getEffectiveLicensor(m).toLowerCase().includes(licensorFilter.trim().toLowerCase()))
+      const data = activeCard !== 'expiring'
+        ? (rawData as any[]).filter((m: any) => {
+            if (licensorFilter.length > 0 && !licensorFilter.includes(getEffectiveLicensor(m))) return false
+            if (agreementEndBy) {
+              if (m.source !== 'acquired' || !m.agreement_end_date) return false
+              if (m.agreement_end_date > agreementEndBy) return false
+            }
+            return true
+          })
         : rawData
       let preparedData: Record<string, unknown>[]
       if (activeCard === 'expiring') {
@@ -340,11 +363,17 @@ export function SatelliteDashboardTable({
     } finally {
       setExportLoading(false)
     }
-  }, [fetchData, activeCard, selectedIds, licensorFilter])
+  }, [fetchData, activeCard, selectedIds, licensorFilter, agreementEndBy])
 
-  const licensorFilteredMovies = licensorFilter.trim()
-    ? movies.filter((m: any) => getEffectiveLicensor(m).toLowerCase().includes(licensorFilter.trim().toLowerCase()))
+  const licensorFilteredMovies = (licensorFilter.length > 0
+    ? movies.filter((m: any) => licensorFilter.includes(getEffectiveLicensor(m)))
     : movies
+  ).filter((m: any) => {
+    if (!agreementEndBy) return true
+    // Acquired-only: home productions have no agreement_end_date, so this filter excludes them.
+    if (m.source !== 'acquired' || !m.agreement_end_date) return false
+    return m.agreement_end_date <= agreementEndBy
+  })
 
   const { sortedData, sortConfig, requestSort } = useSortableTable(licensorFilteredMovies)
 
@@ -379,7 +408,7 @@ export function SatelliteDashboardTable({
 
   const showExpiryFilters = activeCard === 'expiring'
   const showWtpCol = activeCard === 'open_titles'
-  const showLicensorCol = activeCard === 'open_titles' && (sourceFilter === 'acquired' || licensorFilter.trim().length > 0)
+  const showLicensorCol = activeCard === 'open_titles' && (sourceFilter === 'acquired' || licensorFilter.length > 0)
   const showHoldbackCol = activeCard === 'open_titles' && showHoldback
   // Expiring card: flat per-right rows (no expand/collapse)
   const flatExpiryRows = activeCard === 'expiring'
@@ -416,14 +445,16 @@ export function SatelliteDashboardTable({
           </SelectContent>
         </Select>
 
-        {/* Licensor searchable select */}
+        {/* Licensor multi-select */}
         <Popover open={licensorOpen} onOpenChange={(o) => { setLicensorOpen(o); if (!o) setLicensorSearch('') }}>
           <PopoverTrigger asChild>
             <Button variant="outline" size="sm"
-              className={`h-9 w-40 justify-start gap-1.5 text-xs font-normal bg-(--bg-raise) border-(--svf-border) hover:bg-(--hover) hover:border-(--svf-border-strong) transition-colors ${licensorFilter ? 'border-purple-500/60 text-purple-400 bg-purple-500/5' : 'text-(--text-faint)'}`}>
-              <span className="truncate flex-1 text-left">{licensorFilter || 'Licensor'}</span>
-              {licensorFilter && (
-                <span onClick={(e) => { e.stopPropagation(); setLicensorFilter('') }}
+              className={`h-9 w-40 justify-start gap-1.5 text-xs font-normal bg-(--bg-raise) border-(--svf-border) hover:bg-(--hover) hover:border-(--svf-border-strong) transition-colors ${licensorFilter.length > 0 ? 'border-purple-500/60 text-purple-400 bg-purple-500/5' : 'text-(--text-faint)'}`}>
+              <span className="truncate flex-1 text-left">
+                {licensorFilter.length === 0 ? 'Licensor' : licensorFilter.length === 1 ? licensorFilter[0] : `${licensorFilter.length} selected`}
+              </span>
+              {licensorFilter.length > 0 && (
+                <span onClick={(e) => { e.stopPropagation(); setLicensorFilter([]) }}
                   className="hover:text-red-400 transition-colors shrink-0">
                   <X className="h-3 w-3" />
                 </span>
@@ -438,8 +469,8 @@ export function SatelliteDashboardTable({
             </div>
             <div className="max-h-56 overflow-y-auto space-y-0.5">
               <div className="flex items-center gap-2 px-1.5 py-1.5 rounded hover:bg-(--hover) cursor-pointer transition-colors"
-                onClick={() => { setLicensorFilter(''); setLicensorOpen(false) }}>
-                <Checkbox checked={!licensorFilter} className="h-3.5 w-3.5" />
+                onClick={() => { setLicensorFilter([]) }}>
+                <Checkbox checked={licensorFilter.length === 0} className="h-3.5 w-3.5" />
                 <span className="text-xs text-(--text)">All Licensors</span>
               </div>
               {filteredLicensorOptions.length === 0 ? (
@@ -447,8 +478,8 @@ export function SatelliteDashboardTable({
               ) : (
                 filteredLicensorOptions.map((l) => (
                   <div key={l} className="flex items-center gap-2 px-1.5 py-1.5 rounded hover:bg-(--hover) cursor-pointer transition-colors"
-                    onClick={() => { setLicensorFilter(l); setLicensorOpen(false) }}>
-                    <Checkbox checked={licensorFilter === l} className="h-3.5 w-3.5" />
+                    onClick={() => toggleLicensor(l)}>
+                    <Checkbox checked={licensorFilter.includes(l)} className="h-3.5 w-3.5" />
                     <span className="text-xs text-(--text) truncate">{l}</span>
                   </div>
                 ))
@@ -544,17 +575,38 @@ export function SatelliteDashboardTable({
         {/* Open titles filters: WTP + date range */}
         {activeCard === 'open_titles' && (
           <>
-            <Select value={wtpFilter} onValueChange={(v) => { setWtpFilter(v as typeof wtpFilter) }}>
-              <SelectTrigger className={`w-32.5 ${selectTriggerCls} ${wtpFilter !== 'all' ? 'border-violet-500/60 text-violet-400 bg-violet-500/5' : ''}`}>
-                <SelectValue placeholder="WTP" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All WTP</SelectItem>
-                <SelectItem value="wtp">WTP</SelectItem>
-                <SelectItem value="wtp_bd">WTP/BD</SelectItem>
-                <SelectItem value="library">Library</SelectItem>
-              </SelectContent>
-            </Select>
+            <Popover open={wtpOpen} onOpenChange={setWtpOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm"
+                  className={`h-9 w-32.5 justify-start gap-1.5 text-xs font-normal bg-(--bg-raise) border-(--svf-border) hover:bg-(--hover) hover:border-(--svf-border-strong) transition-colors ${wtpFilter.length > 0 ? 'border-violet-500/60 text-violet-400 bg-violet-500/5' : 'text-(--text-faint)'}`}>
+                  <span className="truncate flex-1 text-left">
+                    {wtpFilter.length === 0 ? 'WTP' : wtpFilter.length === 1 ? WTP_OPTIONS.find((o) => o.value === wtpFilter[0])?.label : `${wtpFilter.length} selected`}
+                  </span>
+                  {wtpFilter.length > 0 && (
+                    <span onClick={(e) => { e.stopPropagation(); setWtpFilter([]) }}
+                      className="hover:text-red-400 transition-colors shrink-0">
+                      <X className="h-3 w-3" />
+                    </span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-44 p-2 bg-(--panel-solid) border-(--svf-border)/60 shadow-xl" align="start">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2 px-1.5 py-1.5 rounded hover:bg-(--hover) cursor-pointer transition-colors"
+                    onClick={() => { setWtpFilter([]) }}>
+                    <Checkbox checked={wtpFilter.length === 0} className="h-3.5 w-3.5" />
+                    <span className="text-xs text-(--text)">All</span>
+                  </div>
+                  {WTP_OPTIONS.map((opt) => (
+                    <div key={opt.value} className="flex items-center gap-2 px-1.5 py-1.5 rounded hover:bg-(--hover) cursor-pointer transition-colors"
+                      onClick={() => toggleWtp(opt.value)}>
+                      <Checkbox checked={wtpFilter.includes(opt.value)} className="h-3.5 w-3.5" />
+                      <span className="text-xs text-(--text)">{opt.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
 
             <div className="flex items-center gap-1 bg-(--bg-raise) border border-(--svf-border) rounded-md px-2 h-9 hover:border-(--svf-border-strong) transition-colors">
               <span className="text-[10px] font-medium text-(--text-faint) uppercase px-1">From</span>
@@ -565,6 +617,20 @@ export function SatelliteDashboardTable({
               {(openFrom || openTo) && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onOpenFromChange(''); onOpenToChange('') }}
+                  className="ml-1 p-0.5 text-(--text-faint) hover:text-red-400 transition-colors"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+
+            {/* Agreement end-by date — separate from "open until": lets you spot acquired titles whose acquisition agreement itself is expiring by a given date, not just current-right expiry */}
+            <div className={`flex items-center gap-1 bg-(--bg-raise) border rounded-md px-2 h-9 transition-colors ${agreementEndBy ? 'border-amber-500/60' : 'border-(--svf-border) hover:border-(--svf-border-strong)'}`}>
+              <span className="text-[10px] font-medium text-(--text-faint) uppercase px-1">Agmt End By</span>
+              <DateInput value={agreementEndBy} onChange={setAgreementEndBy} />
+              {agreementEndBy && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setAgreementEndBy('') }}
                   className="ml-1 p-0.5 text-(--text-faint) hover:text-red-400 transition-colors"
                 >
                   <X className="h-3 w-3" />

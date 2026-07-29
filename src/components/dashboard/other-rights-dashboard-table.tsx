@@ -1,6 +1,5 @@
 'use client'
 
-import { HoldbackInfoIcon } from '@/components/dashboard/holdback-info-icon'
 import { DataExportDialog, type ExportFieldDef } from '@/components/import-export/data-export-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -12,16 +11,15 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import {
-  getActiveInternetTitles,
-  getExpiringInternetTitles,
-  getOpenTitlesForMode,
-  type InternetRight,
-  type MovieWithInternetRights,
+  getActiveOtherRightsTitles,
+  getExpiringOtherRightsTitles,
+  getOpenOtherRightsTitles,
+  type MovieWithOtherRights,
+  type OtherRight,
 } from '@/lib/api/dashboard'
 import type { MovieWithDetails } from '@/lib/types/database'
 import { cn } from '@/lib/utils'
 import {
-  Calendar,
   CalendarIcon,
   CalendarRange,
   ChevronDown,
@@ -29,9 +27,7 @@ import {
   ChevronUp,
   Download,
   Filter,
-  Globe,
   Loader2,
-  Monitor,
   Search,
   X,
 } from 'lucide-react'
@@ -88,7 +84,7 @@ type ActiveCard = 'open_titles' | 'expiring' | 'active'
 type SortOption = 'title_asc' | 'title_desc' | 'release_date_desc' | 'release_date_asc' | 'expiry_asc' | 'expiry_desc'
 type SourceFilter = 'all' | 'home' | 'acquired' | 'bangladeshi'
 
-interface InternetDashboardTableProps {
+interface OtherRightsDashboardTableProps {
   activeCard: ActiveCard
   language: string[]
   expiryYear: string
@@ -106,15 +102,15 @@ interface InternetDashboardTableProps {
 }
 
 const cardLabels: Record<ActiveCard, string> = {
-  open_titles: 'Open Internet Titles',
-  expiring: 'Expiring Internet Rights',
-  active: 'Active Internet Rights',
+  open_titles: 'Open Other Rights Titles',
+  expiring: 'Expiring Other Rights',
+  active: 'Active Other Rights',
 }
 
 const cardDescriptions: Record<ActiveCard, string> = {
-  open_titles: 'Movies without active internet/SVOD rights — available to license',
-  expiring: 'Movies whose internet rights are expiring in the selected period',
-  active: 'Movies with currently active internet/SVOD rights',
+  open_titles: 'Movies without active Airborne/Ship/Other rights — available to license',
+  expiring: 'Movies whose Airborne/Ship/Other rights are expiring in the selected period',
+  active: 'Movies with currently active Airborne/Ship/Other rights',
 }
 
 const EXPORT_FIELDS_OPEN: ExportFieldDef[] = [
@@ -123,9 +119,7 @@ const EXPORT_FIELDS_OPEN: ExportFieldDef[] = [
   { key: 'cast_names', label: 'Cast' },
   { key: 'director_names', label: 'Director' },
   { key: 'release_date', label: 'Release Date' },
-  { key: 'trailer_link', label: 'YT Trailer Link' },
   { key: 'certification', label: 'Censor' },
-  { key: 'wtp_library', label: 'WTP/Library' },
   { key: 'source', label: 'Source' },
   { key: 'assignor_licensor', label: 'Licensor' },
   { key: 'licensee', label: 'Licensee' },
@@ -137,8 +131,7 @@ const EXPORT_FIELDS_EXPIRING: ExportFieldDef[] = [
   { key: 'sl_no', label: 'Sl No' },
   { key: 'title', label: 'Title' },
   { key: 'source', label: 'Source' },
-  { key: 'platform_name', label: 'Platform' },
-  { key: 'rights_type_name', label: 'Type' },
+  { key: 'right_type', label: 'Type' },
   { key: 'nature', label: 'Nature' },
   { key: 'start_date', label: 'Start Date' },
   { key: 'end_date', label: 'Expiry Date' },
@@ -155,12 +148,11 @@ const EXPORT_FIELDS_ACTIVE: ExportFieldDef[] = [
   { key: 'cast_names', label: 'Cast' },
   { key: 'director_names', label: 'Director' },
   { key: 'release_date', label: 'Release Date' },
-  { key: 'trailer_link', label: 'YT Trailer Link' },
   { key: 'certification', label: 'Censor' },
-  { key: 'wtp_library', label: 'WTP/Library' },
+  { key: 'source', label: 'Source' },
 ]
 
-export function InternetDashboardTable({
+export function OtherRightsDashboardTable({
   activeCard,
   language,
   expiryYear,
@@ -175,10 +167,10 @@ export function InternetDashboardTable({
   onOpenToChange,
   yearOptions,
   fullPage = false,
-}: InternetDashboardTableProps) {
+}: OtherRightsDashboardTableProps) {
   const CERT_OPTIONS = ['U', 'UA', 'UA 7+', 'UA 13+', 'UA 16+', 'A', 'S']
 
-  const [movies, setMovies] = useState<(MovieWithDetails | MovieWithInternetRights)[]>([])
+  const [movies, setMovies] = useState<(MovieWithDetails | MovieWithOtherRights)[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -189,15 +181,7 @@ export function InternetDashboardTable({
   const [certFilter, setCertFilter] = useState<string[]>([])
   const [certOpen, setCertOpen] = useState(false)
   const [sortBy, setSortBy] = useState<SortOption>('title_asc')
-  const [wtpFilter, setWtpFilter] = useState<('wtp' | 'wtp_bd' | 'library')[]>([])
-  const [wtpOpen, setWtpOpen] = useState(false)
   const [agreementEndBy, setAgreementEndBy] = useState('')
-  const WTP_OPTIONS: { value: 'wtp' | 'wtp_bd' | 'library'; label: string }[] = [
-    { value: 'wtp', label: 'WTP' },
-    { value: 'wtp_bd', label: 'WTP/BD' },
-    { value: 'library', label: 'Library' },
-  ]
-  const [showHoldback, setShowHoldback] = useState(false)
   const [bangladeshiOnly, setBangladeshiOnly] = useState(false)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [showExportDialog, setShowExportDialog] = useState(false)
@@ -215,8 +199,7 @@ export function InternetDashboardTable({
     )
   }
 
-  // Reset selection on filter changes
-  useEffect(() => { setSelectedIds(new Set()) }, [activeCard, language, expiryFrom, expiryTo, openFrom, openTo, sourceFilter, licensorFilter, certFilter, wtpFilter, bangladeshiOnly, agreementEndBy])
+  useEffect(() => { setSelectedIds(new Set()) }, [activeCard, language, expiryFrom, expiryTo, openFrom, openTo, sourceFilter, licensorFilter, certFilter, bangladeshiOnly, agreementEndBy])
 
   const getEffectiveLicensor = (movie: any) => movie.source === 'home_production' ? 'SVF' : (movie.assignor_licensor || '')
 
@@ -247,23 +230,25 @@ export function InternetDashboardTable({
     setLicensorFilter((prev) => prev.includes(l) ? prev.filter((x) => x !== l) : [...prev, l])
   }
 
-  const toggleWtp = (v: 'wtp' | 'wtp_bd' | 'library') => {
-    setWtpFilter((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])
-  }
-
-  // Debounce search
   useEffect(() => {
     const timer = setTimeout(() => { setDebouncedSearch(search) }, 300)
     return () => clearTimeout(timer)
   }, [search])
 
-  // Reset sort on card change
   useEffect(() => {
     setSortBy(activeCard === 'expiring' ? 'expiry_asc' : 'title_asc')
-    setExpandedRows(new Set())
-    setWtpFilter([])
     setAgreementEndBy('')
+    setExpandedRows(new Set())
   }, [activeCard])
+
+  const toggleRow = (id: string) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const fetchData = useCallback(async (forExport = false): Promise<any[] | undefined> => {
     if (!forExport) setIsLoading(true)
@@ -276,13 +261,12 @@ export function InternetDashboardTable({
 
       const certParam = certFilter.length > 0 ? certFilter : undefined
       if (activeCard === 'open_titles') {
-        const { data } = await getOpenTitlesForMode('internet', {
+        const { data } = await getOpenOtherRightsTitles({
           search: debouncedSearch || undefined,
           language: language.length > 0 ? language : undefined,
           sourceFilter,
           certification: certParam,
           sortBy: safeSortBy,
-          wtpFilter: wtpFilter.length > 0 ? wtpFilter : undefined,
           bangladeshiOnly: bangladeshiOnly || undefined,
           openFrom: openFrom || undefined,
           openTo: openTo || undefined,
@@ -292,7 +276,7 @@ export function InternetDashboardTable({
         if (forExport) return data
         setMovies(data)
       } else if (activeCard === 'expiring') {
-        const { data } = await getExpiringInternetTitles({
+        const { data } = await getExpiringOtherRightsTitles({
           fromDate: expiryFrom || undefined,
           toDate: expiryTo || undefined,
           language: language.length > 0 ? language : undefined,
@@ -307,10 +291,10 @@ export function InternetDashboardTable({
         setMovies(data)
       } else {
         // active
-        const { data } = await getActiveInternetTitles({
+        const { data } = await getActiveOtherRightsTitles({
+          search: debouncedSearch || undefined,
           language: language.length > 0 ? language : undefined,
           sourceFilter,
-          search: debouncedSearch || undefined,
           certification: certParam,
           sortBy: safeSortBy,
           limit,
@@ -320,26 +304,16 @@ export function InternetDashboardTable({
         setMovies(data)
       }
     } catch (error) {
-      console.error('Error loading internet table:', error)
+      console.error('Error loading other-rights table:', error)
     } finally {
       if (!forExport) setIsLoading(false)
     }
-  }, [activeCard, debouncedSearch, language, sourceFilter, certFilter, expiryFrom, expiryTo, openFrom, openTo, sortBy, wtpFilter, bangladeshiOnly])
+  }, [activeCard, debouncedSearch, language, sourceFilter, certFilter, expiryFrom, expiryTo, openFrom, openTo, sortBy, bangladeshiOnly])
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  // For expiring card: flatten to one row per internet right
-  const flatExpiryRows = activeCard === 'expiring'
-  const flatRightRows: Array<{ movie: any; right: InternetRight }> = flatExpiryRows
-    ? filteredMovies.flatMap((movie: any) =>
-        ((movie as MovieWithInternetRights).internet_rights_list || []).map((right) => ({ movie, right }))
-      )
-    : []
-
   const toggleSelectAll = () => {
-    const ids = flatExpiryRows
-      ? flatRightRows.map(({ right }) => right.id)
-      : filteredMovies.map((m: any) => m.id)
+    const ids = filteredMovies.map((m: any) => m.id)
     setSelectedIds(prev => prev.size === ids.length ? new Set() : new Set(ids))
   }
 
@@ -347,27 +321,25 @@ export function InternetDashboardTable({
     setExportLoading(true)
     try {
       const rawData = await fetchData(true)
-      const data = activeCard !== 'expiring'
-        ? (rawData as any[]).filter((m: any) => {
-            if (licensorFilter.length > 0 && !licensorFilter.includes(getEffectiveLicensor(m))) return false
-            if (agreementEndBy) {
-              if (m.source !== 'acquired' || !m.agreement_end_date) return false
-              if (m.agreement_end_date > agreementEndBy) return false
-            }
-            return true
-          })
-        : rawData
+      const data = (rawData as any[]).filter((m: any) => {
+        if (licensorFilter.length > 0 && !licensorFilter.includes(getEffectiveLicensor(m))) return false
+        if (agreementEndBy) {
+          if (m.source !== 'acquired' || !m.agreement_end_date) return false
+          if (m.agreement_end_date > agreementEndBy) return false
+        }
+        return true
+      })
       let preparedData: Record<string, unknown>[]
       if (activeCard === 'expiring') {
         const rows: Record<string, unknown>[] = []
         let idx = 1
         const sourceData = selectedIds.size > 0
-          ? (data as MovieWithInternetRights[]).filter(m =>
-              (m.internet_rights_list || []).some(r => selectedIds.has(r.id))
+          ? (data as MovieWithOtherRights[]).filter(m =>
+              (m.other_rights_list || []).some(r => selectedIds.has(r.id))
             )
-          : (data as MovieWithInternetRights[])
+          : (data as MovieWithOtherRights[])
         for (const movie of sourceData || []) {
-          const rights = movie.internet_rights_list || []
+          const rights = movie.other_rights_list || []
           if (rights.length === 0) {
             rows.push({ sl_no: idx++, title: movie.title, source: movie.source, certification: (movie as any).certification, release_date: (movie as any).release_date || (movie as any).release_year || '', language: (movie as any).language })
           } else {
@@ -377,8 +349,7 @@ export function InternetDashboardTable({
                 sl_no: idx++,
                 title: movie.title,
                 source: movie.source === 'home_production' ? 'Home' : 'Acquired',
-                platform_name: right.platform_name || '',
-                rights_type_name: right.rights_type_name || '',
+                right_type: right.right_type || '',
                 nature: right.nature || '',
                 start_date: right.start_date || '',
                 end_date: right.end_date || '',
@@ -416,32 +387,12 @@ export function InternetDashboardTable({
     }
   }, [fetchData, activeCard, selectedIds, licensorFilter, agreementEndBy])
 
-  const toggleRow = (id: string) => {
-    setExpandedRows((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
   const getSourceBadge = (source: string) =>
     source === 'home_production' ? (
       <Badge variant="outline" className="bg-cyan-500/10 text-cyan-400 border-cyan-500/30 text-xs">Home</Badge>
     ) : (
       <Badge variant="outline" className="bg-purple-500/10 text-purple-400 border-purple-500/30 text-xs">Acquired</Badge>
     )
-
-  const getActiveBadge = (dateStr?: string) => {
-    if (!dateStr) return <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-xs">Active</Badge>
-    const days = Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000)
-    if (days < 0) return <Badge variant="outline" className="bg-red-500/10 text-red-400 border-red-500/30 text-xs">Expired</Badge>
-    return (
-      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-xs">
-        Active · {days}d left
-      </Badge>
-    )
-  }
 
   const sortOptions: { value: SortOption; label: string }[] = [
     { value: 'title_asc', label: 'A-Z (Title)' },
@@ -455,11 +406,8 @@ export function InternetDashboardTable({
   ]
 
   const hasSubRows = activeCard === 'active'
-  const showWtpCol = activeCard === 'open_titles'
   const showLicensorCol = activeCard === 'open_titles' && (sourceFilter === 'acquired' || licensorFilter.length > 0)
-  const showHoldbackCol = activeCard === 'open_titles' && showHoldback
-  // +1 for checkbox column in each branch
-  const colCount = flatExpiryRows ? 10 : hasSubRows ? 8 : showWtpCol ? (showLicensorCol ? 11 : 10) + (showHoldbackCol ? 1 : 0) : 7
+  const colCount = hasSubRows ? 6 : showLicensorCol ? 8 : 7
 
   const exportFields = activeCard === 'open_titles' ? EXPORT_FIELDS_OPEN
     : activeCard === 'expiring' ? EXPORT_FIELDS_EXPIRING
@@ -483,7 +431,7 @@ export function InternetDashboardTable({
 
         {/* Source filter */}
         <Select value={sourceFilter} onValueChange={(v) => { setSourceFilter(v as SourceFilter) }}>
-          <SelectTrigger className={`w-[140px] ${selectTriggerCls}`}>
+          <SelectTrigger className={`w-35 ${selectTriggerCls}`}>
             <SelectValue placeholder="Source" />
           </SelectTrigger>
           <SelectContent>
@@ -585,12 +533,11 @@ export function InternetDashboardTable({
           </PopoverContent>
         </Popover>
 
-
         {/* Expiry year + date range */}
         {activeCard === 'expiring' && (
           <>
             <Select value={expiryYear} onValueChange={onExpiryYearChange}>
-              <SelectTrigger className={`w-[140px] ${selectTriggerCls}`}>
+              <SelectTrigger className={`w-35 ${selectTriggerCls}`}>
                 <CalendarRange className="h-3 w-3 mr-1 text-(--text-faint) shrink-0" />
                 <SelectValue placeholder="Expiry Year" />
               </SelectTrigger>
@@ -621,42 +568,9 @@ export function InternetDashboardTable({
           </>
         )}
 
-        {/* Open titles filters: WTP + date range */}
+        {/* Open titles filters: date range + agreement end + bangladesh */}
         {activeCard === 'open_titles' && (
           <>
-            <Popover open={wtpOpen} onOpenChange={setWtpOpen}>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm"
-                  className={`h-9 w-32.5 justify-start gap-1.5 text-xs font-normal bg-(--bg-raise) border-(--svf-border) hover:bg-(--hover) hover:border-(--svf-border-strong) transition-colors ${wtpFilter.length > 0 ? 'border-violet-500/60 text-violet-400 bg-violet-500/5' : 'text-(--text-faint)'}`}>
-                  <span className="truncate flex-1 text-left">
-                    {wtpFilter.length === 0 ? 'WTP' : wtpFilter.length === 1 ? WTP_OPTIONS.find((o) => o.value === wtpFilter[0])?.label : `${wtpFilter.length} selected`}
-                  </span>
-                  {wtpFilter.length > 0 && (
-                    <span onClick={(e) => { e.stopPropagation(); setWtpFilter([]) }}
-                      className="hover:text-red-400 transition-colors shrink-0">
-                      <X className="h-3 w-3" />
-                    </span>
-                  )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-44 p-2 bg-(--panel-solid) border-(--svf-border)/60 shadow-xl" align="start">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2 px-1.5 py-1.5 rounded hover:bg-(--hover) cursor-pointer transition-colors"
-                    onClick={() => { setWtpFilter([]) }}>
-                    <Checkbox checked={wtpFilter.length === 0} className="h-3.5 w-3.5" />
-                    <span className="text-xs text-(--text)">All</span>
-                  </div>
-                  {WTP_OPTIONS.map((opt) => (
-                    <div key={opt.value} className="flex items-center gap-2 px-1.5 py-1.5 rounded hover:bg-(--hover) cursor-pointer transition-colors"
-                      onClick={() => toggleWtp(opt.value)}>
-                      <Checkbox checked={wtpFilter.includes(opt.value)} className="h-3.5 w-3.5" />
-                      <span className="text-xs text-(--text)">{opt.label}</span>
-                    </div>
-                  ))}
-                </div>
-              </PopoverContent>
-            </Popover>
-
             <div className="flex items-center gap-1 bg-(--bg-raise) border border-(--svf-border) rounded-md px-2 h-9 hover:border-(--svf-border-strong) transition-colors">
               <span className="text-[10px] font-medium text-(--text-faint) uppercase px-1">From</span>
               <DateInput value={openFrom} onChange={onOpenFromChange} />
@@ -673,7 +587,6 @@ export function InternetDashboardTable({
               )}
             </div>
 
-            {/* Agreement end-by date — separate from "open until": lets you spot acquired titles whose acquisition agreement itself is expiring by a given date, not just current-right expiry */}
             <div className={`flex items-center gap-1 bg-(--bg-raise) border rounded-md px-2 h-9 transition-colors ${agreementEndBy ? 'border-amber-500/60' : 'border-(--svf-border) hover:border-(--svf-border-strong)'}`}>
               <span className="text-[10px] font-medium text-(--text-faint) uppercase px-1">Agmt End By</span>
               <DateInput value={agreementEndBy} onChange={setAgreementEndBy} />
@@ -687,11 +600,6 @@ export function InternetDashboardTable({
               )}
             </div>
 
-            <label className="flex items-center gap-1.5 h-9 px-2.5 rounded-md border border-(--svf-border) bg-(--bg-raise) hover:border-(--svf-border-strong) transition-colors cursor-pointer">
-              <Checkbox checked={showHoldback} onCheckedChange={(v) => setShowHoldback(v === true)} className="h-3.5 w-3.5" />
-              <span className="text-xs text-(--text)">Show Holdback</span>
-            </label>
-
             <label className={cn(
               'flex items-center gap-1.5 h-9 px-2.5 rounded-md border transition-colors cursor-pointer',
               bangladeshiOnly ? 'border-emerald-500/60 bg-emerald-500/5' : 'border-(--svf-border) bg-(--bg-raise) hover:border-(--svf-border-strong)'
@@ -702,9 +610,25 @@ export function InternetDashboardTable({
           </>
         )}
 
+        {/* Active rights filters: agreement end-by date */}
+        {activeCard === 'active' && (
+          <div className={`flex items-center gap-1 bg-(--bg-raise) border rounded-md px-2 h-9 transition-colors ${agreementEndBy ? 'border-amber-500/60' : 'border-(--svf-border) hover:border-(--svf-border-strong)'}`}>
+            <span className="text-[10px] font-medium text-(--text-faint) uppercase px-1">Agmt End By</span>
+            <DateInput value={agreementEndBy} onChange={setAgreementEndBy} />
+            {agreementEndBy && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setAgreementEndBy('') }}
+                className="ml-1 p-0.5 text-(--text-faint) hover:text-red-400 transition-colors"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Sort */}
         <Select value={sortBy} onValueChange={(v) => { setSortBy(v as SortOption) }}>
-          <SelectTrigger className={`w-[180px] ${selectTriggerCls}`}>
+          <SelectTrigger className={`w-45 ${selectTriggerCls}`}>
             <SelectValue placeholder="Sort" />
           </SelectTrigger>
           <SelectContent>
@@ -759,6 +683,14 @@ export function InternetDashboardTable({
     return ''
   }
 
+  // Expiring card: flatten to one row per Other/Airborne/Ship right
+  const flatExpiryRows = activeCard === 'expiring'
+  const flatRightRows: Array<{ movie: any; right: OtherRight }> = flatExpiryRows
+    ? filteredMovies.flatMap((movie: any) =>
+        ((movie as MovieWithOtherRights).other_rights_list || []).map((right) => ({ movie, right }))
+      )
+    : []
+
   const tableEl = (
     <div className={fullPage ? 'flex-1 overflow-auto' : 'rounded-lg border border-(--svf-border) overflow-hidden'}>
       <Table className={fullPage ? 'border-collapse' : ''}>
@@ -769,12 +701,14 @@ export function InternetDashboardTable({
                 <TableHead className="w-10 pl-4">
                   <Checkbox
                     checked={flatRightRows.length > 0 && selectedIds.size === flatRightRows.length}
-                    onCheckedChange={toggleSelectAll}
+                    onCheckedChange={() => {
+                      const ids = flatRightRows.map(({ right }) => right.id)
+                      setSelectedIds(prev => prev.size === ids.length ? new Set() : new Set(ids))
+                    }}
                   />
                 </TableHead>
                 <TableHead className={headCls}>Movie</TableHead>
                 <TableHead className={headCls}>Source</TableHead>
-                <TableHead className={headCls}>Platform</TableHead>
                 <TableHead className={headCls}>Type</TableHead>
                 <TableHead className={headCls}>Nature</TableHead>
                 <TableHead className={headCls}>Start Date</TableHead>
@@ -792,15 +726,13 @@ export function InternetDashboardTable({
                 </TableHead>
                 {hasSubRows && <TableHead className={cn('w-8', headCls)} />}
                 <TableHead className={headCls}>Title</TableHead>
-                <TableHead className={headCls}>Type</TableHead>
+                <TableHead className={headCls}>Source</TableHead>
                 <TableHead className={headCls}>Cert</TableHead>
                 <TableHead className={headCls}>Release</TableHead>
                 <TableHead className={headCls}>Language</TableHead>
-                {showWtpCol && <TableHead className={headCls}>WTP Library</TableHead>}
                 {showLicensorCol && <TableHead className={headCls}>Licensor</TableHead>}
-                {activeCard === 'open_titles' && <TableHead className={headCls}>Sunset Date</TableHead>}
+                {activeCard === 'open_titles' && <TableHead className={headCls}>Agreement</TableHead>}
                 {activeCard === 'active' && <TableHead className={headCls}>Rights Count</TableHead>}
-                {showHoldbackCol && <TableHead className={cn('w-10', headCls)}>Holdback</TableHead>}
               </>
             )}
           </TableRow>
@@ -817,7 +749,7 @@ export function InternetDashboardTable({
           ) : flatExpiryRows ? (
             flatRightRows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="text-center py-10 text-muted-foreground text-sm">
+                <TableCell colSpan={9} className="text-center py-10 text-muted-foreground text-sm">
                   No expiring rights found matching your filters
                 </TableCell>
               </TableRow>
@@ -839,24 +771,17 @@ export function InternetDashboardTable({
                     </Link>
                   </TableCell>
                   <TableCell className={cellCls}>{getSourceBadge(movie.source)}</TableCell>
-                  <TableCell className={cn('whitespace-nowrap', cellCls)}>
-                    {right.platform_name || <span className="text-muted-foreground">—</span>}
-                  </TableCell>
                   <TableCell className={cellCls}>
-                    {right.rights_type_name ? (
+                    {right.right_type ? (
                       <Badge variant="outline" className="bg-(--bg-raise)/60 text-(--text-faint) border-(--svf-border) text-xs whitespace-nowrap">
-                        {right.rights_type_name}
+                        {right.right_type}
                       </Badge>
                     ) : <span className="text-muted-foreground text-xs">—</span>}
                   </TableCell>
                   <TableCell className={cellCls}>
                     {right.nature ? (
-                      <Badge variant="outline" className={cn('text-xs whitespace-nowrap',
-                        right.nature === 'exclusive'
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25'
-                          : 'bg-(--bg-raise) text-(--text-faint) border-(--svf-border-strong)'
-                      )}>
-                        {right.nature === 'exclusive' ? 'Exclusive' : right.nature === 'non_exclusive' ? 'Non-Exclusive' : right.nature}
+                      <Badge variant="outline" className="bg-(--bg-raise) text-(--text-faint) border-(--svf-border-strong) text-xs whitespace-nowrap">
+                        {right.nature}
                       </Badge>
                     ) : <span className="text-muted-foreground text-xs">—</span>}
                   </TableCell>
@@ -882,24 +807,24 @@ export function InternetDashboardTable({
           ) : (
             filteredMovies.map((movie: any, idx: number) => {
               const isExpanded = expandedRows.has(movie.id)
-              const internetRights: InternetRight[] = (movie as MovieWithInternetRights).internet_rights_list || []
+              const otherRights: OtherRight[] = (movie as MovieWithOtherRights).other_rights_list || []
               return (
                 <Fragment key={movie.id}>
                   <TableRow
                     className={cn(
                       'border-(--svf-border)/30 hover:bg-(--hover) transition-colors',
-                      hasSubRows && internetRights.length > 0 && 'cursor-pointer',
+                      hasSubRows && otherRights.length > 0 && 'cursor-pointer',
                       fullPage && idx % 2 === 0 && 'bg-(--panel-solid)/30',
                       selectedIds.has(movie.id) && 'bg-red-500/5',
                     )}
-                    onClick={() => hasSubRows && internetRights.length > 0 && toggleRow(movie.id)}
+                    onClick={() => hasSubRows && otherRights.length > 0 && toggleRow(movie.id)}
                   >
                     <TableCell className={cn('pl-4 w-10', cellCls)} onClick={(e) => e.stopPropagation()}>
                       <Checkbox checked={selectedIds.has(movie.id)} onCheckedChange={() => toggleSelect(movie.id)} />
                     </TableCell>
                     {hasSubRows && (
                       <TableCell className={cn('w-8', cellCls)}>
-                        {internetRights.length > 0 ? (
+                        {otherRights.length > 0 ? (
                           <div className="flex items-center justify-center h-5 w-5 rounded hover:bg-muted/50">
                             {isExpanded
                               ? <ChevronUp className="h-3 w-3 text-muted-foreground" />
@@ -922,13 +847,6 @@ export function InternetDashboardTable({
                       {movie.release_date ? movie.release_date.split('-').reverse().join('/') : movie.release_year || '—'}
                     </TableCell>
                     <TableCell className={cellCls}>{movie.language || '—'}</TableCell>
-                    {showWtpCol && (
-                      <TableCell className={cellCls} onClick={(e) => e.stopPropagation()}>
-                        {movie.wtp_library
-                          ? <Badge variant="outline" className="bg-violet-500/10 text-violet-400 border-violet-500/30 text-xs">{movie.wtp_library}</Badge>
-                          : <span className="text-muted-foreground text-xs">—</span>}
-                      </TableCell>
-                    )}
                     {showLicensorCol && (
                       <TableCell className={cn('max-w-35', cellCls)} style={{ color: 'var(--text-faint)' }} onClick={(e) => e.stopPropagation()}>
                         <span className="line-clamp-1 text-xs">{getEffectiveLicensor(movie) || '—'}</span>
@@ -948,45 +866,33 @@ export function InternetDashboardTable({
                     {activeCard === 'active' && (
                       <TableCell className={cellCls}>
                         <Badge variant="outline" className="bg-(--bg-raise)/60 text-(--text-faint) border-(--svf-border) text-xs">
-                          {internetRights.length} right{internetRights.length !== 1 ? 's' : ''}
+                          {otherRights.length} right{otherRights.length !== 1 ? 's' : ''}
                         </Badge>
                       </TableCell>
                     )}
-                    {showHoldbackCol && (
-                      <TableCell className={cellCls} onClick={(e) => e.stopPropagation()}>
-                        <HoldbackInfoIcon info={movie.holdback_info || { hasAny: false, entries: [] }} />
-                      </TableCell>
-                    )}
                   </TableRow>
-                  {hasSubRows && isExpanded && internetRights.length > 0 && (
+                  {hasSubRows && isExpanded && otherRights.length > 0 && (
                     <TableRow key={`${movie.id}-expanded`} className="bg-(--panel-solid)/50 border-(--svf-border)/30">
                       <TableCell colSpan={colCount} className="p-0">
                         <div className="px-8 py-2 space-y-1.5">
-                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                            <Globe className="h-3.5 w-3.5" />
-                            Internet Rights Details
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                            Other Rights Details
                           </p>
                           <div className="grid gap-1.5">
-                            {internetRights.map((right) => (
+                            {otherRights.map((right) => (
                               <div key={right.id} className="flex flex-wrap items-center gap-3 bg-(--bg-deep)/50 border border-(--svf-border)/40 rounded px-3 py-1.5">
-                                <div className="flex items-center gap-2 min-w-40">
-                                  <Monitor className="h-3 w-3 text-(--text-faint) shrink-0" />
-                                  <span className="text-xs font-medium">{right.platform_name}</span>
-                                </div>
-                                {right.rights_type_name && (
+                                {right.right_type && (
                                   <Badge variant="outline" className="bg-(--bg-raise)/60 text-(--text-faint) border-(--svf-border) text-xs shrink-0">
-                                    {right.rights_type_name}
+                                    {right.right_type}
                                   </Badge>
                                 )}
                                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                  <Calendar className="h-3 w-3 shrink-0" />
                                   <span className="font-mono">{right.start_date || '—'}</span>
                                   <span>→</span>
                                   <span className={cn('font-mono', right.end_date && new Date(right.end_date) < new Date() ? 'text-red-400' : '')}>
                                     {right.end_date || '—'}
                                   </span>
                                 </div>
-                                <div className="ml-auto shrink-0">{getActiveBadge(right.end_date)}</div>
                                 {right.nature && <span className="text-xs text-muted-foreground/70">{right.nature}</span>}
                                 {right.territory && <span className="text-xs text-muted-foreground/70">🌍 {right.territory}</span>}
                               </div>
@@ -1015,7 +921,7 @@ export function InternetDashboardTable({
           onOpenChange={setShowExportDialog}
           data={exportData}
           fields={exportFields}
-          filename="internet_dashboard"
+          filename="other_rights_dashboard"
         />
       </div>
     )
@@ -1024,7 +930,6 @@ export function InternetDashboardTable({
   return (
     <Card className="glass-card">
       <div className="p-6 space-y-4">
-        {/* Header */}
         <div className="px-1 flex flex-wrap items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-bold tracking-tight text-(--text)">{cardLabels[activeCard]}</h2>
@@ -1055,7 +960,7 @@ export function InternetDashboardTable({
         onOpenChange={setShowExportDialog}
         data={exportData}
         fields={exportFields}
-        filename="internet_dashboard"
+        filename="other_rights_dashboard"
       />
     </Card>
   )

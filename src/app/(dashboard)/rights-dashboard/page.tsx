@@ -1,41 +1,89 @@
 'use client'
 
 import { AnimatedCounter } from '@/components/dashboard/animated-counter'
+import { ClipRightsTable } from '@/components/dashboard/clip-rights-table'
 import { InternetDashboardTable } from '@/components/dashboard/internet-dashboard-table'
+import { OtherRightsDashboardTable } from '@/components/dashboard/other-rights-dashboard-table'
 import { SatelliteDashboardTable } from '@/components/dashboard/satellite-dashboard-table'
 import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useAuth } from '@/contexts/auth-context'
 import { useAppToast } from "@/hooks/use-app-toast"
 import { getPendingMovies } from '@/lib/api/approvals'
 import {
   getActiveInternetTitlesCount,
   getLanguages,
+  getOtherRightsModeStats,
   getRightsModeStats,
+  type OtherRightsModeStats,
   type RightsModeStats,
 } from '@/lib/api/dashboard'
 import {
   Activity,
   ArrowLeft,
   Calendar,
+  Clapperboard,
   Clock,
   Film,
   Gavel,
   Globe,
   Languages,
   Maximize2,
+  Plane,
   Satellite,
   Star
 } from 'lucide-react'
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 
-type DashboardMode = 'satellite' | 'internet'
+type DashboardMode = 'satellite' | 'internet' | 'other' | 'clip'
 
 // ─── Satellite card types ────────────────────────────────────────────────────
 type SatActiveCard = 'open_titles' | 'expiring' | 'wtp'
 // ─── Internet card types ─────────────────────────────────────────────────────
 type IntActiveCard = 'open_titles' | 'expiring' | 'active'
+// ─── Other Rights card types ─────────────────────────────────────────────────
+type OtherActiveCard = 'open_titles' | 'expiring' | 'active'
+
+function LanguageMultiSelect({ languages, selected, onToggle, open, onOpenChange, disabled, triggerCls }: {
+  languages: string[]
+  selected: string[]
+  onToggle: (l: string) => void
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  disabled?: boolean
+  triggerCls?: string
+}) {
+  return (
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" disabled={disabled}
+          className={`justify-start gap-1.5 font-normal bg-(--bg-raise)/40 border-(--svf-border) text-(--text) hover:bg-(--hover) ${triggerCls || ''}`}>
+          <span className="truncate flex-1 text-left">
+            {selected.length === 0 ? 'All Languages' : selected.length === 1 ? selected[0] : `${selected.length} selected`}
+          </span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-44 p-2 bg-(--panel-solid) border-(--svf-border)/60 shadow-xl" align="start">
+        <div className="max-h-64 overflow-y-auto space-y-0.5">
+          <div className="flex items-center gap-2 px-1.5 py-1.5 rounded hover:bg-(--hover) cursor-pointer transition-colors"
+            onClick={() => { languages.forEach((l) => { if (selected.includes(l)) onToggle(l) }) }}>
+            <Checkbox checked={selected.length === 0} className="h-3.5 w-3.5" />
+            <span className="text-xs text-(--text)">All Languages</span>
+          </div>
+          {languages.map((l) => (
+            <div key={l} className="flex items-center gap-2 px-1.5 py-1.5 rounded hover:bg-(--hover) cursor-pointer transition-colors"
+              onClick={() => onToggle(l)}>
+              <Checkbox checked={selected.includes(l)} className="h-3.5 w-3.5" />
+              <span className="text-xs text-(--text) truncate">{l}</span>
+            </div>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
 
 export default function RightsDashboardPage() {
   const { profile } = useAuth()
@@ -47,7 +95,8 @@ export default function RightsDashboardPage() {
 
   // ── shared ──
   const [languages, setLanguages] = useState<string[]>([])
-  const [language, setLanguage] = useState<string>('')
+  const [language, setLanguage] = useState<string[]>([])
+  const [languageOpen, setLanguageOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const toast = useAppToast();
   const [statsLoading, setStatsLoading] = useState(false)
@@ -61,6 +110,10 @@ export default function RightsDashboardPage() {
   const [intActiveCount, setIntActiveCount] = useState<{ total: number; home: number; acquired: number }>({ total: 0, home: 0, acquired: 0 })
   const [intActiveCard, setIntActiveCard] = useState<IntActiveCard>('open_titles')
 
+  // ── other rights state ──
+  const [otherStats, setOtherStats] = useState<OtherRightsModeStats | null>(null)
+  const [otherActiveCard, setOtherActiveCard] = useState<OtherActiveCard>('open_titles')
+
   // ── expiry filters (per-mode) ──
   const [satExpiryYear, setSatExpiryYear] = useState<string>('all')
   const [satExpiryFrom, setSatExpiryFrom] = useState<string>('')
@@ -70,11 +123,17 @@ export default function RightsDashboardPage() {
   const [intExpiryFrom, setIntExpiryFrom] = useState<string>('')
   const [intExpiryTo, setIntExpiryTo] = useState<string>('')
 
+  const [otherExpiryYear, setOtherExpiryYear] = useState<string>('all')
+  const [otherExpiryFrom, setOtherExpiryFrom] = useState<string>('')
+  const [otherExpiryTo, setOtherExpiryTo] = useState<string>('')
+
   // ── open-titles date range filters (per-mode) ──
   const [satOpenFrom, setSatOpenFrom] = useState<string>('')
   const [satOpenTo, setSatOpenTo] = useState<string>('')
   const [intOpenFrom, setIntOpenFrom] = useState<string>('')
   const [intOpenTo, setIntOpenTo] = useState<string>('')
+  const [otherOpenFrom, setOtherOpenFrom] = useState<string>('')
+  const [otherOpenTo, setOtherOpenTo] = useState<string>('')
 
   // Load pending approvals count for legal/admin banner
   useEffect(() => {
@@ -82,7 +141,7 @@ export default function RightsDashboardPage() {
     getPendingMovies({ status: 'pending', limit: 1 }).then(({ count }) => setPendingCount(count)).catch(() => { })
   }, [isLegalOrAdmin])
 
-  // Initial load — fetch languages/default language, stats are fetched by the effect below
+  // Initial load — fetch language options; default to Bengali
   useEffect(() => {
     async function fetchData() {
       try {
@@ -91,8 +150,7 @@ export default function RightsDashboardPage() {
         setLanguages(langs)
 
         const bengali = langs.find((l) => l.toLowerCase() === 'bengali')
-        const defaultLang = bengali ?? ''
-        if (defaultLang) setLanguage(defaultLang)
+        if (bengali) setLanguage([bengali])
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Failed to load dashboard data')
       } finally {
@@ -102,29 +160,33 @@ export default function RightsDashboardPage() {
     fetchData()
   }, [])
 
-  const handleLanguageChange = useCallback(async (val: string) => {
-    const newLang = val === 'all' ? '' : val
-    setLanguage(newLang)
+  const toggleLanguage = useCallback((l: string) => {
+    setLanguage((prev) => prev.includes(l) ? prev.filter((x) => x !== l) : [...prev, l])
   }, [])
 
-  // Refetch stat-card numbers whenever language or either mode's Open Titles date range changes,
-  // so the card numbers stay consistent with the tables below them.
+  // Refetch stat-card numbers whenever the language filter or either mode's Open Titles date
+  // range changes, so the card numbers stay consistent with the tables below them. Only the
+  // language filter (plus the pre-existing open-until date) feeds into these — other table
+  // filters (source, licensor, cert, WTP, agreement-end, bangladeshi) are display-only and do
+  // not affect the stat-card counts.
   useEffect(() => {
     if (loading) return
     let cancelled = false
     async function refreshStats() {
       setStatsLoading(true)
       try {
-        const langParam = language || undefined
-        const [satS, intS, ac] = await Promise.all([
+        const langParam = language.length > 0 ? language : undefined
+        const [satS, intS, ac, otherS] = await Promise.all([
           getRightsModeStats('satellite', langParam, satOpenTo || undefined),
           getRightsModeStats('internet', langParam, intOpenTo || undefined),
           getActiveInternetTitlesCount(langParam),
+          getOtherRightsModeStats(langParam, otherOpenTo || undefined),
         ])
         if (cancelled) return
         setSatStats(satS)
         setIntStats(intS)
         setIntActiveCount(ac)
+        setOtherStats(otherS)
       } catch (err) {
         console.error('Failed to refresh stats', err)
       } finally {
@@ -133,7 +195,7 @@ export default function RightsDashboardPage() {
     }
     refreshStats()
     return () => { cancelled = true }
-  }, [language, satOpenTo, intOpenTo, loading])
+  }, [language, satOpenTo, intOpenTo, otherOpenTo, loading])
 
   const handleSatYearChange = useCallback((year: string) => {
     setSatExpiryYear(year)
@@ -145,6 +207,12 @@ export default function RightsDashboardPage() {
     setIntExpiryYear(year)
     if (year === 'all') { setIntExpiryFrom(''); setIntExpiryTo('') }
     else { setIntExpiryFrom(`${year}-01-01`); setIntExpiryTo(`${year}-12-31`) }
+  }, [])
+
+  const handleOtherYearChange = useCallback((year: string) => {
+    setOtherExpiryYear(year)
+    if (year === 'all') { setOtherExpiryFrom(''); setOtherExpiryTo('') }
+    else { setOtherExpiryFrom(`${year}-01-01`); setOtherExpiryTo(`${year}-12-31`) }
   }, [])
 
   const currentYear = new Date().getFullYear()
@@ -236,16 +304,62 @@ export default function RightsDashboardPage() {
     },
   ] as const
 
+  // ─── Other Rights stat cards config ───────────────────────────────────────
+  const otherStatsConfig = [
+    {
+      id: 'open_titles' as OtherActiveCard,
+      title: 'Open Other Rights Titles',
+      value: otherStats?.openTitlesCount ?? 0,
+      subValues: [
+        { label: 'Home', value: otherStats?.openHomeTitlesCount ?? 0 },
+        { label: 'Acquired', value: otherStats?.openAcquiredTitlesCount ?? 0 },
+      ],
+      description: 'Movies with no active Airborne/Ship/Other rights',
+      icon: Plane,
+      color: 'text-cyan-400',
+      bgGradient: 'from-cyan-500/10 to-cyan-500/5',
+      border: 'border-cyan-500/40',
+      glow: 'glow-cyan',
+    },
+    {
+      id: 'expiring' as OtherActiveCard,
+      title: 'Expiring Other Rights',
+      value: otherStats?.expiringRightsCount ?? 0,
+      description: 'Airborne/Ship/Other rights expiring this year',
+      icon: Clock,
+      color: 'text-orange-400',
+      bgGradient: 'from-orange-500/10 to-orange-500/5',
+      border: 'border-orange-500/40',
+      glow: '',
+    },
+    {
+      id: 'active' as OtherActiveCard,
+      title: 'Active Other Rights',
+      value: otherStats?.activeRightsCount ?? 0,
+      description: 'Movies with currently active Airborne/Ship/Other rights',
+      icon: Activity,
+      color: 'text-emerald-400',
+      bgGradient: 'from-emerald-500/10 to-emerald-500/5',
+      border: 'border-emerald-500/40',
+      glow: 'glow-emerald',
+    },
+  ] as const
+
   const isSatellite = mode === 'satellite'
-  const statsConfig = isSatellite ? satStatsConfig : intStatsConfig
-  const activeCard = isSatellite ? satActiveCard : intActiveCard
+  const isOther = mode === 'other'
+  const isClip = mode === 'clip'
+  const statsConfig = isSatellite ? satStatsConfig : mode === 'internet' ? intStatsConfig : isOther ? otherStatsConfig : []
+  const activeCard = isSatellite ? satActiveCard : mode === 'internet' ? intActiveCard : otherActiveCard
   const setActiveCard = (id: string) => {
     if (isSatellite) {
       setSatActiveCard(id as SatActiveCard)
       if (id === 'expiring' && satExpiryYear === 'all') handleSatYearChange(String(currentYear))
-    } else {
+    } else if (mode === 'internet') {
       setIntActiveCard(id as IntActiveCard)
       if (id === 'expiring' && intExpiryYear === 'all') handleIntYearChange(String(currentYear))
+    } else if (isOther) {
+      setOtherActiveCard(id as OtherActiveCard)
+      if (id === 'expiring' && otherExpiryYear === 'all') handleOtherYearChange(String(currentYear))
     }
     setFullPageView(true)
   }
@@ -280,22 +394,20 @@ export default function RightsDashboardPage() {
           )}
           <div className="ml-auto flex items-center gap-2">
             <span className="text-xs text-(--text-faint)">
-              {isSatellite ? 'Satellite Rights' : 'Internet Rights'}
+              {isSatellite ? 'Satellite Rights' : isOther ? 'Other Rights' : 'Internet Rights'}
             </span>
             {/* Language selector */}
             <div className="flex items-center gap-1.5">
               <Languages className="h-3.5 w-3.5 text-(--text-faint) shrink-0" />
-              <Select value={language || 'all'} onValueChange={handleLanguageChange} disabled={loading}>
-                <SelectTrigger className="bg-(--bg-raise)/40 h-8 border-(--svf-border) text-xs w-32 text-(--text)">
-                  <SelectValue placeholder="Language" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Languages</SelectItem>
-                  {languages.map((l) => (
-                    <SelectItem key={l} value={l}>{l}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <LanguageMultiSelect
+                languages={languages}
+                selected={language}
+                onToggle={toggleLanguage}
+                open={languageOpen}
+                onOpenChange={setLanguageOpen}
+                disabled={loading}
+                triggerCls="h-8 text-xs w-32"
+              />
             </div>
           </div>
         </div>
@@ -319,7 +431,7 @@ export default function RightsDashboardPage() {
               yearOptions={yearOptions}
               fullPage
             />
-          ) : (
+          ) : mode === 'internet' ? (
             <InternetDashboardTable
               activeCard={intActiveCard}
               language={language}
@@ -336,6 +448,25 @@ export default function RightsDashboardPage() {
               yearOptions={yearOptions}
               fullPage
             />
+          ) : isOther ? (
+            <OtherRightsDashboardTable
+              activeCard={otherActiveCard}
+              language={language}
+              expiryYear={otherExpiryYear}
+              onExpiryYearChange={handleOtherYearChange}
+              expiryFrom={otherExpiryFrom}
+              expiryTo={otherExpiryTo}
+              onExpiryFromChange={(v) => { setOtherExpiryFrom(v); setOtherExpiryYear('custom') }}
+              onExpiryToChange={(v) => { setOtherExpiryTo(v); setOtherExpiryYear('custom') }}
+              openFrom={otherOpenFrom}
+              openTo={otherOpenTo}
+              onOpenFromChange={setOtherOpenFrom}
+              onOpenToChange={setOtherOpenTo}
+              yearOptions={yearOptions}
+              fullPage
+            />
+          ) : (
+            <ClipRightsTable language={language} fullPage />
           )}
         </div>
       </div>
@@ -374,9 +505,11 @@ export default function RightsDashboardPage() {
           background: "var(--bg-deep)", border: "1px solid var(--svf-border)",
         }}>
           {([
-            { v: 'satellite' as DashboardMode, icon: Satellite, label: 'Satellite' },
-            { v: 'internet' as DashboardMode, icon: Globe, label: 'Internet' },
-          ] as const).map(({ v, icon: Icon, label }) => {
+            { v: 'satellite' as DashboardMode, icon: Satellite, label: 'Satellite', color: "var(--st-wtp)" },
+            { v: 'internet' as DashboardMode, icon: Globe, label: 'Internet', color: "var(--st-open)" },
+            { v: 'other' as DashboardMode, icon: Plane, label: 'Other', color: "var(--st-expiring)" },
+            { v: 'clip' as DashboardMode, icon: Clapperboard, label: 'Clip Rights', color: "var(--st-active)" },
+          ] as const).map(({ v, icon: Icon, label, color }) => {
             const on = mode === v
             return (
               <button key={v} onClick={() => setMode(v)} style={{
@@ -385,7 +518,7 @@ export default function RightsDashboardPage() {
                 fontSize: 13.5, fontWeight: 600,
                 border: on ? "1px solid var(--svf-border-strong)" : "1px solid transparent",
                 background: on ? "var(--bg-raise)" : "transparent",
-                color: on ? (v === 'satellite' ? "var(--st-wtp)" : "var(--st-open)") : "var(--text-faint)",
+                color: on ? color : "var(--text-faint)",
                 boxShadow: on ? "0 3px 10px -4px hsl(0deg 0% 0% / 0.5)" : "none",
                 transition: "all .2s ease",
               }}>
@@ -401,21 +534,21 @@ export default function RightsDashboardPage() {
         {/* Language selector */}
         <div className="flex items-center gap-2">
           <Languages className="h-4 w-4 shrink-0" style={{ color: "var(--text-faint)" }} />
-          <Select value={language || 'all'} onValueChange={handleLanguageChange} disabled={loading}>
-            <SelectTrigger className="h-9 w-36 bg-(--bg-raise)/40 border-(--svf-border) text-(--text)">
-              <SelectValue placeholder="Language" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Languages</SelectItem>
-              {languages.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <LanguageMultiSelect
+            languages={languages}
+            selected={language}
+            onToggle={toggleLanguage}
+            open={languageOpen}
+            onOpenChange={setLanguageOpen}
+            disabled={loading}
+            triggerCls="h-9 w-36"
+          />
         </div>
 
       </div>
 
-      {/* ── Stat Cards ── */}
-      {loading || statsLoading ? (
+      {/* ── Stat Cards — none for Clip Rights, which is a plain listing with no rights-lifecycle data ── */}
+      {isClip ? null : loading || statsLoading ? (
         <div className="grid gap-4 md:grid-cols-3">
           {[...Array(3)].map((_, i) => (
             <div key={i} className="glass-card animate-pulse" style={{ padding: 20, height: 160 }}>
@@ -536,7 +669,7 @@ export default function RightsDashboardPage() {
             onOpenToChange={setSatOpenTo}
             yearOptions={yearOptions}
           />
-        ) : (
+        ) : mode === 'internet' ? (
           <InternetDashboardTable
             activeCard={intActiveCard}
             language={language}
@@ -552,6 +685,24 @@ export default function RightsDashboardPage() {
             onOpenToChange={setIntOpenTo}
             yearOptions={yearOptions}
           />
+        ) : isOther ? (
+          <OtherRightsDashboardTable
+            activeCard={otherActiveCard}
+            language={language}
+            expiryYear={otherExpiryYear}
+            onExpiryYearChange={handleOtherYearChange}
+            expiryFrom={otherExpiryFrom}
+            expiryTo={otherExpiryTo}
+            onExpiryFromChange={(v) => { setOtherExpiryFrom(v); setOtherExpiryYear('custom') }}
+            onExpiryToChange={(v) => { setOtherExpiryTo(v); setOtherExpiryYear('custom') }}
+            openFrom={otherOpenFrom}
+            openTo={otherOpenTo}
+            onOpenFromChange={setOtherOpenFrom}
+            onOpenToChange={setOtherOpenTo}
+            yearOptions={yearOptions}
+          />
+        ) : (
+          <ClipRightsTable language={language} />
         )}
       </div>
     </div>
