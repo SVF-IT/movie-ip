@@ -489,7 +489,7 @@ export async function removeMovieDirector(id: string): Promise<void> {
 export async function getGroupedMovies(options?: {
   source?: "home_production" | "acquired" | "expired" | "bangladeshi" | "sold";
   search?: string;
-  language?: string;
+  language?: string[];
   certification?: string[];
   yearFrom?: number;
   yearTo?: number;
@@ -499,6 +499,9 @@ export async function getGroupedMovies(options?: {
   offset?: number;
   approvalStatus?: "pending" | "approved" | "rejected" | "all";
 }): Promise<{ data: GroupedMovie[]; count: number }> {
+  if (options?.language && options.language.length === 0) {
+    return { data: [], count: 0 };
+  }
   let query = supabase
     .from("movies_with_details")
     .select("*", { count: "exact" });
@@ -543,8 +546,8 @@ export async function getGroupedMovies(options?: {
     query = query.or(`title.ilike.${escapeOrSearchTerm(options.search)}%,production_no.ilike.${escapeOrSearchTerm(options.search)}%`);
   }
 
-  if (options?.language) {
-    query = query.eq("language", options.language);
+  if (options?.language && options.language.length > 0) {
+    query = query.in("language", options.language);
   }
 
   if (options?.certification && options.certification.length > 0) {

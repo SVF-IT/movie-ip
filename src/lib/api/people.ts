@@ -26,10 +26,13 @@ function normalizeMovieTitle(title: string): string {
 
 export async function getPeopleWithStats(options?: {
   search?: string;
-  role?: "actor" | "director" | "both";
+  role?: ("actor" | "director")[];
   limit?: number;
   offset?: number;
 }): Promise<{ data: PersonWithStats[]; count: number }> {
+  if (options?.role && options.role.length === 0) {
+    return { data: [], count: 0 };
+  }
   try {
     // Get all people with their counts
     let query = supabase.from("people").select("*", { count: "exact" });
@@ -133,14 +136,14 @@ export async function getPeopleWithStats(options?: {
       }
     );
 
-    // Filter by role if specified
+    // Filter by role if specified — only a genuine narrowing (partial or empty selection) is
+    // applied; when both actor/director are selected, that's equivalent to no filter.
     let filteredPeople = peopleWithStats;
-    if (options?.role) {
+    if (options?.role && options.role.length < 2) {
+      const selected = new Set(options.role);
       filteredPeople = peopleWithStats.filter((p) => {
-        if (options.role === "both") return p.role === "both";
-        if (options.role === "actor") return p.role === "actor" || p.role === "both";
-        if (options.role === "director") return p.role === "director" || p.role === "both";
-        return true;
+        if (p.role === "both") return selected.has("actor") || selected.has("director");
+        return selected.has(p.role as "actor" | "director");
       });
     }
 

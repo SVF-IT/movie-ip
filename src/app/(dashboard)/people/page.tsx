@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from "@/contexts/auth-context";
 import { useAppToast } from "@/hooks/use-app-toast";
+import { useMultiSelectFilterState } from "@/hooks/use-multi-select-filter-state";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { createPerson, getPeopleWithStats, getPersonMovieTitles, type PersonWithStats } from "@/lib/api/people";
 import { cn } from "@/lib/utils";
 import {
@@ -63,7 +65,8 @@ export default function PeoplePage() {
   const [people, setPeople] = useState<PersonWithStats[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
-  const [roleFilter, setRoleFilter] = useState<"actor" | "director" | "both" | "all">("all");
+  const ROLE_OPTIONS: ("actor" | "director")[] = ["actor", "director"];
+  const [roleFilter, setRoleFilter] = useMultiSelectFilterState<"actor" | "director">(ROLE_OPTIONS);
   const [sortBy, setSortBy] = useState<SortOption>("name_asc");
   const [loading, setLoading] = useState(true);
   const toast = useAppToast();
@@ -101,7 +104,7 @@ export default function PeoplePage() {
       let offset = 0;
       let hasMore = true;
       while (hasMore) {
-        const { data } = await getPeopleWithStats({ search: searchQuery || undefined, role: roleFilter === "all" ? undefined : roleFilter, limit: 200, offset });
+        const { data } = await getPeopleWithStats({ search: searchQuery || undefined, role: roleFilter.length < ROLE_OPTIONS.length ? roleFilter : undefined, limit: 200, offset });
         if (data.length > 0) {
           allPeople = [...allPeople, ...data];
           if (data.length < 200) hasMore = false;
@@ -135,7 +138,7 @@ export default function PeoplePage() {
   const fetchPeople = useCallback(async () => {
     try {
       setLoading(true);
-        const { data, count } = await getPeopleWithStats({ role: roleFilter === "all" ? undefined : roleFilter, limit: 10000 });
+        const { data, count } = await getPeopleWithStats({ role: roleFilter.length < ROLE_OPTIONS.length ? roleFilter : undefined, limit: 10000 });
       setPeople(data);
       setTotalCount(count);
     } catch (err) {
@@ -173,7 +176,7 @@ export default function PeoplePage() {
   );
 
 
-  const hasFilters = searchQuery || roleFilter !== "all";
+  const hasFilters = searchQuery || roleFilter.length < ROLE_OPTIONS.length;
 
   return (
     <div className="space-y-4">
@@ -195,18 +198,14 @@ export default function PeoplePage() {
                 </button>
               )}
             </div>
-            <Select value={roleFilter} onValueChange={(v) => { setRoleFilter(v as typeof roleFilter); }}>
-              <SelectTrigger className="h-9 w-36 text-sm">
-                <UserCheck className="h-3.5 w-3.5 text-(--text-faint)" />
-                <SelectValue placeholder="All Roles" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Roles</SelectItem>
-                <SelectItem value="actor">Actors</SelectItem>
-                <SelectItem value="director">Directors</SelectItem>
-                <SelectItem value="both">Actor &amp; Director</SelectItem>
-              </SelectContent>
-            </Select>
+            <MultiSelectFilter
+              label="All Roles"
+              options={[{ value: "actor", label: "Actors" }, { value: "director", label: "Directors" }]}
+              value={roleFilter}
+              onChange={(v) => setRoleFilter(v as ("actor" | "director")[])}
+              triggerWidth="w-36"
+              icon={<UserCheck className="h-3.5 w-3.5 shrink-0 text-(--text-faint)" />}
+            />
             <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
               <SelectTrigger className="h-9 w-36 text-sm">
                 <ArrowUpDown className="h-3.5 w-3.5 text-(--text-faint)" />
@@ -221,7 +220,7 @@ export default function PeoplePage() {
             </Select>
             {hasFilters && (
               <Button variant="ghost" size="sm" className="h-9 gap-1.5 text-(--text-faint) hover:text-(--text)"
-                onClick={() => { setSearchQuery(""); setRoleFilter("all"); }}>
+                onClick={() => { setSearchQuery(""); setRoleFilter(ROLE_OPTIONS); }}>
                 <X className="h-3.5 w-3.5" /> Clear
               </Button>
             )}
@@ -318,7 +317,7 @@ export default function PeoplePage() {
               </div>
               <button
                 className="flex items-center gap-1 text-xs text-(--text-faint) hover:text-red-400 transition-colors group"
-                onClick={() => { setRoleFilter("director"); setViewMode("directory"); }}
+                onClick={() => { setRoleFilter(["director"]); setViewMode("directory"); }}
               >
                 View all <ChevronRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
               </button>
@@ -340,7 +339,7 @@ export default function PeoplePage() {
               </div>
               <button
                 className="flex items-center gap-1 text-xs text-(--text-faint) hover:text-red-400 transition-colors group"
-                onClick={() => { setRoleFilter("actor"); setViewMode("directory"); }}
+                onClick={() => { setRoleFilter(["actor"]); setViewMode("directory"); }}
               >
                 View all <ChevronRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
               </button>
@@ -372,7 +371,7 @@ export default function PeoplePage() {
           </p>
           <div className="flex gap-3 mt-5">
             <Button variant="outline" size="sm" className="border-(--svf-border) text-(--text) hover:bg-(--hover)"
-              onClick={() => { setSearchQuery(""); setRoleFilter("all"); }}>
+              onClick={() => { setSearchQuery(""); setRoleFilter(ROLE_OPTIONS); }}>
               Clear Filters
             </Button>
             <Button variant="ghost" size="sm" className="text-(--text-faint) hover:text-(--text) hover:bg-(--hover)"

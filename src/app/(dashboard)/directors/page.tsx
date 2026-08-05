@@ -81,7 +81,7 @@ export default function DirectorsPage() {
     try {
       setLoading(true);
   
-      const { data, count } = await getPeopleWithStats({ role: "director", limit: 10000 });
+      const { data, count } = await getPeopleWithStats({ role: ["director"], limit: 10000 });
       setDirectors(data);
       setTotalCount(count);
     } catch (err) {

@@ -6,6 +6,7 @@ import { RoleGate } from "@/components/role-gate";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import {
   Select,
   SelectContent,
@@ -80,10 +81,11 @@ export default function RightsPage() {
   const [rights, setRights] = useState<RightWithDetails[]>([]);
   const [totalCount, setTotalCount] = useState(0);
 
-  // "all" | exact platform_type string e.g. "Satellite TV", "SVOD"
-  const [rightsTypeFilter, setRightsTypeFilter] = useState("all");
-  // Platform id — populated from DB scoped to selected sub-type
-  const [platformFilter, setPlatformFilter] = useState("all");
+  // All exact platform_type strings across the grouped list, e.g. "Satellite TV", "SVOD"
+  const ALL_RIGHTS_TYPES = RIGHTS_TYPE_GROUPS.flatMap((g) => g.types);
+  const [rightsTypeFilter, setRightsTypeFilter] = useState<string[]>(ALL_RIGHTS_TYPES);
+  // Platform id — populated from DB scoped to selected sub-type(s)
+  const [platformFilter, setPlatformFilter] = useState<string[]>([]);
   const [platformOptions, setPlatformOptions] = useState<PlatformOption[]>([]);
 
   const [movieIdFilter, setMovieIdFilter] = useState("all");
@@ -101,16 +103,17 @@ export default function RightsPage() {
   const [exportData, setExportData] = useState<RightWithDetails[]>([]);
   const [exportLoading, setExportLoading] = useState(false);
 
-  // Load platforms from DB filtered to the exact selected platform_type
+  // Load platforms from DB filtered to the selected platform_type(s)
   useEffect(() => {
     const supabase = createClient();
     supabase.from("platforms").select("id, name, platform_type").order("name").then(({ data }: { data: PlatformOption[] | null }) => {
       let opts: PlatformOption[] = data || [];
-      if (rightsTypeFilter !== "all") {
-        opts = opts.filter((p) => (p.platform_type || "").toLowerCase() === rightsTypeFilter.toLowerCase());
+      if (rightsTypeFilter.length < ALL_RIGHTS_TYPES.length) {
+        const selected = new Set(rightsTypeFilter.map((t) => t.toLowerCase()));
+        opts = opts.filter((p) => selected.has((p.platform_type || "").toLowerCase()));
       }
       setPlatformOptions(opts);
-      setPlatformFilter("all");
+      setPlatformFilter(opts.map((p) => p.id));
     });
   }, [rightsTypeFilter]);
 
@@ -120,9 +123,16 @@ export default function RightsPage() {
 
       const isExpiredValue = statusFilter === "active" ? false : statusFilter === "expired" ? true : undefined;
 
+      // A filter is only sent to the server when it's a genuine narrowing. Platform is only
+      // meaningful once its (dependent) option list has loaded and the user has narrowed it;
+      // sending an empty/partial array before options finish loading would incorrectly restrict
+      // to zero platforms instead of "no restriction."
+      const platformParam = platformOptions.length > 0 && platformFilter.length < platformOptions.length ? platformFilter : undefined;
+      const rightsTypeParam = rightsTypeFilter.length < ALL_RIGHTS_TYPES.length ? rightsTypeFilter : undefined;
+
       const { data, count } = await getAllRights({
-        platformId: platformFilter !== "all" ? platformFilter : undefined,
-        platformTypeExact: rightsTypeFilter !== "all" ? rightsTypeFilter : undefined,
+        platformId: platformParam,
+        platformTypeExact: rightsTypeParam,
         movieId: movieIdFilter !== "all" ? movieIdFilter : undefined,
         isExpired: isExpiredValue,
         limit: 10000,
@@ -137,7 +147,7 @@ export default function RightsPage() {
     } finally {
       setLoading(false);
     }
-  }, [platformFilter, movieIdFilter, statusFilter, rightsTypeFilter]);
+  }, [platformFilter, platformOptions.length, movieIdFilter, statusFilter, rightsTypeFilter]);
 
   useEffect(() => { fetchRights(); }, [fetchRights]);
 
@@ -160,9 +170,11 @@ export default function RightsPage() {
     setExportLoading(true);
     try {
       const isExpiredValue = statusFilter === "active" ? false : statusFilter === "expired" ? true : undefined;
+      const platformParam = platformOptions.length > 0 && platformFilter.length < platformOptions.length ? platformFilter : undefined;
+      const rightsTypeParam = rightsTypeFilter.length < ALL_RIGHTS_TYPES.length ? rightsTypeFilter : undefined;
       const { data } = await getAllRights({
-        platformId: platformFilter !== "all" ? platformFilter : undefined,
-        platformTypeExact: rightsTypeFilter !== "all" ? rightsTypeFilter : undefined,
+        platformId: platformParam,
+        platformTypeExact: rightsTypeParam,
         movieId: movieIdFilter !== "all" ? movieIdFilter : undefined,
         isExpired: isExpiredValue,
         limit: 10000,
@@ -174,7 +186,7 @@ export default function RightsPage() {
     } finally {
       setExportLoading(false);
     }
-  }, [platformFilter, movieIdFilter, statusFilter, rightsTypeFilter]);
+  }, [platformFilter, platformOptions.length, movieIdFilter, statusFilter, rightsTypeFilter]);
 
   const handleDeleteRequest = async () => {
     if (!deletingRight || !profile) return;
@@ -200,7 +212,7 @@ export default function RightsPage() {
 
   const { sortedData: sortedRights, sortConfig, requestSort } = useSortableTable(rights);
 
-  const hasFilters = platformFilter !== "all" || movieIdFilter !== "all" || statusFilter !== "active" || rightsTypeFilter !== "all";
+  const hasFilters = (platformOptions.length > 0 && platformFilter.length < platformOptions.length) || movieIdFilter !== "all" || statusFilter !== "active" || rightsTypeFilter.length < ALL_RIGHTS_TYPES.length;
 
   return (
     <div className="space-y-4 min-w-0">
@@ -223,43 +235,28 @@ export default function RightsPage() {
           </SelectContent>
         </Select>
 
-        {/* Rights type grouped dropdown */}
-        <Select value={rightsTypeFilter} onValueChange={(v) => { setRightsTypeFilter(v); }}>
-          <SelectTrigger className="h-9 w-44 bg-(--bg-raise)/40 border-(--svf-border) text-(--text)">
-            <SelectValue placeholder="All Types" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            {RIGHTS_TYPE_GROUPS.map(({ group, types }) => (
-              <div key={group}>
-                <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) select-none">
-                  {group}
-                </div>
-                {types.map((t) => (
-                  <SelectItem key={t} value={t} className="pl-5">{t}</SelectItem>
-                ))}
-              </div>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Rights type multi-select */}
+        <MultiSelectFilter
+          label="All Types"
+          options={RIGHTS_TYPE_GROUPS.flatMap(({ group, types }) => types.map((t) => ({ value: t, label: `${group} — ${t}` })))}
+          value={rightsTypeFilter}
+          onChange={setRightsTypeFilter}
+          triggerWidth="w-44"
+        />
 
-        {/* Platform — only when a sub-type is selected */}
-        {rightsTypeFilter !== "all" && (
-          <Select value={platformFilter} onValueChange={(v) => { setPlatformFilter(v); }}>
-            <SelectTrigger className="h-9 w-44 bg-(--bg-raise)/40 border-(--svf-border) text-(--text)">
-              <SelectValue placeholder="All Platforms" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Platforms</SelectItem>
-              {platformOptions.map((p) => (
-                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        {/* Platform — only when types have been narrowed */}
+        {rightsTypeFilter.length < ALL_RIGHTS_TYPES.length && (
+          <MultiSelectFilter
+            label="All Platforms"
+            options={platformOptions.map((p) => ({ value: p.id, label: p.name }))}
+            value={platformFilter}
+            onChange={setPlatformFilter}
+            searchable
+            triggerWidth="w-44"
+          />
         )}
-
         {hasFilters && (
-          <Button variant="ghost" size="sm" className="h-9 gap-1 text-(--text-faint)" onClick={() => { setRightsTypeFilter("all"); setPlatformFilter("all"); setMovieIdFilter("all"); setStatusFilter("active"); }}>
+          <Button variant="ghost" size="sm" className="h-9 gap-1 text-(--text-faint)" onClick={() => { setRightsTypeFilter(ALL_RIGHTS_TYPES); setPlatformFilter(platformOptions.map((p) => p.id)); setMovieIdFilter("all"); setStatusFilter("active"); }}>
             <X className="h-3.5 w-3.5" />Reset
           </Button>
         )}

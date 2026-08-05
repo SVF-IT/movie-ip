@@ -82,7 +82,7 @@ export default function ActorsPage() {
     try {
       setLoading(true);
   
-      const { data, count } = await getPeopleWithStats({ role: "actor", limit: 10000 });
+      const { data, count } = await getPeopleWithStats({ role: ["actor"], limit: 10000 });
       setActors(data);
       setTotalCount(count);
     } catch (err) {

@@ -2,6 +2,7 @@
 
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import {
   Select,
   SelectContent,
@@ -9,6 +10,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
+const SOURCE_OPTIONS = [
+  { value: "home_production", label: "Home Production" },
+  { value: "acquired", label: "Acquired" },
+];
 
 interface ReportFiltersProps {
   templateId: string;
@@ -57,27 +63,23 @@ export function ReportFilters({ templateId, filters, onChange }: ReportFiltersPr
         </div>
       );
 
-    case "world_premiere":
+    case "world_premiere": {
+      const sourceValue = (filters.source as string[] | undefined) ?? SOURCE_OPTIONS.map((o) => o.value);
       return (
         <div className="flex flex-wrap gap-4">
           <div className="space-y-1">
             <Label className="text-xs">Source</Label>
-            <Select
-              value={String(filters.source || "all")}
-              onValueChange={(v) => onChange({ ...filters, source: v })}
-            >
-              <SelectTrigger className="w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Sources</SelectItem>
-                <SelectItem value="home_production">Home Production</SelectItem>
-                <SelectItem value="acquired">Acquired</SelectItem>
-              </SelectContent>
-            </Select>
+            <MultiSelectFilter
+              label="All Sources"
+              options={SOURCE_OPTIONS}
+              value={sourceValue}
+              onChange={(v) => onChange({ ...filters, source: v })}
+              triggerWidth="w-48"
+            />
           </div>
         </div>
       );
+    }
 
     default:
       return null;

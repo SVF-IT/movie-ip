@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Checkbox } from '@/components/ui/checkbox'
+import { MultiSelectFilter } from '@/components/ui/multi-select-filter'
 import { Calendar } from '@/components/ui/calendar'
 import { Search, ChevronRight, Download, Loader2, CalendarRange, X, CalendarIcon, Filter } from 'lucide-react'
 import {
@@ -18,6 +19,7 @@ import {
   type MovieWithSatelliteRights,
 } from '@/lib/api/dashboard'
 import { useSortableTable } from '@/hooks/use-sortable-table'
+import { useMultiSelectFilterState } from '@/hooks/use-multi-select-filter-state'
 import { SortableHeader } from '@/components/ui/sortable-header'
 import type { MovieWithDetails } from '@/lib/types/database'
 import Link from 'next/link'
@@ -78,6 +80,7 @@ type SourceFilter = 'all' | 'home' | 'acquired' | 'bangladeshi'
 interface SatelliteDashboardTableProps {
   activeCard: ActiveCard
   language: string[]
+  totalLanguageCount: number
   expiryYear: string
   onExpiryYearChange: (year: string) => void
   expiryFrom: string
@@ -133,6 +136,7 @@ const cardLabels: Record<ActiveCard, string> = {
 export function SatelliteDashboardTable({
   activeCard,
   language,
+  totalLanguageCount,
   expiryYear,
   onExpiryYearChange,
   expiryFrom,
@@ -154,19 +158,14 @@ export function SatelliteDashboardTable({
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
-  const [licensorFilter, setLicensorFilter] = useState<string[]>([])
-  const [licensorOpen, setLicensorOpen] = useState(false)
-  const [licensorSearch, setLicensorSearch] = useState('')
-  const [certFilter, setCertFilter] = useState<string[]>([])
-  const [certOpen, setCertOpen] = useState(false)
+  const [certFilter, setCertFilter] = useMultiSelectFilterState(CERT_OPTIONS)
   const [sortBy, setSortBy] = useState<SortOption>('title_asc')
-  const [wtpFilter, setWtpFilter] = useState<('wtp' | 'wtp_bd' | 'library')[]>([])
-  const [wtpOpen, setWtpOpen] = useState(false)
   const WTP_OPTIONS: { value: 'wtp' | 'wtp_bd' | 'library'; label: string }[] = [
     { value: 'wtp', label: 'WTP' },
     { value: 'wtp_bd', label: 'WTP/BD' },
     { value: 'library', label: 'Library' },
   ]
+  const [wtpFilter, setWtpFilter] = useMultiSelectFilterState(WTP_OPTIONS.map(o => o.value))
   const [agreementEndBy, setAgreementEndBy] = useState('')
   const [showHoldback, setShowHoldback] = useState(false)
   const [bangladeshiOnly, setBangladeshiOnly] = useState(false)
@@ -187,17 +186,7 @@ export function SatelliteDashboardTable({
     return Array.from(set).sort((a, b) => a.localeCompare(b))
   }, [movies])
 
-  const filteredLicensorOptions = licensorSearch.trim()
-    ? licensorOptions.filter((l) => l.toLowerCase().includes(licensorSearch.trim().toLowerCase()))
-    : licensorOptions
-
-  const toggleLicensor = (l: string) => {
-    setLicensorFilter((prev) => prev.includes(l) ? prev.filter((x) => x !== l) : [...prev, l])
-  }
-
-  const toggleWtp = (v: 'wtp' | 'wtp_bd' | 'library') => {
-    setWtpFilter((prev) => prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v])
-  }
+  const [licensorFilter, setLicensorFilter] = useMultiSelectFilterState(licensorOptions)
 
   useEffect(() => { setSelectedIds(new Set()) }, [activeCard, language, expiryFrom, expiryTo, openFrom, openTo, sourceFilter, licensorFilter, certFilter, wtpFilter, bangladeshiOnly, agreementEndBy])
 
@@ -218,15 +207,9 @@ export function SatelliteDashboardTable({
 
   useEffect(() => {
     setSortBy(activeCard === 'expiring' ? 'expiry_asc' : 'title_asc')
-    setWtpFilter([])
+    setWtpFilter(WTP_OPTIONS.map(o => o.value))
     setAgreementEndBy('')
   }, [activeCard])
-
-  const toggleCert = (cert: string) => {
-    setCertFilter((prev) =>
-      prev.includes(cert) ? prev.filter((c) => c !== cert) : [...prev, cert]
-    )
-  }
 
   const fetchData = useCallback(async (forExport = false) => {
     if (!forExport) setIsLoading(true)
@@ -235,14 +218,23 @@ export function SatelliteDashboardTable({
       const offset = 0
       const safeSortBy = (sortBy === 'expiry_asc' || sortBy === 'expiry_desc') ? 'title_asc' : sortBy
 
+      // A filter is only sent to the server when it's a genuine narrowing (partial selection or
+      // fully cleared). When every known option is checked, we pass undefined — the same as "no
+      // filter" — rather than the full array, because the option lists (esp. Certification, a
+      // hardcoded set) aren't guaranteed to cover every value present in the data (nulls, blanks,
+      // legacy values). Sending the full array would silently exclude those rows via `.in()`.
+      const languageParam = language.length < totalLanguageCount ? language : undefined
+      const certParam = certFilter.length < CERT_OPTIONS.length ? certFilter : undefined
+      const wtpParam = wtpFilter.length < WTP_OPTIONS.length ? wtpFilter : undefined
+
       if (activeCard === 'open_titles') {
         const { data, count } = await getOpenTitlesForMode('satellite', {
           search: debouncedSearch || undefined,
-          language: language.length > 0 ? language : undefined,
+          language: languageParam,
           sourceFilter,
           sortBy: safeSortBy,
-          certification: certFilter.length > 0 ? certFilter : undefined,
-          wtpFilter: wtpFilter.length > 0 ? wtpFilter : undefined,
+          certification: certParam,
+          wtpFilter: wtpParam,
           bangladeshiOnly: bangladeshiOnly || undefined,
           openFrom: openFrom || undefined,
           openTo: openTo || undefined,
@@ -256,11 +248,11 @@ export function SatelliteDashboardTable({
         const { data, count } = await getExpiringSatelliteTitles({
           fromDate: expiryFrom || undefined,
           toDate: expiryTo || undefined,
-          language: language.length > 0 ? language : undefined,
+          language: languageParam,
           sourceFilter,
           search: debouncedSearch || undefined,
           sortBy,
-          certification: certFilter.length > 0 ? certFilter : undefined,
+          certification: certParam,
           limit,
           offset,
         })
@@ -272,10 +264,10 @@ export function SatelliteDashboardTable({
         const { data, count } = await getMoviesForDashboard({
           category: 'wtp',
           search: debouncedSearch || undefined,
-          language: language.length > 0 ? language : undefined,
+          language: languageParam,
           sourceFilter,
           sortBy: safeSortBy,
-          certification: certFilter.length > 0 ? certFilter : undefined,
+          certification: certParam,
           limit,
           offset,
         })
@@ -288,7 +280,7 @@ export function SatelliteDashboardTable({
     } finally {
       if (!forExport) setIsLoading(false)
     }
-  }, [activeCard, debouncedSearch, language, sourceFilter, certFilter, expiryFrom, expiryTo, openFrom, openTo, sortBy, wtpFilter, bangladeshiOnly])
+  }, [activeCard, debouncedSearch, language, totalLanguageCount, sourceFilter, certFilter, expiryFrom, expiryTo, openFrom, openTo, sortBy, wtpFilter, bangladeshiOnly])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -298,7 +290,7 @@ export function SatelliteDashboardTable({
       const rawData = await fetchData(true)
       const data = activeCard !== 'expiring'
         ? (rawData as any[]).filter((m: any) => {
-            if (licensorFilter.length > 0 && !licensorFilter.includes(getEffectiveLicensor(m))) return false
+            if (licensorFilter.length < licensorOptions.length && !licensorFilter.includes(getEffectiveLicensor(m))) return false
             if (agreementEndBy) {
               if (m.source !== 'acquired' || !m.agreement_end_date) return false
               if (m.agreement_end_date > agreementEndBy) return false
@@ -365,9 +357,8 @@ export function SatelliteDashboardTable({
     }
   }, [fetchData, activeCard, selectedIds, licensorFilter, agreementEndBy])
 
-  const licensorFilteredMovies = (licensorFilter.length > 0
-    ? movies.filter((m: any) => licensorFilter.includes(getEffectiveLicensor(m)))
-    : movies
+  const licensorFilteredMovies = movies.filter((m: any) =>
+    licensorFilter.length >= licensorOptions.length || licensorFilter.includes(getEffectiveLicensor(m))
   ).filter((m: any) => {
     if (!agreementEndBy) return true
     // Acquired-only: home productions have no agreement_end_date, so this filter excludes them.
@@ -408,7 +399,7 @@ export function SatelliteDashboardTable({
 
   const showExpiryFilters = activeCard === 'expiring'
   const showWtpCol = activeCard === 'open_titles'
-  const showLicensorCol = activeCard === 'open_titles' && (sourceFilter === 'acquired' || licensorFilter.length > 0)
+  const showLicensorCol = activeCard === 'open_titles' && (sourceFilter === 'acquired' || (licensorFilter.length > 0 && licensorFilter.length < licensorOptions.length))
   const showHoldbackCol = activeCard === 'open_titles' && showHoldback
   // Expiring card: flat per-right rows (no expand/collapse)
   const flatExpiryRows = activeCard === 'expiring'
@@ -446,95 +437,30 @@ export function SatelliteDashboardTable({
         </Select>
 
         {/* Licensor multi-select */}
-        <Popover open={licensorOpen} onOpenChange={(o) => { setLicensorOpen(o); if (!o) setLicensorSearch('') }}>
-          <PopoverTrigger asChild>
-            <Button variant="outline" size="sm"
-              className={`h-9 w-40 justify-start gap-1.5 text-xs font-normal bg-(--bg-raise) border-(--svf-border) hover:bg-(--hover) hover:border-(--svf-border-strong) transition-colors ${licensorFilter.length > 0 ? 'border-purple-500/60 text-purple-400 bg-purple-500/5' : 'text-(--text-faint)'}`}>
-              <span className="truncate flex-1 text-left">
-                {licensorFilter.length === 0 ? 'Licensor' : licensorFilter.length === 1 ? licensorFilter[0] : `${licensorFilter.length} selected`}
-              </span>
-              {licensorFilter.length > 0 && (
-                <span onClick={(e) => { e.stopPropagation(); setLicensorFilter([]) }}
-                  className="hover:text-red-400 transition-colors shrink-0">
-                  <X className="h-3 w-3" />
-                </span>
-              )}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-56 p-2 bg-(--panel-solid) border-(--svf-border)/60 shadow-xl" align="start">
-            <div className="relative mb-1.5">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-(--text-faint)" />
-              <Input autoFocus placeholder="Search licensor…" value={licensorSearch} onChange={(e) => setLicensorSearch(e.target.value)}
-                className="h-7 pl-7 text-xs placeholder:text-(--text-faint)" />
-            </div>
-            <div className="max-h-56 overflow-y-auto space-y-0.5">
-              <div className="flex items-center gap-2 px-1.5 py-1.5 rounded hover:bg-(--hover) cursor-pointer transition-colors"
-                onClick={() => { setLicensorFilter([]) }}>
-                <Checkbox checked={licensorFilter.length === 0} className="h-3.5 w-3.5" />
-                <span className="text-xs text-(--text)">All Licensors</span>
-              </div>
-              {filteredLicensorOptions.length === 0 ? (
-                <p className="text-xs text-(--text-faint) px-1.5 py-2">No matches</p>
-              ) : (
-                filteredLicensorOptions.map((l) => (
-                  <div key={l} className="flex items-center gap-2 px-1.5 py-1.5 rounded hover:bg-(--hover) cursor-pointer transition-colors"
-                    onClick={() => toggleLicensor(l)}>
-                    <Checkbox checked={licensorFilter.includes(l)} className="h-3.5 w-3.5" />
-                    <span className="text-xs text-(--text) truncate">{l}</span>
-                  </div>
-                ))
-              )}
-            </div>
-          </PopoverContent>
-        </Popover>
+        <MultiSelectFilter
+          label="Licensor"
+          options={licensorOptions}
+          value={licensorFilter}
+          onChange={setLicensorFilter}
+          searchable
+          accent="purple"
+        />
 
         {/* Certification multi-select */}
-        <Popover open={certOpen} onOpenChange={setCertOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="outline" size="sm"
-              className={`h-9 gap-1.5 text-xs font-normal bg-(--bg-raise) border-(--svf-border) hover:bg-(--hover) hover:border-(--svf-border-strong) transition-colors ${certFilter.length > 0 ? 'border-purple-500/60 text-purple-400 bg-purple-500/5' : 'text-(--text)'}`}>
-              <Filter className="h-3 w-3 shrink-0" />
-              {certFilter.length === 0
-                ? 'Certification'
-                : (certFilter.length > 0 && !certFilter.includes('A') && CERT_OPTIONS.filter(c => c !== 'A').every(c => certFilter.includes(c)))
-                  ? 'Except A'
-                  : certFilter.length === 1
-                    ? certFilter[0]
-                    : `${certFilter.length} selected`}
-              {certFilter.length > 0 && (
-                <span onClick={(e) => { e.stopPropagation(); setCertFilter([]) }}
-                  className="ml-0.5 hover:text-red-400 transition-colors">
-                  <X className="h-3 w-3" />
-                </span>
-              )}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-44 p-2 bg-(--panel-solid) border-(--svf-border)/60 shadow-xl" align="start">
-            <p className="text-xs font-semibold text-(--text-faint) px-1 pb-1.5 uppercase tracking-wide">Certification</p>
-            <div className="border-b border-(--svf-border) mb-1.5 pb-1.5 space-y-0.5">
-              <div className="flex items-center gap-2 px-1 py-1.5 rounded hover:bg-(--hover) cursor-pointer transition-colors"
-                onClick={() => { setCertFilter([]) }}>
-                <Checkbox checked={certFilter.length === 0} className="h-3.5 w-3.5" />
-                <span className="text-xs text-(--text)">All</span>
-              </div>
-              <div className="flex items-center gap-2 px-1 py-1.5 rounded hover:bg-(--hover) cursor-pointer transition-colors"
-                onClick={() => { setCertFilter(CERT_OPTIONS.filter(c => c !== 'A')) }}>
-                <Checkbox
-                  checked={certFilter.length > 0 && !certFilter.includes('A') && CERT_OPTIONS.filter(c => c !== 'A').every(c => certFilter.includes(c))}
-                  className="h-3.5 w-3.5"
-                />
-                <span className="text-xs text-(--text)">Except A</span>
-              </div>
-            </div>
-            {CERT_OPTIONS.map((cert) => (
-              <div key={cert} className="flex items-center gap-2 px-1 py-1.5 rounded hover:bg-(--hover) cursor-pointer transition-colors"
-                onClick={() => toggleCert(cert)}>
-                <Checkbox checked={certFilter.includes(cert)} className="h-3.5 w-3.5" />
-                <span className="text-xs text-(--text)">{cert}</span>
-              </div>
-            ))}
-          </PopoverContent>
-        </Popover>
+        <MultiSelectFilter
+          label="Certification"
+          options={CERT_OPTIONS}
+          value={certFilter}
+          onChange={setCertFilter}
+          accent="purple"
+          triggerWidth="w-36"
+          extraPresetRows={[{
+            key: 'except-a',
+            label: 'Except A',
+            isActive: (v) => v.length > 0 && !v.includes('A') && CERT_OPTIONS.filter(c => c !== 'A').every(c => v.includes(c)),
+            onSelect: () => setCertFilter(CERT_OPTIONS.filter(c => c !== 'A')),
+          }]}
+        />
 
 
         {/* Expiry year + date range */}
@@ -575,38 +501,14 @@ export function SatelliteDashboardTable({
         {/* Open titles filters: WTP + date range */}
         {activeCard === 'open_titles' && (
           <>
-            <Popover open={wtpOpen} onOpenChange={setWtpOpen}>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm"
-                  className={`h-9 w-32.5 justify-start gap-1.5 text-xs font-normal bg-(--bg-raise) border-(--svf-border) hover:bg-(--hover) hover:border-(--svf-border-strong) transition-colors ${wtpFilter.length > 0 ? 'border-violet-500/60 text-violet-400 bg-violet-500/5' : 'text-(--text-faint)'}`}>
-                  <span className="truncate flex-1 text-left">
-                    {wtpFilter.length === 0 ? 'WTP' : wtpFilter.length === 1 ? WTP_OPTIONS.find((o) => o.value === wtpFilter[0])?.label : `${wtpFilter.length} selected`}
-                  </span>
-                  {wtpFilter.length > 0 && (
-                    <span onClick={(e) => { e.stopPropagation(); setWtpFilter([]) }}
-                      className="hover:text-red-400 transition-colors shrink-0">
-                      <X className="h-3 w-3" />
-                    </span>
-                  )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-44 p-2 bg-(--panel-solid) border-(--svf-border)/60 shadow-xl" align="start">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2 px-1.5 py-1.5 rounded hover:bg-(--hover) cursor-pointer transition-colors"
-                    onClick={() => { setWtpFilter([]) }}>
-                    <Checkbox checked={wtpFilter.length === 0} className="h-3.5 w-3.5" />
-                    <span className="text-xs text-(--text)">All</span>
-                  </div>
-                  {WTP_OPTIONS.map((opt) => (
-                    <div key={opt.value} className="flex items-center gap-2 px-1.5 py-1.5 rounded hover:bg-(--hover) cursor-pointer transition-colors"
-                      onClick={() => toggleWtp(opt.value)}>
-                      <Checkbox checked={wtpFilter.includes(opt.value)} className="h-3.5 w-3.5" />
-                      <span className="text-xs text-(--text)">{opt.label}</span>
-                    </div>
-                  ))}
-                </div>
-              </PopoverContent>
-            </Popover>
+            <MultiSelectFilter
+              label="WTP"
+              options={WTP_OPTIONS}
+              value={wtpFilter}
+              onChange={(v) => setWtpFilter(v as ('wtp' | 'wtp_bd' | 'library')[])}
+              accent="purple"
+              triggerWidth="w-32.5"
+            />
 
             <div className="flex items-center gap-1 bg-(--bg-raise) border border-(--svf-border) rounded-md px-2 h-9 hover:border-(--svf-border-strong) transition-colors">
               <span className="text-[10px] font-medium text-(--text-faint) uppercase px-1">From</span>

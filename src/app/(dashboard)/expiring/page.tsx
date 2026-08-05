@@ -6,8 +6,8 @@ import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SortableHeader } from "@/components/ui/sortable-header";
 import {
   Table,
@@ -24,6 +24,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAuth } from "@/contexts/auth-context";
+import { useMultiSelectFilterState } from "@/hooks/use-multi-select-filter-state";
 import { useSortableTable } from "@/hooks/use-sortable-table";
 import { getExpiringRights } from "@/lib/api/movies";
 import { getPlatforms } from "@/lib/api/dashboard";
@@ -64,8 +65,8 @@ export default function ExpiringRightsPage() {
   const [rightsTypeFilter, setRightsTypeFilter] = useState<"all" | "satellite" | "internet" | "other">("all");
   const [customFromDate, setCustomFromDate] = useState<Date>();
   const [customToDate, setCustomToDate] = useState<Date>();
-  const [platformFilter, setPlatformFilter] = useState<string>("all");
-  const [subTypeFilter, setSubTypeFilter] = useState<string>("all");
+  const [platformFilter, setPlatformFilter] = useMultiSelectFilterState<string>([]);
+  const [subTypeFilter, setSubTypeFilter] = useMultiSelectFilterState<string>([]);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [deletingRight, setDeletingRight] = useState<ExpiringRight | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -130,10 +131,12 @@ export default function ExpiringRightsPage() {
     fetchExpiringRights();
   }, [fetchExpiringRights]);
 
+  const platformOptions = useMemo(() => platforms.map((p) => p.id), [platforms]);
+
   useEffect(() => {
-    setPlatformFilter("all");
-    setSubTypeFilter("all");
-  }, [rightsTypeFilter]);
+    setPlatformFilter(platformOptions);
+    setSubTypeFilter([]);
+  }, [rightsTypeFilter, platformOptions]);
 
   const typeFiltered = useMemo(() => expiringRights.filter((right) => {
     if (rightsTypeFilter === "all") return true;
@@ -153,9 +156,16 @@ export default function ExpiringRightsPage() {
     return Array.from(names).sort();
   }, [typeFiltered, rightsTypeFilter]);
 
+  // Seed sub-type filter to "all selected" once its option list is known for the active rights type.
+  const subTypeInitialized = useMemo(() => subTypeOptions.join('|'), [subTypeOptions]);
+  useEffect(() => {
+    setSubTypeFilter(subTypeOptions);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subTypeInitialized]);
+
   const filteredRights = useMemo(() => typeFiltered.filter((right) => {
-    if (platformFilter !== "all" && right.platform_id !== platformFilter) return false;
-    if (subTypeFilter !== "all" && right.rights_type_name !== subTypeFilter) return false;
+    if (platformFilter.length < platformOptions.length && !platformFilter.includes(right.platform_id || "")) return false;
+    if (subTypeOptions.length > 0 && subTypeFilter.length < subTypeOptions.length && !subTypeFilter.includes(right.rights_type_name || "")) return false;
     if (searchQuery) {
       const q = searchQuery.trim().toLowerCase();
       const inTitle = (right.movie_title || "").toLowerCase().startsWith(q);
@@ -163,7 +173,7 @@ export default function ExpiringRightsPage() {
       if (!inTitle && !inPlatform) return false;
     }
     return true;
-  }), [typeFiltered, platformFilter, subTypeFilter, searchQuery]);
+  }), [typeFiltered, platformFilter, platformOptions.length, subTypeFilter, subTypeOptions, searchQuery]);
 
   const { sortedData: sortedFiltered, sortConfig, requestSort } = useSortableTable(filteredRights);
 
@@ -221,7 +231,7 @@ export default function ExpiringRightsPage() {
     XLSX.writeFile(wb, `expiring-rights-${activeFilter}-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
   };
 
-  const hasSecondaryFilters = platformFilter !== "all" || subTypeFilter !== "all" || searchQuery;
+  const hasSecondaryFilters = platformFilter.length < platformOptions.length || (subTypeOptions.length > 0 && subTypeFilter.length < subTypeOptions.length) || searchQuery;
 
   if (loading) {
     return (
@@ -402,40 +412,30 @@ export default function ExpiringRightsPage() {
           />
         </div>
 
-        <Select value={platformFilter} onValueChange={setPlatformFilter}>
-          <SelectTrigger className="h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) text-sm w-50">
-            <SelectValue placeholder="All Platforms" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Platforms</SelectItem>
-            {platforms.map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                <span className="font-medium">{p.name}</span>
-                {p.platform_type && <span className="text-(--text-faint) ml-2 text-xs">— {p.platform_type}</span>}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <MultiSelectFilter
+          label="All Platforms"
+          options={platforms.map((p) => ({ value: p.id, label: p.name }))}
+          value={platformFilter}
+          onChange={setPlatformFilter}
+          searchable
+          triggerWidth="w-50"
+        />
 
         {rightsTypeFilter !== "all" && subTypeOptions.length > 0 && (
-          <Select value={subTypeFilter} onValueChange={setSubTypeFilter}>
-            <SelectTrigger className="h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) text-sm w-45">
-              <SelectValue placeholder="All Types" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              {subTypeOptions.map((t) => (
-                <SelectItem key={t} value={t}>{t}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <MultiSelectFilter
+            label="All Types"
+            options={subTypeOptions}
+            value={subTypeFilter}
+            onChange={setSubTypeFilter}
+            triggerWidth="w-45"
+          />
         )}
 
         {hasSecondaryFilters && (
           <Button
             variant="ghost" size="sm"
             className="h-9 gap-1.5 text-(--text-faint) hover:text-(--text) hover:bg-(--hover)"
-            onClick={() => { setPlatformFilter("all"); setSubTypeFilter("all"); setSearchQuery(""); }}
+            onClick={() => { setPlatformFilter(platformOptions); setSubTypeFilter(subTypeOptions); setSearchQuery(""); }}
           >
             <X className="h-3.5 w-3.5" /> Clear
           </Button>

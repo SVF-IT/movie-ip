@@ -13,17 +13,12 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/auth-context";
 import { useAppToast } from "@/hooks/use-app-toast";
+import { useMultiSelectFilterState } from "@/hooks/use-multi-select-filter-state";
 import {
   approveMovie,
   getMovieApprovalHistory,
@@ -543,7 +538,8 @@ export default function LegalApprovalsPage() {
   const [loading, setLoading] = useState(true);
   const toast = useAppToast();
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<ApprovalStatus | "all">("pending");
+  const APPROVAL_STATUS_OPTIONS: ApprovalStatus[] = ["pending", "approved", "rejected"];
+  const [statusFilter, setStatusFilter] = useState<ApprovalStatus[]>(["pending"]);
 
   // Approve dialog (new movies)
   const [approveTarget, setApproveTarget] = useState<PendingMovieForApproval | null>(null);
@@ -566,7 +562,8 @@ export default function LegalApprovalsPage() {
   const [changesCount, setChangesCount] = useState(0);
   const [changesLoading, setChangesLoading] = useState(true);
   const [changesSearch, setChangesSearch] = useState("");
-  const [changesStatusFilter, setChangesStatusFilter] = useState<"pending" | "approved" | "rejected" | "all">("pending");
+  const CHANGES_STATUS_OPTIONS: ("pending" | "approved" | "rejected")[] = ["pending", "approved", "rejected"];
+  const [changesStatusFilter, setChangesStatusFilter] = useState<("pending" | "approved" | "rejected")[]>(["pending"]);
 
   // Approve dialog (changes)
   const [changeApproveTarget, setChangeApproveTarget] = useState<PendingChange | null>(null);
@@ -792,8 +789,8 @@ export default function LegalApprovalsPage() {
     }
   };
 
-  const pendingMovieCount = statusFilter === "pending" ? totalCount : 0;
-  const pendingChangesCount = changesStatusFilter === "pending" ? changesCount : 0;
+  const pendingMovieCount = statusFilter.length === 1 && statusFilter[0] === "pending" ? totalCount : 0;
+  const pendingChangesCount = changesStatusFilter.length === 1 && changesStatusFilter[0] === "pending" ? changesCount : 0;
 
   return (
     <div className="space-y-4">
@@ -825,17 +822,13 @@ export default function LegalApprovalsPage() {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 h-9 bg-(--bg-raise) border-(--svf-border) text-(--text)" />
               </div>
-              <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as ApprovalStatus | "all")}>
-                <SelectTrigger className="h-9 w-40 bg-(--bg-raise) border-(--svf-border) text-(--text)">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="approved">Approved</SelectItem>
-                  <SelectItem value="rejected">Rejected</SelectItem>
-                  <SelectItem value="all">All</SelectItem>
-                </SelectContent>
-              </Select>
+              <MultiSelectFilter
+                label="Status"
+                options={[{ value: "pending", label: "Pending" }, { value: "approved", label: "Approved" }, { value: "rejected", label: "Rejected" }]}
+                value={statusFilter}
+                onChange={(v) => setStatusFilter(v as ApprovalStatus[])}
+                triggerWidth="w-40"
+              />
             </div>
           </div>
 
@@ -847,10 +840,10 @@ export default function LegalApprovalsPage() {
             <div className="flex flex-col items-center justify-center py-20 rounded-[14px] border border-dashed border-(--svf-border)">
               <CheckCircle className="h-12 w-12 text-green-400/40 mb-4" />
               <h3 className="font-bold text-xl text-(--text)">
-                {statusFilter === "pending" ? "No pending approvals" : "No movies found"}
+                {statusFilter.length === 1 && statusFilter[0] === "pending" ? "No pending approvals" : "No movies found"}
               </h3>
               <p className="text-(--text-faint) text-sm mt-2">
-                {statusFilter === "pending" ? "All movies have been reviewed." : "Try adjusting your search or filter."}
+                {statusFilter.length === 1 && statusFilter[0] === "pending" ? "All movies have been reviewed." : "Try adjusting your search or filter."}
               </p>
             </div>
           ) : (
@@ -921,17 +914,13 @@ export default function LegalApprovalsPage() {
                   onChange={(e) => setChangesSearch(e.target.value)}
                   className="pl-10 h-9 bg-(--bg-raise) border-(--svf-border) text-(--text)" />
               </div>
-              <Select value={changesStatusFilter} onValueChange={(v) => setChangesStatusFilter(v as typeof changesStatusFilter)}>
-                <SelectTrigger className="h-9 w-40 bg-(--bg-raise) border-(--svf-border) text-(--text)">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="approved">Approved</SelectItem>
-                  <SelectItem value="rejected">Rejected</SelectItem>
-                  <SelectItem value="all">All</SelectItem>
-                </SelectContent>
-              </Select>
+              <MultiSelectFilter
+                label="Status"
+                options={[{ value: "pending", label: "Pending" }, { value: "approved", label: "Approved" }, { value: "rejected", label: "Rejected" }]}
+                value={changesStatusFilter}
+                onChange={(v) => setChangesStatusFilter(v as ("pending" | "approved" | "rejected")[])}
+                triggerWidth="w-40"
+              />
             </div>
           </div>
 
@@ -943,10 +932,10 @@ export default function LegalApprovalsPage() {
             <div className="flex flex-col items-center justify-center py-20 rounded-[14px] border border-dashed border-(--svf-border)">
               <GitPullRequest className="h-12 w-12 text-blue-400/40 mb-4" />
               <h3 className="font-bold text-xl text-(--text)">
-                {changesStatusFilter === "pending" ? "No pending edit requests" : "No edit requests found"}
+                {changesStatusFilter.length === 1 && changesStatusFilter[0] === "pending" ? "No pending edit requests" : "No edit requests found"}
               </h3>
               <p className="text-(--text-faint) text-sm mt-2">
-                {changesStatusFilter === "pending" ? "All edit requests have been reviewed." : "Try adjusting your search or filter."}
+                {changesStatusFilter.length === 1 && changesStatusFilter[0] === "pending" ? "All edit requests have been reviewed." : "Try adjusting your search or filter."}
               </p>
             </div>
           ) : (

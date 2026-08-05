@@ -3,6 +3,7 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import {
   Select,
   SelectContent,
@@ -12,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useAppToast } from "@/hooks/use-app-toast";
+import { useMultiSelectFilterState } from "@/hooks/use-multi-select-filter-state";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { sanitizeError } from "@/lib/utils/sanitize-error";
@@ -53,7 +55,8 @@ export default function RecensorPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
-  const [sourceFilter, setSourceFilter] = useState<"all" | "home_production" | "acquired">("all");
+  const SOURCE_OPTIONS: ("home_production" | "acquired")[] = ["home_production", "acquired"];
+  const [sourceFilter, setSourceFilter] = useMultiSelectFilterState<"home_production" | "acquired">(SOURCE_OPTIONS);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState(0);
 
@@ -85,8 +88,14 @@ export default function RecensorPage() {
         query = query.eq("recensor_flag", false);
       }
 
-      if (sourceFilter !== "all") {
-        query = query.eq("source", sourceFilter);
+      if (sourceFilter.length === 0) {
+        setMovies([]);
+        setTotalCount(0);
+        setLoading(false);
+        return;
+      }
+      if (sourceFilter.length < SOURCE_OPTIONS.length) {
+        query = query.in("source", sourceFilter);
       }
 
       query = query
@@ -142,7 +151,7 @@ export default function RecensorPage() {
     }
   };
 
-  const hasFilters = search || statusFilter !== "all" || sourceFilter !== "all";
+  const hasFilters = search || statusFilter !== "all" || sourceFilter.length < SOURCE_OPTIONS.length;
 
   const statusPills: { id: FilterStatus; label: string; icon: React.ElementType; active: string; inactive: string }[] = [
     {
@@ -204,16 +213,13 @@ export default function RecensorPage() {
           />
         </div>
 
-        <Select value={sourceFilter} onValueChange={(v) => { setSourceFilter(v as typeof sourceFilter); }}>
-          <SelectTrigger className="w-40 h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text)">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Sources</SelectItem>
-            <SelectItem value="home_production">Home Production</SelectItem>
-            <SelectItem value="acquired">Acquired</SelectItem>
-          </SelectContent>
-        </Select>
+        <MultiSelectFilter
+          label="All Sources"
+          options={[{ value: "home_production", label: "Home Production" }, { value: "acquired", label: "Acquired" }]}
+          value={sourceFilter}
+          onChange={(v) => setSourceFilter(v as ("home_production" | "acquired")[])}
+          triggerWidth="w-40"
+        />
 
         {hasFilters && (
           <Button
@@ -221,7 +227,7 @@ export default function RecensorPage() {
             size="sm"
             className="h-9 gap-1.5"
             style={{ color: "var(--text-faint)" }}
-            onClick={() => { setSearch(""); setStatusFilter("all"); setSourceFilter("all"); }}
+            onClick={() => { setSearch(""); setStatusFilter("all"); setSourceFilter(SOURCE_OPTIONS); }}
           >
             <X className="h-3.5 w-3.5" />Reset
           </Button>
@@ -249,7 +255,7 @@ export default function RecensorPage() {
               </p>
               {hasFilters && (
                 <Button variant="ghost" size="sm" className="text-(--text-faint) hover:text-(--text)"
-                  onClick={() => { setSearch(""); setStatusFilter("all"); setSourceFilter("all"); }}>
+                  onClick={() => { setSearch(""); setStatusFilter("all"); setSourceFilter(SOURCE_OPTIONS); }}>
                   Clear filters
                 </Button>
               )}

@@ -4,15 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { useAuth } from "@/contexts/auth-context";
 import { useAppToast } from "@/hooks/use-app-toast";
+import { useMultiSelectFilterState } from "@/hooks/use-multi-select-filter-state";
 import { getMovieApprovalHistory, getPendingMovies, type PendingMovieForApproval } from "@/lib/api/approvals";
 import { resubmitMovie } from "@/lib/api/approvals";
 import { getPendingChanges, type PendingChange, type PendingChangeStatus } from "@/lib/api/pending-changes";
@@ -353,20 +348,22 @@ export default function MySubmissionsPage() {
   const [movies, setMovies] = useState<PendingMovieForApproval[]>([]);
   const [moviesLoading, setMoviesLoading] = useState(true);
   const [movieSearch, setMovieSearch] = useState("");
-  const [movieStatus, setMovieStatus] = useState<ApprovalStatus | "all">("all");
+  const MOVIE_STATUS_OPTIONS: ApprovalStatus[] = ["pending", "rejected"];
+  const [movieStatus, setMovieStatus] = useMultiSelectFilterState<ApprovalStatus>(MOVIE_STATUS_OPTIONS);
 
   // ── Pending changes ──
   const [changes, setChanges] = useState<PendingChange[]>([]);
   const [changesLoading, setChangesLoading] = useState(true);
   const [changeSearch, setChangeSearch] = useState("");
-  const [changeStatus, setChangeStatus] = useState<PendingChangeStatus | "all">("all");
+  const CHANGE_STATUS_OPTIONS: PendingChangeStatus[] = ["pending", "approved", "rejected"];
+  const [changeStatus, setChangeStatus] = useMultiSelectFilterState<PendingChangeStatus>(CHANGE_STATUS_OPTIONS);
 
   const toast = useAppToast();
 
   const fetchMovies = useCallback(async () => {
     setMoviesLoading(true);
     try {
-      const { data } = await getPendingMovies({ status: movieStatus === "all" ? "all" : movieStatus, search: movieSearch || undefined, limit: 10000, offset: 0 });
+      const { data } = await getPendingMovies({ status: movieStatus, search: movieSearch || undefined, limit: 10000, offset: 0 });
       setMovies(data.filter(m => m.approval_status !== "approved"));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load submissions");
@@ -378,7 +375,7 @@ export default function MySubmissionsPage() {
   const fetchChanges = useCallback(async () => {
     setChangesLoading(true);
     try {
-      const { data } = await getPendingChanges({ status: changeStatus === "all" ? "all" : changeStatus, search: changeSearch || undefined, limit: 10000, offset: 0 });
+      const { data } = await getPendingChanges({ status: changeStatus, search: changeSearch || undefined, limit: 10000, offset: 0 });
       setChanges(data);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load change requests");
@@ -471,16 +468,13 @@ export default function MySubmissionsPage() {
               <Input placeholder="Search by title or production no…" value={movieSearch} onChange={(e) => setMovieSearch(e.target.value)}
                 className="pl-10 h-9 bg-(--bg-raise) border-(--svf-border) text-(--text)" />
             </div>
-            <Select value={movieStatus} onValueChange={(v) => setMovieStatus(v as ApprovalStatus | "all")}>
-              <SelectTrigger className="h-9 w-44 bg-(--bg-raise) border-(--svf-border) text-(--text)">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
-              </SelectContent>
-            </Select>
+            <MultiSelectFilter
+              label="All Status"
+              options={[{ value: "pending", label: "Pending" }, { value: "rejected", label: "Rejected" }]}
+              value={movieStatus}
+              onChange={(v) => setMovieStatus(v as ApprovalStatus[])}
+              triggerWidth="w-44"
+            />
             <Link href="/movies/new">
               <Button size="sm" className="h-9 bg-red-600 hover:bg-red-500 text-white gap-2">
                 <Film className="h-4 w-4" /> New Movie
@@ -530,17 +524,13 @@ export default function MySubmissionsPage() {
               <Input placeholder="Search by movie title or change…" value={changeSearch} onChange={(e) => setChangeSearch(e.target.value)}
                 className="pl-10 h-9 bg-(--bg-raise) border-(--svf-border) text-(--text)" />
             </div>
-            <Select value={changeStatus} onValueChange={(v) => setChangeStatus(v as PendingChangeStatus | "all")}>
-              <SelectTrigger className="h-9 w-44 bg-(--bg-raise) border-(--svf-border) text-(--text)">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="approved">Approved</SelectItem>
-                <SelectItem value="rejected">Rejected</SelectItem>
-              </SelectContent>
-            </Select>
+            <MultiSelectFilter
+              label="All Status"
+              options={[{ value: "pending", label: "Pending" }, { value: "approved", label: "Approved" }, { value: "rejected", label: "Rejected" }]}
+              value={changeStatus}
+              onChange={(v) => setChangeStatus(v as PendingChangeStatus[])}
+              triggerWidth="w-44"
+            />
           </div>
 
           {pendingChanges > 0 && (

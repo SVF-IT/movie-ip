@@ -78,10 +78,11 @@ type ClipFilter = 'all' | 'yes' | 'no'
 
 interface ClipRightsTableProps {
   language: string[]
+  totalLanguageCount: number
   fullPage?: boolean
 }
 
-export function ClipRightsTable({ language, fullPage = false }: ClipRightsTableProps) {
+export function ClipRightsTable({ language, totalLanguageCount, fullPage = false }: ClipRightsTableProps) {
   const [movies, setMovies] = useState<MovieWithDetails[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -103,7 +104,7 @@ export function ClipRightsTable({ language, fullPage = false }: ClipRightsTableP
     try {
       const { data } = await getClipRightsMovies({
         search: debouncedSearch || undefined,
-        language: language.length > 0 ? language : undefined,
+        language: language.length < totalLanguageCount ? language : undefined,
         sourceFilter,
         clipRightsFilter: clipFilter,
         agreementEndBy: agreementEndBy || undefined,
@@ -115,7 +116,7 @@ export function ClipRightsTable({ language, fullPage = false }: ClipRightsTableP
     } finally {
       setIsLoading(false)
     }
-  }, [debouncedSearch, language, sourceFilter, clipFilter, agreementEndBy])
+  }, [debouncedSearch, language, totalLanguageCount, sourceFilter, clipFilter, agreementEndBy])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -124,7 +125,7 @@ export function ClipRightsTable({ language, fullPage = false }: ClipRightsTableP
     try {
       const { data } = await getClipRightsMovies({
         search: debouncedSearch || undefined,
-        language: language.length > 0 ? language : undefined,
+        language: language.length < totalLanguageCount ? language : undefined,
         sourceFilter,
         clipRightsFilter: clipFilter,
         agreementEndBy: agreementEndBy || undefined,
@@ -145,7 +146,7 @@ export function ClipRightsTable({ language, fullPage = false }: ClipRightsTableP
     } finally {
       setExportLoading(false)
     }
-  }, [debouncedSearch, language, sourceFilter, clipFilter, agreementEndBy])
+  }, [debouncedSearch, language, totalLanguageCount, sourceFilter, clipFilter, agreementEndBy])
 
   const getSourceBadge = (source: string) =>
     source === 'home_production' ? (

@@ -27,19 +27,22 @@ export interface PendingMovieForApproval {
 }
 
 export async function getPendingMovies(options?: {
-  status?: ApprovalStatus | "all";
+  status?: ApprovalStatus[];
   search?: string;
   limit?: number;
   offset?: number;
 }): Promise<{ data: PendingMovieForApproval[]; count: number }> {
+  if (options?.status && options.status.length === 0) {
+    return { data: [], count: 0 };
+  }
   try {
     let query = supabase
       .from("movies_with_details")
       .select("*", { count: "exact" });
 
-    const status = options?.status || "pending";
-    if (status !== "all") {
-      query = query.eq("approval_status", status);
+    const status = options?.status ?? ["pending"];
+    if (status.length > 0) {
+      query = query.in("approval_status", status);
     }
 
     if (options?.search) {

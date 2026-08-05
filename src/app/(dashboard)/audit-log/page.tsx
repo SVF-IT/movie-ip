@@ -3,15 +3,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { History, Loader2, ChevronDown, ChevronRight, Search, X, FilePlus, FilePen, Trash2 } from "lucide-react";
 import { useAppToast } from "@/hooks/use-app-toast";
+import { useMultiSelectFilterState } from "@/hooks/use-multi-select-filter-state";
 import { format, formatDistanceToNow } from "date-fns";
 import { getAuditLogs, getAuditLogStats } from "@/lib/api/audit";
 import { EnhancedStatsCard } from "@/components/dashboard/enhanced-stats-card";
@@ -183,8 +178,10 @@ export default function AuditLogPage() {
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [stats, setStats] = useState({ totalEvents: 0, eventsToday: 0, eventsThisWeek: 0 });
-  const [tableFilter, setTableFilter]   = useState("all");
-  const [actionFilter, setActionFilter] = useState("all");
+  const TABLE_OPTIONS = Object.keys(TABLE_NAMES);
+  const ACTION_OPTIONS = ["INSERT", "UPDATE", "DELETE"];
+  const [tableFilter, setTableFilter]   = useMultiSelectFilterState<string>(TABLE_OPTIONS);
+  const [actionFilter, setActionFilter] = useMultiSelectFilterState<string>(ACTION_OPTIONS);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo]     = useState("");
   const [loading, setLoading]   = useState(true);
@@ -195,8 +192,8 @@ export default function AuditLogPage() {
     try {
       setLoading(true);
       const { data, count } = await getAuditLogs({
-        tableName:  tableFilter  !== "all" ? tableFilter  : undefined,
-        action:     actionFilter !== "all" ? actionFilter : undefined,
+        tableName:  tableFilter.length  < TABLE_OPTIONS.length  ? tableFilter  : undefined,
+        action:     actionFilter.length < ACTION_OPTIONS.length ? actionFilter : undefined,
         dateFrom:   dateFrom || undefined,
         dateTo:     dateTo   || undefined,
         limit:  10000,
@@ -211,10 +208,10 @@ export default function AuditLogPage() {
   useEffect(() => { fetchLogs(); getAuditLogStats().then(setStats).catch(() => {}); }, [fetchLogs]);
 
   const clearFilters = () => {
-    setTableFilter("all"); setActionFilter("all");
+    setTableFilter(TABLE_OPTIONS); setActionFilter(ACTION_OPTIONS);
     setDateFrom(""); setDateTo("");
   };
-  const hasFilters = tableFilter !== "all" || actionFilter !== "all" || dateFrom || dateTo;
+  const hasFilters = tableFilter.length < TABLE_OPTIONS.length || actionFilter.length < ACTION_OPTIONS.length || dateFrom || dateTo;
 
 
   return (
@@ -237,26 +234,20 @@ export default function AuditLogPage() {
       {/* ── Directory Filters ── */}
       <div className="relative overflow-hidden rounded-[12px] bg-(--panel-solid)/40 border border-(--svf-border) backdrop-blur-xl p-4 shadow-xl">
         <div className="flex flex-wrap gap-3 items-center">
-          <Select value={tableFilter} onValueChange={(v) => { setTableFilter(v); }}>
-            <SelectTrigger className="h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) text-sm w-[160px]">
-              <SelectValue placeholder="All Tables" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Tables</SelectItem>
-              {Object.entries(TABLE_NAMES).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={actionFilter} onValueChange={(v) => { setActionFilter(v); }}>
-            <SelectTrigger className="h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) text-sm w-[140px]">
-              <SelectValue placeholder="All Actions" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Actions</SelectItem>
-              <SelectItem value="INSERT">Create</SelectItem>
-              <SelectItem value="UPDATE">Update</SelectItem>
-              <SelectItem value="DELETE">Delete</SelectItem>
-            </SelectContent>
-          </Select>
+          <MultiSelectFilter
+            label="All Tables"
+            options={TABLE_OPTIONS.map((k) => ({ value: k, label: TABLE_NAMES[k] }))}
+            value={tableFilter}
+            onChange={setTableFilter}
+            triggerWidth="w-[160px]"
+          />
+          <MultiSelectFilter
+            label="All Actions"
+            options={[{ value: "INSERT", label: "Create" }, { value: "UPDATE", label: "Update" }, { value: "DELETE", label: "Delete" }]}
+            value={actionFilter}
+            onChange={setActionFilter}
+            triggerWidth="w-[140px]"
+          />
           <Input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); }}
             className="h-9 w-[150px] bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-sm" />
           <span className="text-(--text-faint) text-xs">to</span>

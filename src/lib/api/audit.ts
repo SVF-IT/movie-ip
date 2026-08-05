@@ -5,23 +5,26 @@ import type { AuditLogEntry } from "@/lib/types/database";
 const supabase = createClient();
 
 export async function getAuditLogs(options?: {
-  tableName?: string;
-  action?: string;
+  tableName?: string[];
+  action?: string[];
   userId?: string;
   dateFrom?: string;
   dateTo?: string;
   limit?: number;
   offset?: number;
 }): Promise<{ data: AuditLogEntry[]; count: number }> {
+  if ((options?.tableName && options.tableName.length === 0) || (options?.action && options.action.length === 0)) {
+    return { data: [], count: 0 };
+  }
   let query = supabase
     .from("audit_logs")
     .select("*", { count: "exact" });
 
-  if (options?.tableName) {
-    query = query.eq("table_name", options.tableName);
+  if (options?.tableName && options.tableName.length > 0) {
+    query = query.in("table_name", options.tableName);
   }
-  if (options?.action) {
-    query = query.eq("action", options.action);
+  if (options?.action && options.action.length > 0) {
+    query = query.in("action", options.action);
   }
   if (options?.userId) {
     query = query.eq("user_id", options.userId);

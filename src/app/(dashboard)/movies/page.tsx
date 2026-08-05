@@ -11,11 +11,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -32,6 +27,8 @@ import {
 } from "@/components/ui/table";
 import { useAuth } from "@/contexts/auth-context";
 import { useAppToast } from "@/hooks/use-app-toast";
+import { useMultiSelectFilterState } from "@/hooks/use-multi-select-filter-state";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { getDistinctCertifications, getPlatforms } from "@/lib/api/dashboard";
 import { getBulkMoviePlatformRights, getGroupedMovies, getLanguages } from "@/lib/api/movies";
 import type { ApprovalStatus, GroupedMovie, MovieLanguageVersion, Platform, PlatformRight } from "@/lib/types/database";
@@ -39,7 +36,6 @@ import { cn } from "@/lib/utils";
 import {
   Activity,
   Calendar,
-  ChevronDown,
   Download, Edit, ExternalLink, Film,
   Image as ImageIcon,
   Languages,
@@ -68,10 +64,11 @@ export default function MoviesPage() {
   const toast = useAppToast();
 
   const [languages, setLanguages] = useState<string[]>([]);
-  const [certificationFilter, setCertificationFilter] = useState<string[]>([]);
+  const [certificationFilter, setCertificationFilter] = useMultiSelectFilterState<string>([]);
   const [certificationOptions, setCertificationOptions] = useState<string[]>([]);
-  const [languageFilter, setLanguageFilter] = useState<string>("all");
-  const [wtpFilter, setWtpFilter] = useState<string>("");
+  const [languageFilter, setLanguageFilter] = useMultiSelectFilterState<string>([]);
+  const WTP_OPTIONS = ["WTP", "WTP/BD", "Library"];
+  const [wtpFilter, setWtpFilter] = useMultiSelectFilterState<string>(WTP_OPTIONS);
   const [sortBy, setSortBy] = useState<'title_asc' | 'title_desc' | 'created_at_desc' | 'release_date_asc' | 'release_date_desc'>('title_asc');
   const [agreementExpiryYear, setAgreementExpiryYear] = useState<string>("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -91,7 +88,7 @@ export default function MoviesPage() {
     getLanguages().then((langs) => {
       setLanguages(langs);
       const bengali = langs.find((l) => l.toLowerCase() === 'bengali');
-      if (bengali) setLanguageFilter(bengali);
+      if (bengali) setLanguageFilter([bengali]);
     }).catch(() => { });
     getDistinctCertifications().then((certs) => {
       const standardCerts = ['U', 'UA', 'UA 7+', 'UA 13+', 'UA 16+', 'A', 'S'];
@@ -119,10 +116,15 @@ export default function MoviesPage() {
 
       const source = (sourceFilter === "all" || sourceFilter === "jointly_owned") ? undefined : (sourceFilter as "home_production" | "acquired" | "expired" | "bangladeshi");
 
+      // A filter is only sent to the server when it's a genuine narrowing (partial selection or
+      // fully cleared). When every known option is checked, we pass undefined — the same as "no
+      // filter" — since option lists (esp. Certification, partly hardcoded) aren't guaranteed to
+      // cover every value present in the data; sending the full array would silently exclude
+      // rows with off-list/blank values via `.in()`.
       const commonParams = {
         search: searchQuery || undefined,
-        language: (versionFilter === "multi") ? undefined : (languageFilter !== "all" ? languageFilter : undefined),
-        certification: certificationFilter.length > 0 ? certificationFilter : undefined,
+        language: (versionFilter === "multi") ? undefined : (languageFilter.length < languages.length ? languageFilter : undefined),
+        certification: certificationFilter.length < certificationOptions.length ? certificationFilter : undefined,
         sortBy,
         approvalStatus: canFilterByApproval ? approvalFilter : "approved",
       };
@@ -167,8 +169,8 @@ export default function MoviesPage() {
         });
       }
 
-      if (wtpFilter) {
-        filteredData = filteredData.filter(m => m.primary_version?.wtp_library === wtpFilter);
+      if (wtpFilter.length < WTP_OPTIONS.length) {
+        filteredData = filteredData.filter(m => wtpFilter.includes(m.primary_version?.wtp_library || ""));
       }
 
       setAllFilteredMovies(filteredData);
@@ -181,7 +183,7 @@ export default function MoviesPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, sourceFilter, versionFilter, languageFilter, certificationFilter, wtpFilter, sortBy, agreementExpiryYear, approvalFilter, canFilterByApproval]);
+  }, [searchQuery, sourceFilter, versionFilter, languageFilter, languages.length, certificationFilter, certificationOptions.length, wtpFilter, sortBy, agreementExpiryYear, approvalFilter, canFilterByApproval]);
 
   useEffect(() => { fetchMovies(); }, [fetchMovies]);
 
@@ -420,7 +422,8 @@ export default function MoviesPage() {
   };
 
   const hasFilters = searchQuery || sourceFilter !== "all" || versionFilter !== "all"
-    || languageFilter !== "all" || certificationFilter.length > 0 || wtpFilter
+    || languageFilter.length !== 1 || certificationFilter.length < certificationOptions.length
+    || wtpFilter.length < WTP_OPTIONS.length
     || agreementExpiryYear !== "all";
 
   const formatDate = (dateStr?: string) => {
@@ -502,63 +505,31 @@ export default function MoviesPage() {
             </div>
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Language</label>
-              <Select value={languageFilter} onValueChange={(v) => { setLanguageFilter(v); }}>
-                <SelectTrigger className="h-9 w-full">
-                  <div className="flex items-center gap-2"><Languages className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} /><SelectValue placeholder="Language" /></div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Languages</SelectItem>
-                  {languages.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <MultiSelectFilter
+                label="Language"
+                options={languages}
+                value={languageFilter}
+                onChange={setLanguageFilter}
+                triggerWidth="w-full"
+                icon={<Languages className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} />}
+              />
             </div>
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Certification</label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="h-9 w-full justify-between text-sm font-normal">
-                    <div className="flex items-center gap-2 truncate">
-                      <ShieldCheck className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} />
-                      <span className="truncate">
-                        {certificationFilter.length === 0
-                          ? "All Certs"
-                          : (certificationFilter.length > 0 && !certificationFilter.includes("A") && certificationOptions.filter(c => c !== "A").every(c => certificationFilter.includes(c)))
-                            ? "Except A"
-                            : certificationFilter.length === 1
-                              ? certificationFilter[0]
-                              : `${certificationFilter.length} selected`}
-                      </span>
-                    </div>
-                    <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-40" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-52 p-0" align="start" style={{ background: "var(--panel-solid)", border: "1px solid var(--svf-border-strong)", borderRadius: 11 }}>
-                  <div className="p-2 space-y-0.5" style={{ borderBottom: "1px solid var(--svf-border)" }}>
-                    <label className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-sm" style={{ color: "var(--text-dim)" }}>
-                      <Checkbox checked={certificationFilter.length === 0} onCheckedChange={() => { setCertificationFilter([]); }} />
-                      <span className="font-medium">All</span>
-                    </label>
-                    <label className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-sm" style={{ color: "var(--text-dim)" }}>
-                      <Checkbox
-                        checked={certificationFilter.length > 0 && !certificationFilter.includes("A") && certificationOptions.filter(c => c !== "A").every(c => certificationFilter.includes(c))}
-                        onCheckedChange={() => { setCertificationFilter(certificationOptions.filter(c => c !== "A")); }}
-                      />
-                      <span className="font-medium">Except A</span>
-                    </label>
-                  </div>
-                  <div className="max-h-56 overflow-y-auto p-2 space-y-0.5">
-                    {certificationOptions.map((cert) => (
-                      <label key={cert} className="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer text-sm" style={{ color: "var(--text-dim)" }}>
-                        <Checkbox checked={certificationFilter.includes(cert)}
-                          onCheckedChange={(checked) => {
-                            setCertificationFilter(prev => checked ? [...prev, cert] : prev.filter(c => c !== cert));
-                          }} />
-                        <span className="font-medium">{cert}</span>
-                      </label>
-                    ))}
-                  </div>
-                </PopoverContent>
-              </Popover>
+              <MultiSelectFilter
+                label="All Certs"
+                options={certificationOptions}
+                value={certificationFilter}
+                onChange={setCertificationFilter}
+                triggerWidth="w-full"
+                icon={<ShieldCheck className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} />}
+                extraPresetRows={[{
+                  key: 'except-a',
+                  label: 'Except A',
+                  isActive: (v) => v.length > 0 && !v.includes('A') && certificationOptions.filter(c => c !== 'A').every(c => v.includes(c)),
+                  onSelect: () => setCertificationFilter(certificationOptions.filter(c => c !== 'A')),
+                }]}
+              />
             </div>
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Versions</label>
@@ -575,17 +546,14 @@ export default function MoviesPage() {
             </div>
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>WTP / Library</label>
-              <Select value={wtpFilter || "all"} onValueChange={(v) => { setWtpFilter(v === "all" ? "" : v); }}>
-                <SelectTrigger className="h-9 w-full">
-                  <div className="flex items-center gap-2"><Star className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} /><SelectValue placeholder="All" /></div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="WTP">WTP</SelectItem>
-                  <SelectItem value="WTP/BD">WTP/BD</SelectItem>
-                  <SelectItem value="Library">Library</SelectItem>
-                </SelectContent>
-              </Select>
+              <MultiSelectFilter
+                label="All"
+                options={WTP_OPTIONS}
+                value={wtpFilter}
+                onChange={setWtpFilter}
+                triggerWidth="w-full"
+                icon={<Star className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} />}
+              />
             </div>
             <div>
               <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Sort By</label>
@@ -628,8 +596,9 @@ export default function MoviesPage() {
               <div className="flex items-end">
                 <Button variant="outline" size="sm" className="h-9 gap-1.5 w-full bg-red-500/5 border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50" onClick={() => {
                   setSearchQuery(""); setSourceFilter("all"); setVersionFilter("all");
-                  setLanguageFilter(languages.find(l => l.toLowerCase() === "bengali") ?? "all");
-                  setCertificationFilter([]); setWtpFilter("");
+                  const bengali = languages.find(l => l.toLowerCase() === "bengali");
+                  setLanguageFilter(bengali ? [bengali] : []);
+                  setCertificationFilter(certificationOptions); setWtpFilter(WTP_OPTIONS);
                   setAgreementExpiryYear("all");
                   setApprovalFilter(canSeeAllStatuses ? "approved" : "all");
                 }}>

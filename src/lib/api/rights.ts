@@ -6,10 +6,10 @@ const supabase = createClient()
 const MAX_LIMIT = 10000
 
 export async function getAllRights(options?: {
-  platformId?: string
+  platformId?: string[]
   platformNameContains?: string
   platformTypeCategory?: 'satellite' | 'internet' | 'other'
-  platformTypeExact?: string
+  platformTypeExact?: string[]
   isExpired?: boolean
   nature?: string
   territory?: string
@@ -20,6 +20,9 @@ export async function getAllRights(options?: {
   limit?: number
   offset?: number
 }): Promise<{ data: PlatformRight[]; count: number }> {
+  if ((options?.platformId && options.platformId.length === 0) || (options?.platformTypeExact && options.platformTypeExact.length === 0)) {
+    return { data: [], count: 0 }
+  }
   let movieIds: string[] | null = null
 
   if (options?.movieSearch) {
@@ -34,9 +37,9 @@ export async function getAllRights(options?: {
   // Resolve platform IDs from name or type-category filter
   let filteredPlatformIds: string[] | null = null
 
-  if (options?.platformId) {
-    filteredPlatformIds = [options.platformId]
-  } else if (options?.platformNameContains || options?.platformTypeCategory || options?.platformTypeExact) {
+  if (options?.platformId && options.platformId.length > 0) {
+    filteredPlatformIds = options.platformId
+  } else if (options?.platformNameContains || options?.platformTypeCategory || (options?.platformTypeExact && options.platformTypeExact.length > 0)) {
     let platQuery = supabase.from('platforms').select('id, platform_type')
     if (options.platformNameContains) {
       platQuery = platQuery.ilike('name', `%${options.platformNameContains}%`)
@@ -46,9 +49,9 @@ export async function getAllRights(options?: {
 
     let candidates = matchedPlatforms || []
 
-    if (options.platformTypeExact) {
-      const exact = options.platformTypeExact.toLowerCase()
-      candidates = candidates.filter((p: { platform_type?: string }) => (p.platform_type || '').toLowerCase() === exact)
+    if (options.platformTypeExact && options.platformTypeExact.length > 0) {
+      const exact = new Set(options.platformTypeExact.map((t) => t.toLowerCase()))
+      candidates = candidates.filter((p: { platform_type?: string }) => exact.has((p.platform_type || '').toLowerCase()))
     } else if (options.platformTypeCategory) {
       const cat = options.platformTypeCategory
       candidates = candidates.filter((p: { platform_type?: string }) => {

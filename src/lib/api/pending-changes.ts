@@ -173,19 +173,22 @@ export async function submitPersonChange(
 // ─── Fetch ────────────────────────────────────────────────────────────────────
 
 export async function getPendingChanges(options?: {
-  status?: PendingChangeStatus | "all";
+  status?: PendingChangeStatus[];
   movieId?: string;
   search?: string;
   limit?: number;
   offset?: number;
 }): Promise<{ data: PendingChange[]; count: number }> {
+  if (options?.status && options.status.length === 0) {
+    return { data: [], count: 0 };
+  }
   try {
     let query = supabase
       .from("movie_pending_changes")
       .select("*", { count: "exact" });
 
-    const status = options?.status ?? "pending";
-    if (status !== "all") query = query.eq("status", status);
+    const status = options?.status ?? ["pending"];
+    if (status.length > 0) query = query.in("status", status);
     if (options?.movieId) query = query.eq("movie_id", options.movieId);
 
     query = query.order("created_at", { ascending: false });

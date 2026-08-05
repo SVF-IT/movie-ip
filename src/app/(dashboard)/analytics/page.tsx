@@ -6,7 +6,9 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, LabelList,
 } from "recharts";
 import { Loader2, X } from "lucide-react";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useMultiSelectFilterState } from "@/hooks/use-multi-select-filter-state";
 import { createClient } from "@/lib/supabase/client";
 
 const supabase = createClient();
@@ -94,9 +96,10 @@ export default function AnalyticsPage() {
   const [allPlatformTypes, setAllPlatformTypes] = useState<string[]>([]);
 
   // Filters
-  const [language, setLanguage] = useState("all");
-  const [source, setSource] = useState("all");
-  const [platformType, setPlatformType] = useState("all");
+  const SOURCE_OPTIONS = ["home_production", "acquired"];
+  const [language, setLanguage] = useMultiSelectFilterState<string>(allLanguages);
+  const [source, setSource] = useMultiSelectFilterState<string>(SOURCE_OPTIONS);
+  const [platformType, setPlatformType] = useMultiSelectFilterState<string>(allPlatformTypes);
   const [rightsStatus, setRightsStatus] = useState("active"); // active | all
 
   const today = new Date().toISOString().split("T")[0];
@@ -140,12 +143,12 @@ export default function AnalyticsPage() {
   const filtered = useMemo(() => {
     return rights.filter((r) => {
       if (rightsStatus === "active" && (!r.is_current || (r.end_date && r.end_date < today))) return false;
-      if (language !== "all" && r.movie_language !== language) return false;
-      if (source !== "all" && r.movie_source !== source) return false;
-      if (platformType !== "all" && r.platform_type !== platformType) return false;
+      if (language.length < allLanguages.length && !language.includes(r.movie_language)) return false;
+      if (source.length < SOURCE_OPTIONS.length && !source.includes(r.movie_source)) return false;
+      if (platformType.length < allPlatformTypes.length && !platformType.includes(r.platform_type)) return false;
       return true;
     });
-  }, [rights, language, source, platformType, rightsStatus, today]);
+  }, [rights, language, allLanguages.length, source, platformType, allPlatformTypes.length, rightsStatus, today]);
 
   const activeRights = useMemo(() => rights.filter((r) => r.is_current && (!r.end_date || r.end_date >= today)), [rights, today]);
   const expiring30 = useMemo(() => activeRights.filter((r) => r.end_date && r.end_date <= new Date(Date.now() + 30 * 864e5).toISOString().split("T")[0]), [activeRights]);
@@ -202,7 +205,7 @@ export default function AnalyticsPage() {
     return Object.values(counts).sort((a, b) => b.count - a.count).slice(0, 8);
   }, [filtered]);
 
-  const hasFilters = language !== "all" || source !== "all" || platformType !== "all" || rightsStatus !== "active";
+  const hasFilters = language.length < allLanguages.length || source.length < SOURCE_OPTIONS.length || platformType.length < allPlatformTypes.length || rightsStatus !== "active";
 
   if (loading) {
     return (
@@ -229,40 +232,33 @@ export default function AnalyticsPage() {
             </SelectContent>
           </Select>
 
-          <Select value={language} onValueChange={setLanguage}>
-            <SelectTrigger className="h-8 w-36 text-xs bg-(--bg-raise) border-(--svf-border)">
-              <SelectValue placeholder="Language" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Languages</SelectItem>
-              {allLanguages.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <MultiSelectFilter
+            label="Language"
+            options={allLanguages}
+            value={language}
+            onChange={setLanguage}
+            triggerWidth="w-36"
+          />
 
-          <Select value={source} onValueChange={setSource}>
-            <SelectTrigger className="h-8 w-36 text-xs bg-(--bg-raise) border-(--svf-border)">
-              <SelectValue placeholder="Source" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Sources</SelectItem>
-              <SelectItem value="home_production">Home Production</SelectItem>
-              <SelectItem value="acquired">Acquired</SelectItem>
-            </SelectContent>
-          </Select>
+          <MultiSelectFilter
+            label="Source"
+            options={[{ value: "home_production", label: "Home Production" }, { value: "acquired", label: "Acquired" }]}
+            value={source}
+            onChange={setSource}
+            triggerWidth="w-36"
+          />
 
-          <Select value={platformType} onValueChange={setPlatformType}>
-            <SelectTrigger className="h-8 w-36 text-xs bg-(--bg-raise) border-(--svf-border)">
-              <SelectValue placeholder="Platform type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              {allPlatformTypes.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <MultiSelectFilter
+            label="Platform type"
+            options={allPlatformTypes}
+            value={platformType}
+            onChange={setPlatformType}
+            triggerWidth="w-36"
+          />
 
           {hasFilters && (
             <button
-              onClick={() => { setLanguage("all"); setSource("all"); setPlatformType("all"); setRightsStatus("active"); }}
+              onClick={() => { setLanguage(allLanguages); setSource(SOURCE_OPTIONS); setPlatformType(allPlatformTypes); setRightsStatus("active"); }}
               className="flex items-center gap-1 text-xs text-(--text-faint) hover:text-red-400 transition-colors"
             >
               <X className="h-3 w-3" /> Clear

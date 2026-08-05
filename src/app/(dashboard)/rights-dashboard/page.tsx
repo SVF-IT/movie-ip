@@ -6,8 +6,7 @@ import { InternetDashboardTable } from '@/components/dashboard/internet-dashboar
 import { OtherRightsDashboardTable } from '@/components/dashboard/other-rights-dashboard-table'
 import { SatelliteDashboardTable } from '@/components/dashboard/satellite-dashboard-table'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { MultiSelectFilter } from '@/components/ui/multi-select-filter'
 import { useAuth } from '@/contexts/auth-context'
 import { useAppToast } from "@/hooks/use-app-toast"
 import { getPendingMovies } from '@/lib/api/approvals'
@@ -46,45 +45,6 @@ type IntActiveCard = 'open_titles' | 'expiring' | 'active'
 // ─── Other Rights card types ─────────────────────────────────────────────────
 type OtherActiveCard = 'open_titles' | 'expiring' | 'active'
 
-function LanguageMultiSelect({ languages, selected, onToggle, open, onOpenChange, disabled, triggerCls }: {
-  languages: string[]
-  selected: string[]
-  onToggle: (l: string) => void
-  open: boolean
-  onOpenChange: (o: boolean) => void
-  disabled?: boolean
-  triggerCls?: string
-}) {
-  return (
-    <Popover open={open} onOpenChange={onOpenChange}>
-      <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" disabled={disabled}
-          className={`justify-start gap-1.5 font-normal bg-(--bg-raise)/40 border-(--svf-border) text-(--text) hover:bg-(--hover) ${triggerCls || ''}`}>
-          <span className="truncate flex-1 text-left">
-            {selected.length === 0 ? 'All Languages' : selected.length === 1 ? selected[0] : `${selected.length} selected`}
-          </span>
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-44 p-2 bg-(--panel-solid) border-(--svf-border)/60 shadow-xl" align="start">
-        <div className="max-h-64 overflow-y-auto space-y-0.5">
-          <div className="flex items-center gap-2 px-1.5 py-1.5 rounded hover:bg-(--hover) cursor-pointer transition-colors"
-            onClick={() => { languages.forEach((l) => { if (selected.includes(l)) onToggle(l) }) }}>
-            <Checkbox checked={selected.length === 0} className="h-3.5 w-3.5" />
-            <span className="text-xs text-(--text)">All Languages</span>
-          </div>
-          {languages.map((l) => (
-            <div key={l} className="flex items-center gap-2 px-1.5 py-1.5 rounded hover:bg-(--hover) cursor-pointer transition-colors"
-              onClick={() => onToggle(l)}>
-              <Checkbox checked={selected.includes(l)} className="h-3.5 w-3.5" />
-              <span className="text-xs text-(--text) truncate">{l}</span>
-            </div>
-          ))}
-        </div>
-      </PopoverContent>
-    </Popover>
-  )
-}
-
 export default function RightsDashboardPage() {
   const { profile } = useAuth()
   const isLegalOrAdmin = profile?.role === 'legal' || profile?.role === 'admin'
@@ -96,7 +56,6 @@ export default function RightsDashboardPage() {
   // ── shared ──
   const [languages, setLanguages] = useState<string[]>([])
   const [language, setLanguage] = useState<string[]>([])
-  const [languageOpen, setLanguageOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const toast = useAppToast();
   const [statsLoading, setStatsLoading] = useState(false)
@@ -138,7 +97,7 @@ export default function RightsDashboardPage() {
   // Load pending approvals count for legal/admin banner
   useEffect(() => {
     if (!isLegalOrAdmin) return
-    getPendingMovies({ status: 'pending', limit: 1 }).then(({ count }) => setPendingCount(count)).catch(() => { })
+    getPendingMovies({ status: ['pending'], limit: 1 }).then(({ count }) => setPendingCount(count)).catch(() => { })
   }, [isLegalOrAdmin])
 
   // Initial load — fetch language options; default to Bengali
@@ -160,10 +119,6 @@ export default function RightsDashboardPage() {
     fetchData()
   }, [])
 
-  const toggleLanguage = useCallback((l: string) => {
-    setLanguage((prev) => prev.includes(l) ? prev.filter((x) => x !== l) : [...prev, l])
-  }, [])
-
   // Refetch stat-card numbers whenever the language filter or either mode's Open Titles date
   // range changes, so the card numbers stay consistent with the tables below them. Only the
   // language filter (plus the pre-existing open-until date) feeds into these — other table
@@ -175,12 +130,11 @@ export default function RightsDashboardPage() {
     async function refreshStats() {
       setStatsLoading(true)
       try {
-        const langParam = language.length > 0 ? language : undefined
         const [satS, intS, ac, otherS] = await Promise.all([
-          getRightsModeStats('satellite', langParam, satOpenTo || undefined),
-          getRightsModeStats('internet', langParam, intOpenTo || undefined),
-          getActiveInternetTitlesCount(langParam),
-          getOtherRightsModeStats(langParam, otherOpenTo || undefined),
+          getRightsModeStats('satellite', language, satOpenTo || undefined),
+          getRightsModeStats('internet', language, intOpenTo || undefined),
+          getActiveInternetTitlesCount(language),
+          getOtherRightsModeStats(language, otherOpenTo || undefined),
         ])
         if (cancelled) return
         setSatStats(satS)
@@ -399,14 +353,13 @@ export default function RightsDashboardPage() {
             {/* Language selector */}
             <div className="flex items-center gap-1.5">
               <Languages className="h-3.5 w-3.5 text-(--text-faint) shrink-0" />
-              <LanguageMultiSelect
-                languages={languages}
-                selected={language}
-                onToggle={toggleLanguage}
-                open={languageOpen}
-                onOpenChange={setLanguageOpen}
+              <MultiSelectFilter
+                label="Language"
+                options={languages}
+                value={language}
+                onChange={setLanguage}
                 disabled={loading}
-                triggerCls="h-8 text-xs w-32"
+                triggerWidth="w-32"
               />
             </div>
           </div>
@@ -418,6 +371,7 @@ export default function RightsDashboardPage() {
             <SatelliteDashboardTable
               activeCard={satActiveCard}
               language={language}
+              totalLanguageCount={languages.length}
               expiryYear={satExpiryYear}
               onExpiryYearChange={handleSatYearChange}
               expiryFrom={satExpiryFrom}
@@ -435,6 +389,7 @@ export default function RightsDashboardPage() {
             <InternetDashboardTable
               activeCard={intActiveCard}
               language={language}
+              totalLanguageCount={languages.length}
               expiryYear={intExpiryYear}
               onExpiryYearChange={handleIntYearChange}
               expiryFrom={intExpiryFrom}
@@ -452,6 +407,7 @@ export default function RightsDashboardPage() {
             <OtherRightsDashboardTable
               activeCard={otherActiveCard}
               language={language}
+              totalLanguageCount={languages.length}
               expiryYear={otherExpiryYear}
               onExpiryYearChange={handleOtherYearChange}
               expiryFrom={otherExpiryFrom}
@@ -466,7 +422,7 @@ export default function RightsDashboardPage() {
               fullPage
             />
           ) : (
-            <ClipRightsTable language={language} fullPage />
+            <ClipRightsTable language={language} totalLanguageCount={languages.length} fullPage />
           )}
         </div>
       </div>
@@ -534,14 +490,13 @@ export default function RightsDashboardPage() {
         {/* Language selector */}
         <div className="flex items-center gap-2">
           <Languages className="h-4 w-4 shrink-0" style={{ color: "var(--text-faint)" }} />
-          <LanguageMultiSelect
-            languages={languages}
-            selected={language}
-            onToggle={toggleLanguage}
-            open={languageOpen}
-            onOpenChange={setLanguageOpen}
+          <MultiSelectFilter
+            label="Language"
+            options={languages}
+            value={language}
+            onChange={setLanguage}
             disabled={loading}
-            triggerCls="h-9 w-36"
+            triggerWidth="w-36"
           />
         </div>
 
@@ -657,6 +612,7 @@ export default function RightsDashboardPage() {
           <SatelliteDashboardTable
             activeCard={satActiveCard}
             language={language}
+            totalLanguageCount={languages.length}
             expiryYear={satExpiryYear}
             onExpiryYearChange={handleSatYearChange}
             expiryFrom={satExpiryFrom}
@@ -673,6 +629,7 @@ export default function RightsDashboardPage() {
           <InternetDashboardTable
             activeCard={intActiveCard}
             language={language}
+            totalLanguageCount={languages.length}
             expiryYear={intExpiryYear}
             onExpiryYearChange={handleIntYearChange}
             expiryFrom={intExpiryFrom}
@@ -689,6 +646,7 @@ export default function RightsDashboardPage() {
           <OtherRightsDashboardTable
             activeCard={otherActiveCard}
             language={language}
+            totalLanguageCount={languages.length}
             expiryYear={otherExpiryYear}
             onExpiryYearChange={handleOtherYearChange}
             expiryFrom={otherExpiryFrom}
@@ -702,7 +660,7 @@ export default function RightsDashboardPage() {
             yearOptions={yearOptions}
           />
         ) : (
-          <ClipRightsTable language={language} />
+          <ClipRightsTable language={language} totalLanguageCount={languages.length} />
         )}
       </div>
     </div>

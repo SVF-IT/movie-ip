@@ -11,7 +11,10 @@ export interface PlatformWithStats extends Platform {
   total_rights?: number
 }
 
-export async function getPlatformsWithStats(options?: { search?: string; platformType?: string; limit?: number; offset?: number }): Promise<{ data: PlatformWithStats[]; count: number }> {
+export async function getPlatformsWithStats(options?: { search?: string; platformType?: string[]; limit?: number; offset?: number }): Promise<{ data: PlatformWithStats[]; count: number }> {
+  if (options?.platformType && options.platformType.length === 0) {
+    return { data: [], count: 0 }
+  }
   try {
     let query = supabase.from('platforms').select('*', { count: 'exact' })
 
@@ -19,8 +22,8 @@ export async function getPlatformsWithStats(options?: { search?: string; platfor
       query = query.ilike('name', `%${options.search}%`)
     }
 
-    if (options?.platformType) {
-      query = query.eq('platform_type', options.platformType)
+    if (options?.platformType && options.platformType.length > 0) {
+      query = query.in('platform_type', options.platformType)
     }
 
     query = query.order('name')

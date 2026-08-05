@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import {
   Select,
   SelectContent,
@@ -28,6 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useMultiSelectFilterState } from "@/hooks/use-multi-select-filter-state";
 import { useSortableTable } from "@/hooks/use-sortable-table";
 import { deletePlatform, getPlatformsWithStats, getPlatformTypes, type PlatformWithStats } from "@/lib/api/platforms";
 import { cn } from "@/lib/utils";
@@ -61,7 +63,7 @@ export default function PlatformsPage() {
   const [platformTypes, setPlatformTypes] = useState<string[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useMultiSelectFilterState<string>(platformTypes);
   const [loading, setLoading] = useState(true);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -81,7 +83,7 @@ export default function PlatformsPage() {
       setLoading(true);
       const { data, count } = await getPlatformsWithStats({
         search: searchQuery || undefined,
-        platformType: typeFilter !== "all" ? typeFilter : undefined,
+        platformType: typeFilter.length < platformTypes.length ? typeFilter : undefined,
         limit: 10000,
       });
       setPlatforms(data);
@@ -91,7 +93,7 @@ export default function PlatformsPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, typeFilter]);
+  }, [searchQuery, typeFilter, platformTypes.length]);
 
   useEffect(() => { fetchPlatforms(); }, [fetchPlatforms]);
 
@@ -115,7 +117,7 @@ export default function PlatformsPage() {
     try {
       const { data } = await getPlatformsWithStats({
         search: searchQuery || undefined,
-        platformType: typeFilter !== "all" ? typeFilter : undefined,
+        platformType: typeFilter.length < platformTypes.length ? typeFilter : undefined,
       });
       setExportData(data);
       setShowExportDialog(true);
@@ -124,13 +126,13 @@ export default function PlatformsPage() {
     } finally {
       setExportLoading(false);
     }
-  }, [searchQuery, typeFilter]);
+  }, [searchQuery, typeFilter, platformTypes.length]);
 
   const { sortedData: sortedPlatforms, sortConfig, requestSort } = useSortableTable(platforms);
 
   const totalActiveRights = platforms.reduce((sum, p) => sum + (p.active_rights || 0), 0);
   const totalAllRights = platforms.reduce((sum, p) => sum + (p.total_rights || 0), 0);
-  const hasFilters = searchQuery || typeFilter !== "all";
+  const hasFilters = searchQuery || typeFilter.length < platformTypes.length;
 
   return (
     <div className="space-y-4 min-w-0">
@@ -184,21 +186,17 @@ export default function PlatformsPage() {
             )}
           </div>
 
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger className="h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) text-sm w-[180px]" aria-label="Filter by platform type">
-              <SelectValue placeholder="Platform Type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              {platformTypes.map((type) => (
-                <SelectItem key={type} value={type}>{type}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <MultiSelectFilter
+            label="Platform Type"
+            options={platformTypes}
+            value={typeFilter}
+            onChange={setTypeFilter}
+            triggerWidth="w-[180px]"
+          />
 
           {hasFilters && (
             <Button variant="ghost" size="sm" className="h-9 gap-1.5 text-(--text-faint) hover:text-(--text) hover:bg-(--hover)"
-              onClick={() => { setSearchQuery(""); setTypeFilter("all"); }}>
+              onClick={() => { setSearchQuery(""); setTypeFilter(platformTypes); }}>
               <X className="h-3.5 w-3.5" /> Clear
             </Button>
           )}

@@ -402,6 +402,15 @@ export interface RightsModeStats {
 }
 
 export async function getRightsModeStats(mode: RightsMode, language?: string[], openTo?: string): Promise<RightsModeStats> {
+  const emptyStats: RightsModeStats = {
+    openTitlesCount: 0,
+    openHomeTitlesCount: 0,
+    openAcquiredTitlesCount: 0,
+    wtpCount: 0,
+    expiringRightsCount: 0,
+    upcomingMoviesCount: 0,
+  }
+  if (language && language.length === 0) return emptyStats
   try {
     const today = new Date().toISOString().split('T')[0]
     // Same semantics as getOpenTitlesForMode: when an "open until" date is supplied, open-title
@@ -610,6 +619,9 @@ export async function getOpenTitlesForMode(
     wtpFilter?: ('wtp' | 'wtp_bd' | 'library')[]
   },
 ): Promise<{ data: (MovieWithDetails & { holdback_info: HoldbackInfo; holdback_summary: string })[]; count: number }> {
+  if ((options?.language && options.language.length === 0) || (options?.certification && options.certification.length === 0) || (options?.wtpFilter && options.wtpFilter.length === 0)) {
+    return { data: [], count: 0 }
+  }
   try {
     const today = new Date().toISOString().split('T')[0]
     // Reference date for expiry comparisons: when an "open until" date is supplied, a right
@@ -847,6 +859,9 @@ export async function getOpenOtherRightsTitles(options?: {
   openFrom?: string
   openTo?: string
 }): Promise<{ data: MovieWithDetails[]; count: number }> {
+  if ((options?.language && options.language.length === 0) || (options?.certification && options.certification.length === 0)) {
+    return { data: [], count: 0 }
+  }
   try {
     const today = new Date().toISOString().split('T')[0]
     const referenceDate = options?.openTo || today
@@ -962,6 +977,9 @@ export async function getExpiringOtherRightsTitles(options?: {
   limit?: number
   offset?: number
 }): Promise<{ data: MovieWithOtherRights[]; count: number }> {
+  if ((options?.language && options.language.length === 0) || (options?.certification && options.certification.length === 0)) {
+    return { data: [], count: 0 }
+  }
   try {
     const today = new Date().toISOString().split('T')[0]
     const sortBy = options?.sortBy || 'expiry_asc'
@@ -1051,6 +1069,9 @@ export interface OtherRightsModeStats {
 }
 
 export async function getOtherRightsModeStats(language?: string[], openTo?: string): Promise<OtherRightsModeStats> {
+  if (language && language.length === 0) {
+    return { openTitlesCount: 0, openHomeTitlesCount: 0, openAcquiredTitlesCount: 0, expiringRightsCount: 0, activeRightsCount: 0 }
+  }
   try {
     const today = new Date().toISOString().split('T')[0]
     const referenceDate = openTo || today
@@ -1170,6 +1191,9 @@ export async function getActiveOtherRightsTitles(options?: {
   certification?: string[]
   sortBy?: 'title_asc' | 'title_desc' | 'release_date_desc' | 'release_date_asc'
 }): Promise<{ data: MovieWithOtherRights[]; count: number }> {
+  if ((options?.language && options.language.length === 0) || (options?.certification && options.certification.length === 0)) {
+    return { data: [], count: 0 }
+  }
   try {
     const today = new Date().toISOString().split('T')[0]
     const sortBy = options?.sortBy || 'title_asc'
@@ -1257,6 +1281,9 @@ export async function getClipRightsMovies(options?: {
   agreementEndBy?: string
   sortBy?: 'title_asc' | 'title_desc' | 'release_date_desc' | 'release_date_asc'
 }): Promise<{ data: MovieWithDetails[]; count: number }> {
+  if (options?.language && options.language.length === 0) {
+    return { data: [], count: 0 }
+  }
   try {
     const sortBy = options?.sortBy || 'title_asc'
     let query = supabase.from('movies_with_details').select('*').eq('approval_status', 'approved')
@@ -1345,6 +1372,9 @@ export async function getExpiringSatelliteTitles(options?: {
   limit?: number
   offset?: number
 }): Promise<{ data: MovieWithSatelliteRights[]; count: number }> {
+  if ((options?.language && options.language.length === 0) || (options?.certification && options.certification.length === 0)) {
+    return { data: [], count: 0 }
+  }
   try {
     const today = new Date().toISOString().split('T')[0]
     const sortBy = options?.sortBy || 'expiry_asc'
@@ -1494,6 +1524,9 @@ export async function getExpiringInternetTitles(options?: {
   limit?: number
   offset?: number
 }): Promise<{ data: MovieWithInternetRights[]; count: number }> {
+  if ((options?.language && options.language.length === 0) || (options?.certification && options.certification.length === 0)) {
+    return { data: [], count: 0 }
+  }
   try {
     const today = new Date().toISOString().split('T')[0]
     const sortBy = options?.sortBy || 'expiry_asc'
@@ -1602,6 +1635,9 @@ export async function getActiveInternetTitles(options?: {
   limit?: number
   offset?: number
 }): Promise<{ data: MovieWithInternetRights[]; count: number }> {
+  if ((options?.language && options.language.length === 0) || (options?.certification && options.certification.length === 0)) {
+    return { data: [], count: 0 }
+  }
   try {
     const today = new Date().toISOString().split('T')[0]
     const sortBy = options?.sortBy || 'title_asc'
@@ -1685,6 +1721,7 @@ export async function getActiveInternetTitles(options?: {
 
 // Count of movies with active internet rights (for stat card)
 export async function getActiveInternetTitlesCount(language?: string[]): Promise<{ total: number; home: number; acquired: number }> {
+  if (language && language.length === 0) return { total: 0, home: 0, acquired: 0 }
   try {
     const today = new Date().toISOString().split('T')[0]
 
@@ -1764,6 +1801,9 @@ export async function getMoviesForDashboard(options?: {
   limit?: number
   offset?: number
 }): Promise<{ data: MovieWithDetails[]; count: number }> {
+  if ((options?.language && options.language.length === 0) || (options?.certification && options.certification.length === 0)) {
+    return { data: [], count: 0 }
+  }
   try {
     const today = new Date().toISOString().split('T')[0]
     const ninetyDaysFromNow = new Date()

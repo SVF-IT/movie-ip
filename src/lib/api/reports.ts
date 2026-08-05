@@ -318,10 +318,11 @@ export async function getReportData(
         (m: Record<string, unknown>) => !moviesWithRights.has(m.id as string)
       );
 
-      // Apply optional source filter
-      const sourceFilter = filters.source as string | undefined;
-      if (sourceFilter && sourceFilter !== "all") {
-        unreleased = unreleased.filter((m: Record<string, unknown>) => m.source === sourceFilter);
+      // Apply optional source filter — only a genuine narrowing (partial or fully cleared
+      // selection) is applied; when both sources are selected, that's equivalent to no filter.
+      const sourceFilter = filters.source as string[] | undefined;
+      if (sourceFilter && sourceFilter.length < 2) {
+        unreleased = unreleased.filter((m: Record<string, unknown>) => sourceFilter.includes(m.source as string));
       }
 
       // Sort by release year descending (newest first)
