@@ -721,7 +721,7 @@ export default function MoviesPage() {
                     <span className="absolute top-2 right-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: "oklch(0.70 0.16 305 / 0.3)", color: "oklch(0.85 0.10 305)", backdropFilter: "blur(4px)" }}>{pv?.wtp_library}</span>
                   )}
                   <div className="absolute bottom-0 left-0 right-0 px-2.5 pb-2.5 pt-8" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.82) 0%, transparent 100%)" }}>
-                    <p className="leading-tight text-white line-clamp-2" style={{ fontFamily: "var(--font-serif)", fontSize: 16, textShadow: "0 2px 10px rgba(0,0,0,0.5)" }}>
+                    <p title={movie.title} className="leading-tight text-white line-clamp-2" style={{ fontFamily: "var(--font-serif)", fontSize: 16, textShadow: "0 2px 10px rgba(0,0,0,0.5)" }}>
                       {movie.title}
                     </p>
                     <p style={{ fontSize: 10, marginTop: 4, color: "rgba(255,255,255,0.6)", fontFamily: "var(--font-mono)" }}>
@@ -732,12 +732,12 @@ export default function MoviesPage() {
                 </div>
                 <div style={{ padding: "10px 2px 4px" }}>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-semibold truncate" style={{ fontSize: 13.5, color: "var(--text)" }}>{movie.title}</span>
+                    <span title={movie.title} className="font-semibold truncate" style={{ fontSize: 13.5, color: "var(--text)" }}>{movie.title}</span>
                     {movie.certification && (
                       <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 5, border: "1px solid var(--svf-border)", color: "var(--text-faint)", flexShrink: 0 }}>{movie.certification}</span>
                     )}
                   </div>
-                  <p className="truncate" style={{ fontSize: 11.5, color: "var(--text-faint)", marginTop: 2 }}>
+                  <p title={pv?.director_names?.split(/[,&]/)[0]?.trim() || undefined} className="truncate" style={{ fontSize: 11.5, color: "var(--text-faint)", marginTop: 2 }}>
                     {pv?.director_names?.split(/[,&]/)[0]?.trim() || ""}
                   </p>
                 </div>
@@ -834,7 +834,7 @@ export default function MoviesPage() {
                                 <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "45%", background: "linear-gradient(to top, rgba(0,0,0,0.65), transparent)" }} />
                               </div>
                               <div className="min-w-0">
-                                <Link href={`/movies/${movieId}`} className="font-semibold text-sm hover:text-red-400 transition-colors line-clamp-1 block" style={{ color: "var(--text)" }}>
+                                <Link href={`/movies/${movieId}`} title={movie.title} className="font-semibold text-sm hover:text-red-400 transition-colors line-clamp-1 block" style={{ color: "var(--text)" }}>
                                   {movie.title}
                                   {movie.release_year && <span style={{ color: "var(--text-faint)", fontWeight: 400, marginLeft: 5 }}>({movie.release_year})</span>}
                                 </Link>
@@ -907,7 +907,7 @@ export default function MoviesPage() {
 
                           {showLicensorCol && (
                             <TableCell className="hidden lg:table-cell text-xs py-3 max-w-[140px]" style={{ color: "var(--text-faint)" }}>
-                              <span className="line-clamp-1">{pv?.assignor_licensor || "—"}</span>
+                              <span title={pv?.assignor_licensor || undefined} className="line-clamp-1">{pv?.assignor_licensor || "—"}</span>
                             </TableCell>
                           )}
 

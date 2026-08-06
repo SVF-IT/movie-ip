@@ -252,7 +252,7 @@ export function ClipRightsTable({ language, totalLanguageCount, fullPage = false
                   className={cn('border-(--svf-border)/30 hover:bg-(--hover) transition-colors', fullPage && idx % 2 === 0 && 'bg-(--panel-solid)/30')}
                 >
                   <TableCell className={cn('pl-4 font-medium max-w-70', cellCls)}>
-                    <Link href={`/movies/${movie.id}`} className="hover:text-primary transition-colors line-clamp-1">
+                    <Link href={`/movies/${movie.id}`} title={movie.title} className="hover:text-primary transition-colors line-clamp-1">
                       {movie.title}
                       {(movie.release_year || movie.release_date?.split('-')[0]) && (
                         <span className="font-normal ml-1" style={{ color: 'var(--text-faint)' }}>({movie.release_year || movie.release_date?.split('-')[0]})</span>

@@ -689,7 +689,7 @@ export function SatelliteDashboardTable({
                     <Checkbox checked={selectedIds.has(right.id)} onCheckedChange={() => toggleSelect(right.id)} />
                   </TableCell>
                   <TableCell className={cn('font-medium max-w-48', cellCls)}>
-                    <Link href={`/movies/${movie.id}`} className="hover:text-primary transition-colors line-clamp-2">
+                    <Link href={`/movies/${movie.id}`} title={movie.title} className="hover:text-primary transition-colors line-clamp-2">
                       {movie.title}
                       {(movie.release_year || movie.release_date?.split('-')[0]) && (
                         <span className="font-normal ml-1" style={{ color: 'var(--text-faint)' }}>({movie.release_year || movie.release_date?.split('-')[0]})</span>
@@ -744,7 +744,7 @@ export function SatelliteDashboardTable({
                   <Checkbox checked={selectedIds.has(movie.id)} onCheckedChange={() => toggleSelect(movie.id)} />
                 </TableCell>
                 <TableCell className={cn('font-medium max-w-55', cellCls)}>
-                  <Link href={`/movies/${movie.id}`} className="hover:text-primary transition-colors line-clamp-1">
+                  <Link href={`/movies/${movie.id}`} title={movie.title} className="hover:text-primary transition-colors line-clamp-1">
                     {movie.title}
                     {(movie.release_year || movie.release_date?.split('-')[0]) && (
                       <span className="font-normal ml-1" style={{ color: 'var(--text-faint)' }}>({movie.release_year || movie.release_date?.split('-')[0]})</span>
@@ -766,7 +766,7 @@ export function SatelliteDashboardTable({
                 )}
                 {showLicensorCol && (
                   <TableCell className={cn('max-w-35', cellCls)} style={{ color: 'var(--text-faint)' }}>
-                    <span className="line-clamp-1 text-xs">{getEffectiveLicensor(movie) || '—'}</span>
+                    <span className="line-clamp-1 text-xs" title={getEffectiveLicensor(movie) || undefined}>{getEffectiveLicensor(movie) || '—'}</span>
                   </TableCell>
                 )}
                 {activeCard === 'open_titles' && (

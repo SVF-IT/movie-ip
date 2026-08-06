@@ -115,14 +115,9 @@ export function MultiSelectFilter({
         )}
 
         <div className="flex items-center gap-2 px-1.5 py-1.5 rounded hover:bg-(--hover) cursor-pointer transition-colors"
-          onClick={() => onChange(allValues)}>
+          onClick={() => onChange(isAllSelected ? [] : allValues)}>
           <Checkbox checked={isAllSelected} className="h-3.5 w-3.5" />
           <span className="text-xs text-(--text)">Select All</span>
-        </div>
-        <div className="flex items-center gap-2 px-1.5 py-1.5 rounded hover:bg-(--hover) cursor-pointer transition-colors"
-          onClick={() => onChange([])}>
-          <Checkbox checked={isNoneSelected} className="h-3.5 w-3.5" />
-          <span className="text-xs text-(--text)">Clear All</span>
         </div>
 
         {extraPresetRows.length > 0 && (
