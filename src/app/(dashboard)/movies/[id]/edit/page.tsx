@@ -1,6 +1,7 @@
 "use client";
 
 import { LanguageSelector } from "@/components/forms/language-selector";
+import { CensorCertificatesSection } from "@/components/movies/censor-certificates-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -757,6 +758,7 @@ export default function EditMoviePage() {
           { id: "rights",   label: "Rights",    disabled: isHomeProd, tag: isHomeProd ? "All Yes" : null },
           { id: "notes",    label: "Notes" },
           { id: "people",   label: "Cast & Crew" },
+          { id: "certificates", label: "Censor Certificates" },
           { id: "approval", label: "Approval",  dot: approvalStatus === "rejected" ? "red" : approvalStatus === "pending" ? "amber" : null },
         ].map(step => {
           const isActive = activeTab === step.id;
@@ -1213,6 +1215,10 @@ export default function EditMoviePage() {
                 </div>
               </div>
             </SectionCard>
+          </div>}
+
+          {activeTab === "certificates" && <div className="space-y-4">
+            <CensorCertificatesSection movieId={movieId} />
           </div>}
 
           {activeTab === "approval" && <div className="space-y-4">

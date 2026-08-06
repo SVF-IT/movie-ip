@@ -1,6 +1,7 @@
 "use client";
 
 import { LanguageSelector } from "@/components/forms/language-selector";
+import { CensorCertificatesSection } from "@/components/movies/censor-certificates-section";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +30,7 @@ import type {
 } from "@/lib/types/database";
 import {
   ArrowLeft,
+  Award,
   Calendar,
   CheckCircle,
   Film,
@@ -55,11 +57,12 @@ const textareaCls = "bg-(--bg-raise) border-(--svf-border) text-(--text) placeho
 const selectTriggerCls = "h-[38px] bg-(--bg-raise) border-(--svf-border) text-(--text) text-[13.5px]";
 
 const STEPS = [
-  { id: "basic",    label: "Basic Info",  icon: Film },
-  { id: "acquired", label: "Acquisition", icon: Calendar },
-  { id: "rights",   label: "Rights",      icon: ShieldCheck },
-  { id: "notes",    label: "Notes",       icon: Info },
-  { id: "people",   label: "Cast & Crew", icon: Users },
+  { id: "basic",         label: "Basic Info",         icon: Film },
+  { id: "acquired",      label: "Acquisition",        icon: Calendar },
+  { id: "rights",        label: "Rights",             icon: ShieldCheck },
+  { id: "notes",         label: "Notes",               icon: Info },
+  { id: "people",        label: "Cast & Crew",         icon: Users },
+  { id: "certificates",  label: "Censor Certificates", icon: Award },
 ];
 
 // ── Small components ─────────────────────────────────────────────────────────
@@ -509,9 +512,10 @@ export default function NewMoviePage() {
           const isDone = i < currentStepIndex;
           // Acquisition tab disabled for home; Rights tab disabled for home (always "yes"); People tab disabled before save
           const isDisabled =
-            step.id === "acquired" ? isHomeProd :
-            step.id === "rights"   ? isHomeProd :
-            step.id === "people"   ? !createdMovieId : false;
+            step.id === "acquired"     ? isHomeProd :
+            step.id === "rights"       ? isHomeProd :
+            step.id === "people"       ? !createdMovieId :
+            step.id === "certificates" ? !createdMovieId : false;
           return (
             <button key={step.id} type="button" disabled={isDisabled}
               onClick={() => !isDisabled && setActiveTab(step.id)}
@@ -979,6 +983,36 @@ export default function NewMoviePage() {
                 </div>
               </div>
 
+              <div className="pt-2 border-t border-(--svf-border)">
+                <Button onClick={() => router.push("/movies")}
+                  className="h-9 px-6 bg-red-600 hover:bg-red-500 text-white border-0 shadow-lg shadow-red-900/30">
+                  Done — Go to Movies
+                </Button>
+              </div>
+            </div>
+          )}
+        </SectionCard>
+      )}
+
+      {activeTab === "certificates" && (
+        <SectionCard icon={Award} title="Censor Certificates">
+          {!createdMovieId ? (
+            <div className="flex flex-col items-center justify-center py-10 gap-3 text-center">
+              <div className="p-2 rounded-[9px] bg-(--bg-deep) border border-(--svf-border)">
+                <Award className="h-5 w-5 text-(--text-faint)" />
+              </div>
+              <p className="text-(--text) font-medium">Save the movie first</p>
+              <p className="text-(--text-faint) text-sm max-w-xs">Create the movie using the button below, then you can upload censor certificates here.</p>
+              <Button variant="outline" size="sm" className="mt-2 border-(--svf-border) text-(--text) hover:text-(--text) hover:bg-(--hover)"
+                onClick={() => setActiveTab("basic")}>Go to Basic Info</Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 rounded-[10px] bg-emerald-950/30 border border-emerald-700/40 px-4 py-3 text-sm text-emerald-300">
+                <CheckCircle className="h-4 w-4 shrink-0" />
+                Movie created! You can now upload censor certificates.
+              </div>
+              <CensorCertificatesSection movieId={createdMovieId} />
               <div className="pt-2 border-t border-(--svf-border)">
                 <Button onClick={() => router.push("/movies")}
                   className="h-9 px-6 bg-red-600 hover:bg-red-500 text-white border-0 shadow-lg shadow-red-900/30">

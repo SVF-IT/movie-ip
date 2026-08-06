@@ -2,6 +2,7 @@
 
 import { DisabledActionButton } from "@/components/disabled-action-button";
 import { RoleGate } from "@/components/role-gate";
+import { CensorCertificatesSection } from "@/components/movies/censor-certificates-section";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -40,6 +41,7 @@ import { format } from "date-fns";
 import {
   AlertTriangle,
   ArrowLeft,
+  Award,
   Calendar,
   CheckCircle2,
   Download,
@@ -203,6 +205,7 @@ export default function MovieDetailPage() {
     { id: "rights-info", label: "Rights Info", icon: ShieldCheck },
     { id: "exploitation", label: "Exploitation Rights", icon: FileText },
     { id: "history", label: "Rights History", icon: History },
+    { id: "censor-certificates", label: "Censor Certificates", icon: Award },
   ] as const;
   const [activeSection, setActiveSection] = useState<string>("info");
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -980,6 +983,11 @@ export default function MovieDetailPage() {
           )}
         </div>
         <RightsSubTabs sat={expiredSatellite} inet={expiredInternet} other={expiredOther} expired />
+      </div>
+
+      {/* ── Censor Certificates ── */}
+      <div ref={(el) => { sectionRefs.current["censor-certificates"] = el; }}>
+        <CensorCertificatesSection movieId={selectedVersionId} />
       </div>
 
         </div>
