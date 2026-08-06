@@ -2,7 +2,6 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/contexts/auth-context";
 import { useAppToast } from "@/hooks/use-app-toast";
 import type { EffectivePreference, GlobalNotificationSettings, NotificationType } from "@/lib/email/notification-service";
@@ -12,17 +11,20 @@ import {
   ArrowLeft,
   Bell,
   BellOff,
+  Check,
+  Clock,
   Info,
   Loader2,
   Mail,
   Pencil,
   Plus,
+  Shield,
   ShieldCheck,
   Sparkles,
   Trash2,
   User,
   Users,
-  X,
+  VolumeX,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -41,7 +43,7 @@ const categoryConfig: Record<string, {
 }> = {
   alerts: {
     title: "Expiring Rights Alerts",
-    description: "Get notified when rights are approaching expiration",
+    description: "Know before a right lapses",
     icon: AlertTriangle,
     accent: "text-red-600",
     accentBg: "bg-red-50",
@@ -50,7 +52,7 @@ const categoryConfig: Record<string, {
   },
   activity: {
     title: "Activity Updates",
-    description: "Stay informed about changes made in the system",
+    description: "Stay on top of catalogue changes",
     icon: Bell,
     accent: "text-blue-600",
     accentBg: "bg-blue-50",
@@ -68,7 +70,7 @@ const categoryConfig: Record<string, {
   },
   special_events: {
     title: "Special Events",
-    description: "Movie anniversaries and milestone celebrations",
+    description: "Milestones worth celebrating",
     icon: Sparkles,
     accent: "text-emerald-600",
     accentBg: "bg-emerald-50",
@@ -77,14 +79,16 @@ const categoryConfig: Record<string, {
   },
 };
 
-const notificationLabels: Record<string, { title: string; description: string }> = {
+const notificationLabels: Record<string, { title: string; description: string; cadence?: string }> = {
   rights_expiring_digest: {
     title: "Expiring Rights Digest",
-    description: "Every 2 weeks, a summary of all rights expiring within 90 days",
+    description: "A summary of all rights expiring within the next 90 days",
+    cadence: "Every 2 weeks",
   },
   agreement_end_reminder: {
     title: "Agreement End Date Digest",
-    description: "Every 2 weeks, acquired-movie agreements ending within 90 days",
+    description: "Acquired-movie agreements ending within the next 90 days",
+    cadence: "Every 2 weeks",
   },
   movie_created: {
     title: "New Movies",
@@ -92,11 +96,13 @@ const notificationLabels: Record<string, { title: string; description: string }>
   },
   recensor_reminder: {
     title: "Censor Reminder",
-    description: "Every 2 weeks, all A-certified movies pending re-censoring",
+    description: "All A-certified movies pending re-censoring",
+    cadence: "Every 2 weeks",
   },
   pending_approvals_reminder: {
     title: "Pending Approvals Reminder",
-    description: "Every 2 days, all movie change submissions awaiting review",
+    description: "Movie change submissions awaiting your review",
+    cadence: "Every 2 days",
   },
   user_created: {
     title: "Welcome Email",
@@ -108,7 +114,8 @@ const notificationLabels: Record<string, { title: string; description: string }>
   },
   anniversary_notification: {
     title: "Anniversary & Milestone",
-    description: "Every 10 days, upcoming movie anniversaries within the next 4 weeks",
+    description: "Upcoming movie anniversaries within the next 4 weeks",
+    cadence: "Every 10 days",
   },
 };
 
@@ -181,7 +188,7 @@ function ExternalContactForm({
   };
 
   return (
-    <div className="rounded-xl border border-(--svf-accent-line) bg-(--svf-accent-soft) p-4 space-y-4">
+    <div className="rounded-2xl border border-(--svf-accent-line) bg-linear-to-br from-(--svf-accent-soft) to-transparent p-5 space-y-4 shadow-sm">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div>
           <label className="text-xs font-medium text-(--text-faint) mb-1 block">Name</label>
@@ -198,7 +205,7 @@ function ExternalContactForm({
       </div>
 
       <div>
-        <p className="text-xs font-medium text-(--text-faint) mb-2">Notification types</p>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-2">Notification types</p>
         <div className="flex flex-wrap gap-1.5">
           {ALL_NOTIFICATION_TYPES.map(t => {
             const isActive = types.includes(t);
@@ -275,21 +282,21 @@ function ExternalContactsTab() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-start gap-2.5 px-3.5 py-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-sm">
-        <Info className="h-4 w-4 mt-0.5 shrink-0 text-blue-500" />
+    <div className="space-y-5">
+      <div className="flex items-start gap-2.5 px-4 py-3 rounded-2xl bg-(--svf-accent-soft) border border-(--svf-accent-line) text-(--svf-accent-bright) text-sm">
+        <Info className="h-4 w-4 mt-0.5 shrink-0" />
         <span>
-          External contacts receive email notifications only (no in-app account or login). Assign them to any
+          External contacts receive email notifications only — no in-app account. Assign them to any
           notification type below.
         </span>
       </div>
 
       <div className="flex items-center justify-between px-1">
-        <p className="text-sm font-semibold text-(--text)">
+        <p className="text-sm font-bold text-(--text)">
           {contacts.length} external contact{contacts.length === 1 ? "" : "s"}
         </p>
         {!showAddForm && (
-          <Button size="sm" onClick={() => setShowAddForm(true)}>
+          <Button size="sm" onClick={() => setShowAddForm(true)} className="shadow-sm">
             <Plus className="h-3.5 w-3.5 mr-1.5" />
             Add contact
           </Button>
@@ -312,13 +319,13 @@ function ExternalContactsTab() {
           <Loader2 className="h-5 w-5 animate-spin text-(--text-faint)" />
         </div>
       ) : contacts.length === 0 && !showAddForm ? (
-        <div className="rounded-xl border border-(--svf-border) bg-(--bg-raise) py-16 text-center">
+        <div className="rounded-2xl border border-(--svf-border) bg-(--bg-raise) py-16 text-center shadow-sm">
           <Users className="h-8 w-8 mx-auto mb-3 text-(--text-faint) opacity-40" />
           <p className="text-sm font-medium text-(--text)">No external contacts yet</p>
           <p className="text-xs text-(--text-faint) mt-1">Add someone outside the app to receive email notifications.</p>
         </div>
       ) : (
-        <div className="rounded-xl border border-(--svf-border) bg-(--bg-raise) divide-y divide-(--svf-border) overflow-hidden">
+        <div className="rounded-2xl border border-(--svf-border) bg-(--bg-raise) divide-y divide-(--svf-border) overflow-hidden shadow-sm">
           {contacts.map(contact =>
             editingId === contact.id ? (
               <div key={contact.id} className="p-4">
@@ -332,26 +339,26 @@ function ExternalContactsTab() {
                 />
               </div>
             ) : (
-              <div key={contact.id} className="px-4 py-3.5 hover:bg-(--hover) transition-colors">
+              <div key={contact.id} className="px-5 py-4 hover:bg-(--hover) transition-colors">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium text-(--text)">{contact.name}</span>
+                      <span className="text-sm font-semibold text-(--text)">{contact.name}</span>
                       {contact.tag && (
-                        <span className="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-(--bg-deep) border border-(--svf-border) text-(--text-faint)">
+                        <span className="inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full bg-(--bg-deep) border border-(--svf-border) text-(--text-faint)">
                           {contact.tag}
                         </span>
                       )}
                     </div>
                     <p className="text-xs text-(--text-faint) mt-0.5">{contact.email}</p>
-                    <div className="flex flex-wrap gap-1.5 mt-2">
+                    <div className="flex flex-wrap gap-1.5 mt-2.5">
                       {contact.notification_types.length === 0 ? (
                         <span className="text-xs text-(--text-faint) italic">No notification types selected</span>
                       ) : (
                         contact.notification_types.map(t => (
                           <span
                             key={t}
-                            className="inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded-full bg-(--bg-deep) border border-(--svf-border) text-(--text-dim)"
+                            className="inline-flex items-center text-[10px] font-medium px-2.5 py-0.5 rounded-full bg-(--bg-deep) border border-(--svf-border) text-(--text-dim)"
                           >
                             {notificationLabels[t]?.title || t}
                           </span>
@@ -364,7 +371,7 @@ function ExternalContactsTab() {
                       variant="ghost"
                       size="icon-sm"
                       onClick={() => setEditingId(contact.id)}
-                      className="text-(--text-faint) hover:text-(--text)"
+                      className="text-(--text-faint) hover:text-(--text) rounded-lg"
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
@@ -373,7 +380,7 @@ function ExternalContactsTab() {
                       size="icon-sm"
                       onClick={() => handleDelete(contact.id)}
                       disabled={deletingId === contact.id}
-                      className="text-(--text-faint) hover:text-red-600"
+                      className="text-(--text-faint) hover:text-red-600 rounded-lg"
                     >
                       {deletingId === contact.id ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -499,6 +506,30 @@ export default function NotificationPreferencesPage() {
     }
   };
 
+  const handleEnableAll = async () => {
+    const items = isAdminView ? globalSettings : preferences;
+    for (const item of items) {
+      const notificationType = item.notification_type as NotificationType;
+      if (notificationType === "password_reset") continue;
+      const already = isAdminView
+        ? (item as GlobalNotificationSettings).is_enabled
+        : (item as EffectivePreference).user_enabled;
+      if (!already) await handleToggle(notificationType, true);
+    }
+  };
+
+  const handleMuteAll = async () => {
+    const items = isAdminView ? globalSettings : preferences;
+    for (const item of items) {
+      const notificationType = item.notification_type as NotificationType;
+      if (notificationType === "password_reset") continue;
+      const already = isAdminView
+        ? (item as GlobalNotificationSettings).is_enabled
+        : (item as EffectivePreference).user_enabled;
+      if (already) await handleToggle(notificationType, false);
+    }
+  };
+
   const groupedItems = isAdminView
     ? globalSettings.reduce((acc, s) => {
         const cat = s.category || "other";
@@ -519,10 +550,11 @@ export default function NotificationPreferencesPage() {
   const totalAvailable = isAdminView
     ? globalSettings.length
     : preferences.filter(p => p.globally_enabled).length;
+  const progressPct = totalAvailable > 0 ? Math.round((enabledCount / totalAvailable) * 100) : 0;
 
   if (authLoading || loading || isViewer) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex items-center justify-center min-h-100">
         <Loader2 className="h-6 w-6 animate-spin text-(--svf-accent)" />
       </div>
     );
@@ -542,10 +574,10 @@ export default function NotificationPreferencesPage() {
           </Link>
         </div>
         {isAdmin && (
-          <div className="flex items-center gap-1 bg-(--bg-deep) border border-(--svf-border) rounded-lg p-1">
+          <div className="flex items-center gap-1 bg-(--bg-deep) border border-(--svf-border) rounded-xl p-1">
             <button
               onClick={() => setActiveTab("preferences")}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+              className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-all ${
                 activeTab === "preferences"
                   ? "bg-(--bg-raise) text-(--text) shadow-sm border border-(--svf-border)"
                   : "text-(--text-faint) hover:text-(--text)"
@@ -555,7 +587,7 @@ export default function NotificationPreferencesPage() {
             </button>
             <button
               onClick={() => setActiveTab("global")}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+              className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-all ${
                 activeTab === "global"
                   ? "bg-(--bg-raise) text-(--text) shadow-sm border border-(--svf-border)"
                   : "text-(--text-faint) hover:text-(--text)"
@@ -565,7 +597,7 @@ export default function NotificationPreferencesPage() {
             </button>
             <button
               onClick={() => setActiveTab("external")}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+              className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-all ${
                 activeTab === "external"
                   ? "bg-(--bg-raise) text-(--text) shadow-sm border border-(--svf-border)"
                   : "text-(--text-faint) hover:text-(--text)"
@@ -579,15 +611,17 @@ export default function NotificationPreferencesPage() {
 
       {/* Page title + summary */}
       <div className="flex items-start gap-4 px-1">
-        <div className="p-2.5 rounded-xl bg-(--svf-accent-soft) border border-(--svf-accent-line)">
+        <div className="p-2.5 rounded-2xl bg-(--svf-accent-soft) border border-(--svf-accent-line)">
           {activeTab === "external" ? (
             <Users className="h-5 w-5 text-(--svf-accent-bright)" />
+          ) : activeTab === "global" ? (
+            <Shield className="h-5 w-5 text-(--svf-accent-bright)" />
           ) : (
             <Bell className="h-5 w-5 text-(--svf-accent-bright)" />
           )}
         </div>
         <div className="flex-1">
-          <h1 className="text-lg font-semibold text-(--text)">
+          <h1 className="text-xl font-bold tracking-tight text-(--text)">
             {activeTab === "external"
               ? "External Contacts"
               : isAdminView
@@ -599,7 +633,7 @@ export default function NotificationPreferencesPage() {
               ? "Send email notifications to people without an app login"
               : isAdminView
               ? "Control which notifications are available organisation-wide"
-              : `${enabledCount} of ${totalAvailable} notifications enabled`}
+              : "Pick which emails you receive. Turn anything off anytime — changes save instantly."}
           </p>
         </div>
       </div>
@@ -608,161 +642,221 @@ export default function NotificationPreferencesPage() {
         <ExternalContactsTab />
       ) : (
         <>
-      {/* Info strip */}
-      <div className="flex items-start gap-2.5 px-3.5 py-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-sm">
-        <Info className="h-4 w-4 mt-0.5 shrink-0 text-blue-500" />
-        <span>
-          {isAdminView
-            ? "Disabling a type here removes it for all users. Role filters control who receives automated alerts."
-            : "Your admin controls which types are available. You can opt out of any enabled type below."}
-        </span>
-      </div>
+          {/* Info strip */}
+          <div className="flex items-start gap-2.5 px-4 py-3 rounded-2xl bg-(--svf-accent-soft) border border-(--svf-accent-line) text-(--svf-accent-bright) text-sm">
+            <Info className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>
+              {isAdminView
+                ? "Disabling a type here removes it for all users. Role filters control who receives automated alerts."
+                : "Your admin controls which types are available. You can opt out of any enabled type below."}
+            </span>
+          </div>
 
-      {/* Category sections */}
-      {categoryOrder
-        .filter(cat => groupedItems[cat]?.length > 0)
-        .map(category => {
-          const cfg = categoryConfig[category] ?? {
-            title: category,
-            description: "",
-            icon: Bell,
-            accent: "text-(--text-faint)",
-            accentBg: "bg-(--bg-deep)",
-            accentBorder: "border-(--svf-border)",
-            accentText: "text-(--text-dim)",
-          };
-          const CategoryIcon = cfg.icon;
-
-          return (
-            <div key={category} className="rounded-xl border border-(--svf-border) bg-(--bg-raise) overflow-hidden">
-              {/* Category header */}
-              <div className="flex items-center gap-3 px-4 py-3 border-b border-(--svf-border) bg-(--bg-deep)">
-                <div className={`p-1.5 rounded-lg ${cfg.accentBg} border ${cfg.accentBorder}`}>
-                  <CategoryIcon className={`h-3.5 w-3.5 ${cfg.accent}`} />
+          {/* Summary card with progress ring + bulk actions */}
+          <div className="rounded-2xl border border-(--svf-border) bg-linear-to-br from-(--svf-accent-soft) to-transparent p-5 sm:p-6 shadow-md">
+            <div className="flex items-center justify-between gap-6 flex-wrap">
+              <div className="flex items-center gap-5">
+                <div
+                  className="w-18 h-18 rounded-full flex items-center justify-center shrink-0"
+                  style={{ background: `conic-gradient(var(--svf-accent) ${progressPct}%, var(--svf-border-strong, var(--svf-border)) 0)` }}
+                >
+                  <div className="w-14.5 h-14.5 rounded-full bg-(--bg-raise) flex flex-col items-center justify-center">
+                    <span className="font-serif text-2xl leading-none text-(--text)">{enabledCount}</span>
+                    <span className="text-[9px] font-semibold uppercase tracking-wide text-(--text-faint) mt-0.5">
+                      of {totalAvailable}
+                    </span>
+                  </div>
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-(--text)">{cfg.title}</p>
-                  <p className="text-xs text-(--text-faint)">{cfg.description}</p>
+                  <div className="text-sm font-bold text-(--text)">
+                    {enabledCount} notification{enabledCount === 1 ? "" : "s"} active
+                  </div>
+                  <p className="text-xs text-(--text-faint) mt-1 max-w-xs">
+                    {isAdminView
+                      ? "Toggle types on or off organisation-wide."
+                      : "Critical alerts arrive as scheduled; nothing sends when there's nothing to report."}
+                  </p>
                 </div>
               </div>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={handleEnableAll} className="shadow-sm">
+                  <Check className="h-3.5 w-3.5 mr-1.5" />
+                  Enable all
+                </Button>
+                <Button size="sm" variant="outline" onClick={handleMuteAll}>
+                  <VolumeX className="h-3.5 w-3.5 mr-1.5" />
+                  Mute all
+                </Button>
+              </div>
+            </div>
+          </div>
 
-              {/* Items */}
-              <div className="divide-y divide-(--svf-border)">
-                {groupedItems[category].map((item: any) => {
-                  const notificationType = item.notification_type as NotificationType;
-                  const isAlwaysOn = notificationType === "password_reset";
-                  const isDisabledByAdmin = !isAdminView && !item.globally_enabled;
-                  const label = notificationLabels[notificationType];
-                  const isChecked = isAdminView ? item.is_enabled : (item.globally_enabled && item.user_enabled);
-                  const isSaving = saving === notificationType;
+          {/* Category sections */}
+          {categoryOrder
+            .filter(cat => groupedItems[cat]?.length > 0)
+            .map(category => {
+              const cfg = categoryConfig[category] ?? {
+                title: category,
+                description: "",
+                icon: Bell,
+                accent: "text-(--text-faint)",
+                accentBg: "bg-(--bg-deep)",
+                accentBorder: "border-(--svf-border)",
+                accentText: "text-(--text-dim)",
+              };
+              const CategoryIcon = cfg.icon;
+              const items = groupedItems[category];
+              const onCount = items.filter((item: any) =>
+                item.notification_type === "password_reset" ? true : (isAdminView ? item.is_enabled : (item.globally_enabled && item.user_enabled))
+              ).length;
 
-                  return (
-                    <div
-                      key={notificationType}
-                      className={`px-4 py-3.5 transition-colors ${
-                        isDisabledByAdmin ? "opacity-50 bg-(--bg-deep)" : "hover:bg-(--hover)"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-(--text)">
-                              {label?.title || notificationType}
-                            </span>
-                            {isAlwaysOn && (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-(--bg-deep) border border-(--svf-border) text-(--text-faint)">
-                                <ShieldCheck className="h-2.5 w-2.5" />
-                                Always on
-                              </span>
-                            )}
-                            {!isAdminView && isDisabledByAdmin && (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-50 border border-red-200 text-red-600">
-                                <BellOff className="h-2.5 w-2.5" />
-                                Disabled by admin
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-(--text-faint) mt-0.5 leading-relaxed">
-                            {label?.description || item.description}
-                          </p>
+              return (
+                <div key={category} className="rounded-2xl border border-(--svf-border) bg-(--bg-raise) overflow-hidden shadow-sm">
+                  {/* Category header */}
+                  <div className="flex items-center gap-3 px-5 py-4 border-b border-(--svf-border) bg-linear-to-b from-(--bg-deep) to-transparent">
+                    <div className={`p-2 rounded-xl ${cfg.accentBg} border ${cfg.accentBorder}`}>
+                      <CategoryIcon className={`h-4 w-4 ${cfg.accent}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-(--text)">{cfg.title}</p>
+                      <p className="text-xs text-(--text-faint) mt-0.5">{cfg.description}</p>
+                    </div>
+                    <div className="shrink-0 text-[11px] font-bold font-mono px-2.5 py-1 rounded-full text-(--text-faint) bg-(--bg-deep) border border-(--svf-border)">
+                      {onCount}/{items.length} on
+                    </div>
+                  </div>
 
-                          {/* Admin role filter row */}
-                          {isAdminView && !isAlwaysOn && (
-                            <div className="mt-3 pt-3 border-t border-(--svf-border) border-dashed">
-                              <p className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) mb-2">
-                                Recipients
-                              </p>
-                              <div className="flex flex-wrap gap-1.5">
-                                {["admin", "legal", "it", "editor", "viewer"].map(role => {
-                                  const isActive = item.role_filters?.includes(role);
-                                  const isChanging = saving === `${notificationType}-${role}`;
-                                  return (
-                                    <button
-                                      key={role}
-                                      onClick={() => handleRoleToggle(notificationType, role, item.role_filters)}
-                                      disabled={isChanging || !item.is_enabled}
-                                      className={`
-                                        inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-all
-                                        ${isActive
-                                          ? `${cfg.accentBg} ${cfg.accentBorder} ${cfg.accentText}`
-                                          : "bg-(--bg-deep) border-(--svf-border) text-(--text-faint) hover:text-(--text) hover:bg-(--hover)"}
-                                        ${(!item.is_enabled || isChanging) ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}
-                                      `}
-                                    >
-                                      {isChanging && <Loader2 className="h-2.5 w-2.5 animate-spin" />}
-                                      <span className="capitalize">{role}</span>
-                                    </button>
-                                  );
-                                })}
+                  {/* Items */}
+                  <div className="divide-y divide-(--svf-border)">
+                    {items.map((item: any) => {
+                      const notificationType = item.notification_type as NotificationType;
+                      const isAlwaysOn = notificationType === "password_reset";
+                      const isDisabledByAdmin = !isAdminView && !item.globally_enabled;
+                      const label = notificationLabels[notificationType];
+                      const isChecked = isAdminView ? item.is_enabled : (item.globally_enabled && item.user_enabled);
+                      const isSaving = saving === notificationType;
+
+                      return (
+                        <div
+                          key={notificationType}
+                          className={`px-5 py-4 transition-colors ${
+                            isDisabledByAdmin ? "opacity-50 bg-(--bg-deep)" : "hover:bg-(--hover)"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-[13.5px] font-semibold text-(--text)">
+                                  {label?.title || notificationType}
+                                </span>
+                                {label?.cadence && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-(--bg-deep) border border-(--svf-border) text-(--text-faint)">
+                                    <Clock className="h-2.5 w-2.5" />
+                                    {label.cadence}
+                                  </span>
+                                )}
+                                {isAlwaysOn && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-(--svf-accent-soft) border border-(--svf-accent-line) text-(--svf-accent-bright)">
+                                    <ShieldCheck className="h-2.5 w-2.5" />
+                                    Always on
+                                  </span>
+                                )}
+                                {!isAdminView && isDisabledByAdmin && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-50 border border-red-200 text-red-600">
+                                    <BellOff className="h-2.5 w-2.5" />
+                                    Disabled by admin
+                                  </span>
+                                )}
                               </div>
-                              {!item.role_filters?.length && item.is_enabled && (
+                              <p className="text-xs text-(--text-faint) mt-1 leading-relaxed max-w-lg">
+                                {label?.description || item.description}
+                              </p>
+
+                              {/* Admin role filter — aligned grid, full names in bold */}
+                              {isAdminView && !isAlwaysOn && (
+                                <div className="grid grid-cols-5 gap-1.5 mt-3 max-w-xs">
+                                  {["admin", "legal", "it", "editor", "viewer"].map(role => {
+                                    const isActive = item.role_filters?.includes(role);
+                                    const isChanging = saving === `${notificationType}-${role}`;
+                                    return (
+                                      <button
+                                        key={role}
+                                        onClick={() => handleRoleToggle(notificationType, role, item.role_filters)}
+                                        disabled={isChanging || !item.is_enabled}
+                                        className={`
+                                          flex items-center justify-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold capitalize border transition-all
+                                          ${isActive
+                                            ? `${cfg.accentBg} ${cfg.accentBorder} ${cfg.accentText}`
+                                            : "bg-(--bg-deep) border-(--svf-border) text-(--text-faint) hover:text-(--text) hover:bg-(--hover)"}
+                                          ${(!item.is_enabled || isChanging) ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}
+                                        `}
+                                      >
+                                        {isChanging ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : role}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+
+                              {isAdminView && !isAlwaysOn && !item.role_filters?.length && item.is_enabled && (
                                 <p className="text-xs text-red-600 mt-2 flex items-center gap-1.5">
                                   <AlertCircle className="h-3.5 w-3.5" />
                                   No roles selected — no one will receive this automatically
                                 </p>
                               )}
                             </div>
-                          )}
-                        </div>
 
-                        <div className="flex items-center gap-2 mt-0.5 shrink-0">
-                          {isSaving && <Loader2 className="h-3.5 w-3.5 animate-spin text-(--text-faint)" />}
-                          <Switch
-                            checked={isChecked}
-                            onCheckedChange={checked => {
-                              if (!isAlwaysOn && !isDisabledByAdmin) {
-                                handleToggle(notificationType, checked);
-                              }
-                            }}
-                            disabled={isAlwaysOn || isDisabledByAdmin || isSaving}
-                          />
+                            <div className="flex items-center gap-2 shrink-0 mt-0.5">
+                              {isSaving && <Loader2 className="h-3.5 w-3.5 animate-spin text-(--text-faint)" />}
+                              <button
+                                onClick={() => {
+                                  if (!isAlwaysOn && !isDisabledByAdmin) {
+                                    handleToggle(notificationType, !isChecked);
+                                  }
+                                }}
+                                disabled={isAlwaysOn || isDisabledByAdmin || isSaving}
+                                aria-checked={isChecked}
+                                role="switch"
+                                className="relative w-11.5 h-6.75 rounded-full shrink-0 transition-colors disabled:cursor-not-allowed"
+                                style={{
+                                  background: isChecked ? "var(--svf-accent)" : "var(--svf-border-strong, var(--svf-border))",
+                                  boxShadow: isChecked ? "0 2px 10px color-mix(in oklch, var(--svf-accent) 45%, transparent)" : "none",
+                                  opacity: isAlwaysOn || isDisabledByAdmin ? 0.8 : 1,
+                                  cursor: isAlwaysOn || isDisabledByAdmin || isSaving ? "default" : "pointer",
+                                }}
+                              >
+                                <span
+                                  className="absolute top-0.75 w-5.25 h-5.25 rounded-full bg-white shadow-md transition-all"
+                                  style={{ left: isChecked ? "22px" : "3px" }}
+                                />
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+
+          {/* Empty state */}
+          {categoryOrder.every(cat => !groupedItems[cat]?.length) && (
+            <div className="rounded-2xl border border-(--svf-border) bg-(--bg-raise) py-16 text-center shadow-sm">
+              <Bell className="h-8 w-8 mx-auto mb-3 text-(--text-faint) opacity-40" />
+              <p className="text-sm font-medium text-(--text)">No notifications available</p>
+              <p className="text-xs text-(--text-faint) mt-1">Contact your administrator to enable notifications.</p>
             </div>
-          );
-        })}
+          )}
 
-      {/* Empty state */}
-      {categoryOrder.every(cat => !groupedItems[cat]?.length) && (
-        <div className="rounded-xl border border-(--svf-border) bg-(--bg-raise) py-16 text-center">
-          <Bell className="h-8 w-8 mx-auto mb-3 text-(--text-faint) opacity-40" />
-          <p className="text-sm font-medium text-(--text)">No notifications available</p>
-          <p className="text-xs text-(--text-faint) mt-1">Contact your administrator to enable notifications.</p>
-        </div>
-      )}
-
-      {/* Footer note */}
-      <div className="flex items-start gap-2.5 px-3.5 py-3 rounded-lg bg-(--bg-deep) border border-(--svf-border) text-sm text-(--text-faint)">
-        <Mail className="h-4 w-4 mt-0.5 shrink-0" />
-        <span>
-          Emails are sent to your registered address. Check your spam folder if you&apos;re not receiving them.
-          Critical alerts (7-day expiry) are sent immediately; digests go out once each morning.
-        </span>
-      </div>
+          {/* Footer note */}
+          <div className="flex items-start gap-2.5 px-4 py-3.5 rounded-2xl bg-(--bg-deep) border border-(--svf-border) text-sm text-(--text-faint)">
+            <Mail className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>
+              Emails are sent to your registered address. Check your spam folder if you&apos;re not receiving them.
+              Notifications with no data to report are skipped automatically.
+            </span>
+          </div>
         </>
       )}
     </div>
