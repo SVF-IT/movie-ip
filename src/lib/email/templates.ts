@@ -22,7 +22,14 @@ const COLORS = {
 /**
  * Base email layout wrapper
  */
-function baseTemplate(content: string, preheader?: string): string {
+function baseTemplate(content: string, preheader?: string, options?: { isExternal?: boolean }): string {
+  const footerNote = options?.isExternal
+    ? `<p style="margin: 0; font-size: 12px; color: ${COLORS.textMuted}; text-align: center;">
+                You're receiving this because you're on SVF's external notification list. Contact your SVF administrator to update or remove your subscription.
+              </p>`
+    : `<p style="margin: 0; font-size: 12px; color: ${COLORS.textMuted}; text-align: center;">
+                <a href="${APP_URL}/settings/notifications" style="color: ${COLORS.primary}; text-decoration: none;">Manage notification preferences</a>
+              </p>`;
   return `
 <!DOCTYPE html>
 <html lang="en">
@@ -70,9 +77,7 @@ function baseTemplate(content: string, preheader?: string): string {
               <p style="margin: 0 0 8px; font-size: 12px; color: ${COLORS.textMuted}; text-align: center;">
                 This is an automated notification from ${APP_NAME}.
               </p>
-              <p style="margin: 0; font-size: 12px; color: ${COLORS.textMuted}; text-align: center;">
-                <a href="${APP_URL}/settings/notifications" style="color: ${COLORS.primary}; text-decoration: none;">Manage notification preferences</a>
-              </p>
+              ${footerNote}
             </td>
           </tr>
         </table>
@@ -129,10 +134,10 @@ export interface RightsExpiringData {
     daysRemaining: number;
     id: string; // rightId or movieId
   }[];
-  urgencyLevel: "milestone_90d" | "milestone_30d" | "daily_final_week" | "upcoming" | "urgent" | "critical";
+  urgencyLevel: "digest" | "agreement_end_digest" | "milestone_90d" | "milestone_30d" | "daily_final_week" | "upcoming" | "urgent" | "critical";
 }
 
-export function rightsExpiringTemplate(data: RightsExpiringData): { subject: string; html: string } {
+export function rightsExpiringTemplate(data: RightsExpiringData, options?: { isExternal?: boolean }): { subject: string; html: string } {
   const urgencyConfig = {
     critical: { badge: "danger", label: "Critical", subject: "CRITICAL: Expiring Within 7 Days" },
     urgent: { badge: "warning", label: "Urgent", subject: "Urgent: Expiring Within 30 Days" },
@@ -140,6 +145,8 @@ export function rightsExpiringTemplate(data: RightsExpiringData): { subject: str
     milestone_90d: { badge: "info", label: "90-Day Warning", subject: "Reminder: Agreement/Rights Expiring in 90 Days" },
     milestone_30d: { badge: "warning", label: "30-Day Warning", subject: "Reminder: Agreement/Rights Expiring in 30 Days" },
     daily_final_week: { badge: "danger", label: "Final Week Daily Alert", subject: "URGENT: Agreement/Rights Expiring This Week" },
+    digest: { badge: "warning", label: "Expiring Rights", subject: "Rights Expiring Within 90 Days" },
+    agreement_end_digest: { badge: "warning", label: "Agreement End Date", subject: "Acquired Movie Agreements Ending Within 90 Days" },
   };
   const config = urgencyConfig[data.urgencyLevel];
 
@@ -195,7 +202,7 @@ export function rightsExpiringTemplate(data: RightsExpiringData): { subject: str
 
   return {
     subject: config.subject,
-    html: baseTemplate(content, `${data.items.length} items expiring - action required`),
+    html: baseTemplate(content, `${data.items.length} items expiring - action required`, options),
   };
 }
 
@@ -204,6 +211,7 @@ export interface AnniversaryEmailData {
   anniversaries: {
     title: string;
     milestone: number;
+    isMilestone: boolean;
     releaseYear: number;
     anniversaryDate: string;
     daysUntil: number;
@@ -212,7 +220,7 @@ export interface AnniversaryEmailData {
   }[];
 }
 
-export function anniversaryTemplate(data: AnniversaryEmailData): { subject: string; html: string } {
+export function anniversaryTemplate(data: AnniversaryEmailData, options?: { isExternal?: boolean }): { subject: string; html: string } {
   const todayItems = data.anniversaries.filter(a => a.daysUntil === 0);
   const upcomingItems = data.anniversaries.filter(a => a.daysUntil > 0);
 
@@ -235,7 +243,8 @@ export function anniversaryTemplate(data: AnniversaryEmailData): { subject: stri
     return `
     <tr>
       <td style="padding: 12px; border-bottom: 1px solid ${COLORS.border};">
-        <strong style="color: ${COLORS.text};">${a.title}</strong><br>
+        <strong style="color: ${COLORS.text};">${a.title}</strong>
+        ${a.isMilestone ? ` ${alertBadge("warning", "Milestone")}` : ""}<br>
         <span style="font-size: 13px; color: ${COLORS.textMuted};">
           ${a.releaseYear} · ${a.milestone}${ordinalSuffix(a.milestone)} Anniversary
           ${a.language ? ` · ${a.language}` : ""}
@@ -272,7 +281,7 @@ export function anniversaryTemplate(data: AnniversaryEmailData): { subject: stri
       Hi ${data.userName},
     </h2>
     <p style="margin: 0 0 24px; font-size: 15px; color: ${COLORS.textMuted}; line-height: 1.6;">
-      Here are the upcoming movie anniversary milestones in the next 30 days:
+      Here are the upcoming movie anniversaries in the next 4 weeks:
     </p>
     ${todaySection}
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border: 1px solid ${COLORS.border}; border-radius: 8px; overflow: hidden;">
@@ -295,7 +304,7 @@ export function anniversaryTemplate(data: AnniversaryEmailData): { subject: stri
 
   return {
     subject: `🎬 Movie Anniversaries: ${subjectParts.join(", ")}`,
-    html: baseTemplate(content, `${data.anniversaries.length} upcoming movie anniversary milestones`),
+    html: baseTemplate(content, `${data.anniversaries.length} upcoming movie anniversaries`, options),
   };
 }
 
@@ -308,7 +317,7 @@ export interface UserCreatedData {
   createdBy: string;
 }
 
-export function userCreatedTemplate(data: UserCreatedData): { subject: string; html: string } {
+export function userCreatedTemplate(data: UserCreatedData, options?: { isExternal?: boolean }): { subject: string; html: string } {
   const content = `
     <div style="margin-bottom: 24px;">
       ${alertBadge("success", "Welcome")}
@@ -351,7 +360,7 @@ export function userCreatedTemplate(data: UserCreatedData): { subject: string; h
 
   return {
     subject: `Welcome to ${APP_NAME} - Your Account is Ready`,
-    html: baseTemplate(content, `Your ${APP_NAME} account has been created`),
+    html: baseTemplate(content, `Your ${APP_NAME} account has been created`, options),
   };
 }
 
@@ -366,7 +375,7 @@ export interface MovieCreatedData {
   createdBy: string;
 }
 
-export function movieCreatedTemplate(data: MovieCreatedData): { subject: string; html: string } {
+export function movieCreatedTemplate(data: MovieCreatedData, options?: { isExternal?: boolean }): { subject: string; html: string } {
   const content = `
     <div style="margin-bottom: 24px;">
       ${alertBadge("success", "New Movie")}
@@ -414,109 +423,7 @@ export function movieCreatedTemplate(data: MovieCreatedData): { subject: string;
 
   return {
     subject: `New Movie Added: ${data.movieTitle}`,
-    html: baseTemplate(content, `New movie added to catalog: ${data.movieTitle}`),
-  };
-}
-
-export interface DailyDigestData {
-  userName: string;
-  date: string;
-  stats: {
-    criticalExpiring: number;
-    urgentExpiring: number;
-    newMovies: number;
-  };
-  criticalRights?: {
-    movieTitle: string;
-    platformName: string;
-    daysRemaining: number;
-    rightId: string;
-  }[];
-}
-
-export function dailyDigestTemplate(data: DailyDigestData): { subject: string; html: string } {
-  const hasActivity = data.stats.newMovies > 0;
-
-  const criticalSection =
-    data.criticalRights && data.criticalRights.length > 0
-      ? `
-    <div style="margin-top: 32px;">
-      <h3 style="margin: 0 0 16px; font-size: 16px; font-weight: 600; color: ${COLORS.danger};">Critical Rights Expiring</h3>
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border: 1px solid ${COLORS.border}; border-radius: 8px; overflow: hidden;">
-        ${data.criticalRights
-        .map(
-          (r) => `
-          <tr>
-            <td style="padding: 12px; border-bottom: 1px solid ${COLORS.border};">
-              <strong>${r.movieTitle}</strong><br>
-              <span style="font-size: 13px; color: ${COLORS.textMuted};">${r.platformName}</span>
-            </td>
-            <td style="padding: 12px; border-bottom: 1px solid ${COLORS.border}; text-align: right;">
-              <a href="${APP_URL}/rights" style="color: ${COLORS.primary}; text-decoration: none; font-size: 12px; margin-right: 8px;">View</a>
-              ${alertBadge("danger", `${r.daysRemaining}d left`)}
-            </td>
-          </tr>
-        `
-        )
-        .join("")}
-      </table>
-    </div>
-  `
-      : "";
-
-  const content = `
-    <h2 style="margin: 0 0 16px; font-size: 20px; font-weight: 600; color: ${COLORS.text};">
-      Daily Digest for ${data.date}
-    </h2>
-    <p style="margin: 0 0 24px; font-size: 15px; color: ${COLORS.textMuted}; line-height: 1.6;">
-      Hi ${data.userName}, here's your daily summary:
-    </p>
-
-    <!-- Stats Grid -->
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 24px;">
-      <tr>
-        <td width="33%" style="padding: 8px;">
-          <div style="background-color: ${COLORS.danger}10; border-radius: 8px; padding: 16px; text-align: center;">
-            <div style="font-size: 28px; font-weight: 700; color: ${COLORS.danger};">${data.stats.criticalExpiring}</div>
-            <div style="font-size: 12px; color: ${COLORS.textMuted}; text-transform: uppercase;">Critical</div>
-          </div>
-        </td>
-        <td width="33%" style="padding: 8px;">
-          <div style="background-color: ${COLORS.warning}10; border-radius: 8px; padding: 16px; text-align: center;">
-            <div style="font-size: 28px; font-weight: 700; color: ${COLORS.warning};">${data.stats.urgentExpiring}</div>
-            <div style="font-size: 12px; color: ${COLORS.textMuted}; text-transform: uppercase;">Urgent</div>
-          </div>
-        </td>
-        <td width="33%" style="padding: 8px;">
-          <div style="background-color: ${COLORS.success}10; border-radius: 8px; padding: 16px; text-align: center;">
-            <div style="font-size: 28px; font-weight: 700; color: ${COLORS.success};">${data.stats.newMovies}</div>
-            <div style="font-size: 12px; color: ${COLORS.textMuted}; text-transform: uppercase;">New Movies</div>
-          </div>
-        </td>
-      </tr>
-    </table>
-
-    ${hasActivity ? `
-    <h3 style="margin: 0 0 16px; font-size: 16px; font-weight: 600; color: ${COLORS.text};">Today's Activity</h3>
-    <ul style="margin: 0 0 24px; padding-left: 20px; color: ${COLORS.textMuted};">
-      ${data.stats.newMovies > 0 ? `<li style="margin-bottom: 8px;">${data.stats.newMovies} new movie${data.stats.newMovies > 1 ? "s" : ""} added</li>` : ""}
-    </ul>
-    ` : `
-    <p style="margin: 0 0 24px; font-size: 14px; color: ${COLORS.textMuted}; font-style: italic;">
-      No activity recorded today.
-    </p>
-    `}
-
-    ${criticalSection}
-
-    <div style="margin-top: 32px; text-align: center;">
-      ${button("Open Dashboard", `${APP_URL}`)}
-    </div>
-  `;
-
-  return {
-    subject: `Daily Digest: ${data.stats.criticalExpiring} Critical, ${data.stats.urgentExpiring} Urgent Expirations`,
-    html: baseTemplate(content, `Your daily summary - ${data.stats.criticalExpiring} critical rights expiring`),
+    html: baseTemplate(content, `New movie added to catalog: ${data.movieTitle}`, options),
   };
 }
 
@@ -556,5 +463,131 @@ export function passwordResetTemplate(data: PasswordResetData): { subject: strin
   return {
     subject: `Your ${APP_NAME} Password Has Been Reset`,
     html: baseTemplate(content, "Your password has been reset"),
+  };
+}
+
+export interface RecensorReminderData {
+  userName: string;
+  movies: {
+    id: string;
+    title: string;
+    certification?: string;
+    releaseYear?: string;
+    productionHouseName?: string;
+  }[];
+}
+
+export function recensorReminderTemplate(data: RecensorReminderData, options?: { isExternal?: boolean }): { subject: string; html: string } {
+  const movieRows = data.movies
+    .map(
+      (m) => `
+    <tr>
+      <td style="padding: 12px; border-bottom: 1px solid ${COLORS.border};">
+        <strong style="color: ${COLORS.text};">${m.title}</strong><br>
+        <span style="font-size: 13px; color: ${COLORS.textMuted};">
+          ${m.releaseYear ? `${m.releaseYear} · ` : ""}${m.certification ? `Cert: ${m.certification}` : ""}
+          ${m.productionHouseName ? ` · ${m.productionHouseName}` : ""}
+        </span>
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid ${COLORS.border}; text-align: right;">
+        <a href="${APP_URL}/movies/${m.id}" style="color: ${COLORS.primary}; text-decoration: none; font-size: 13px;">View</a>
+      </td>
+    </tr>
+  `
+    )
+    .join("");
+
+  const content = `
+    <div style="margin-bottom: 24px;">
+      ${alertBadge("warning", "Censor Reminder")}
+    </div>
+    <h2 style="margin: 0 0 16px; font-size: 20px; font-weight: 600; color: ${COLORS.text};">
+      Hi ${data.userName},
+    </h2>
+    <p style="margin: 0 0 24px; font-size: 15px; color: ${COLORS.textMuted}; line-height: 1.6;">
+      The following ${data.movies.length} A-certified movie${data.movies.length > 1 ? "s require" : " requires"} re-censoring.
+      Visit each movie's edit page and uncheck "Censor Flag" once censoring is done.
+    </p>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border: 1px solid ${COLORS.border}; border-radius: 8px; overflow: hidden;">
+      <tr style="background-color: ${COLORS.background};">
+        <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; color: ${COLORS.textMuted}; text-transform: uppercase;">Movie</th>
+        <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: ${COLORS.textMuted}; text-transform: uppercase;">Action</th>
+      </tr>
+      ${movieRows}
+    </table>
+  `;
+
+  return {
+    subject: `Censor Reminder: ${data.movies.length} movie${data.movies.length !== 1 ? "s" : ""} pending censoring`,
+    html: baseTemplate(content, `${data.movies.length} A-certified movies pending re-censoring`, options),
+  };
+}
+
+export interface PendingApprovalsData {
+  userName: string;
+  changes: {
+    id: string;
+    movieTitle: string;
+    changeType: string;
+    changeSummary: string;
+    changedByName?: string;
+    createdAt: string;
+  }[];
+}
+
+export function pendingApprovalsTemplate(data: PendingApprovalsData, options?: { isExternal?: boolean }): { subject: string; html: string } {
+  const changeTypeLabel: Record<string, string> = {
+    movie_fields: "Movie Details",
+    right_create: "New Right",
+    right_update: "Right Update",
+    right_delete: "Right Deletion",
+    person_add: "Person Added",
+    person_remove: "Person Removed",
+  };
+
+  const rows = data.changes
+    .map(
+      (c) => `
+    <tr>
+      <td style="padding: 12px; border-bottom: 1px solid ${COLORS.border};">
+        <strong style="color: ${COLORS.text};">${c.movieTitle}</strong><br>
+        <span style="font-size: 13px; color: ${COLORS.textMuted};">
+          ${changeTypeLabel[c.changeType] || c.changeType} — ${c.changeSummary}
+          ${c.changedByName ? ` · Submitted by ${c.changedByName}` : ""}
+        </span>
+      </td>
+      <td style="padding: 12px; border-bottom: 1px solid ${COLORS.border}; text-align: right;">
+        <a href="${APP_URL}/legal-approvals" style="color: ${COLORS.primary}; text-decoration: none; font-size: 13px;">Review</a>
+      </td>
+    </tr>
+  `
+    )
+    .join("");
+
+  const content = `
+    <div style="margin-bottom: 24px;">
+      ${alertBadge("warning", "Pending Approvals")}
+    </div>
+    <h2 style="margin: 0 0 16px; font-size: 20px; font-weight: 600; color: ${COLORS.text};">
+      Hi ${data.userName},
+    </h2>
+    <p style="margin: 0 0 24px; font-size: 15px; color: ${COLORS.textMuted}; line-height: 1.6;">
+      There ${data.changes.length > 1 ? "are" : "is"} ${data.changes.length} change${data.changes.length > 1 ? "s" : ""} awaiting your review.
+    </p>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border: 1px solid ${COLORS.border}; border-radius: 8px; overflow: hidden;">
+      <tr style="background-color: ${COLORS.background};">
+        <th style="padding: 12px; text-align: left; font-size: 12px; font-weight: 600; color: ${COLORS.textMuted}; text-transform: uppercase;">Change</th>
+        <th style="padding: 12px; text-align: right; font-size: 12px; font-weight: 600; color: ${COLORS.textMuted}; text-transform: uppercase;">Action</th>
+      </tr>
+      ${rows}
+    </table>
+    <div style="margin-top: 32px; text-align: center;">
+      ${button("Review All Pending Changes", `${APP_URL}/legal-approvals`)}
+    </div>
+  `;
+
+  return {
+    subject: `${data.changes.length} pending approval${data.changes.length !== 1 ? "s" : ""} awaiting review`,
+    html: baseTemplate(content, `${data.changes.length} changes awaiting review`, options),
   };
 }

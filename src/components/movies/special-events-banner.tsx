@@ -11,6 +11,7 @@ interface Anniversary {
   title: string
   release_date: string
   years: number
+  isMilestone: boolean
   daysUntil: number
   anniversaryDate: Date
 }
@@ -20,7 +21,7 @@ const MILESTONES = [1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 60, 75]
 
 function getUpcomingAnniversaries(
   movies: { id: string; title: string; release_date: string }[],
-  windowDays = 180
+  windowDays = 60
 ): Anniversary[] {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -32,9 +33,15 @@ function getUpcomingAnniversaries(
     const rel = new Date(m.release_date + 'T00:00:00')
     if (isNaN(rel.getTime())) continue
     const baseYear = rel.getFullYear()
+    const currentYear = today.getFullYear()
 
-    for (const milestone of MILESTONES) {
-      const anniv = new Date(baseYear + milestone, rel.getMonth(), rel.getDate())
+    // Check every anniversary year (not just milestones) across a window
+    // wide enough to cover year-boundary edge cases.
+    const maxYears = Math.ceil(windowDays / 365) + 1
+    for (let offset = 0; offset <= maxYears; offset++) {
+      const years = currentYear + offset - baseYear
+      if (years <= 0) continue
+      const anniv = new Date(baseYear + years, rel.getMonth(), rel.getDate())
       anniv.setHours(0, 0, 0, 0)
       const diff = Math.round((anniv.getTime() - todayMs) / 86400000)
       if (diff < 0 || diff > windowDays) continue
@@ -42,14 +49,15 @@ function getUpcomingAnniversaries(
         id: m.id,
         title: m.title,
         release_date: m.release_date,
-        years: milestone,
+        years,
+        isMilestone: MILESTONES.includes(years),
         daysUntil: diff,
         anniversaryDate: anniv,
       })
     }
   }
 
-  return results.sort((a, b) => a.daysUntil - b.daysUntil).slice(0, 12)
+  return results.sort((a, b) => a.daysUntil - b.daysUntil)
 }
 
 // ─── Milestone helpers ────────────────────────────────────────────────────────
@@ -67,7 +75,8 @@ function milestoneIcon(y: number) {
   return '★'
 }
 
-function milestoneStyle(y: number): { bg: string; color: string; border: string } {
+function milestoneStyle(y: number, isMilestone: boolean): { bg: string; color: string; border: string } {
+  if (!isMilestone) return { bg: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.55)', border: 'rgba(255,255,255,0.15)' }
   if (y >= 50) return { bg: 'oklch(0.78 0.14 55 / 0.25)', color: 'oklch(0.88 0.14 55)', border: 'oklch(0.78 0.14 55 / 0.5)' }
   if (y === 25) return { bg: 'oklch(0.74 0.08 250 / 0.22)', color: 'oklch(0.88 0.06 250)', border: 'oklch(0.74 0.08 250 / 0.45)' }
   if (y >= 15) return { bg: 'oklch(0.74 0.14 162 / 0.22)', color: 'oklch(0.84 0.14 162)', border: 'oklch(0.74 0.14 162 / 0.45)' }
@@ -200,7 +209,7 @@ export function SpecialEventsBanner({ preferenceEnabled }: { preferenceEnabled: 
                 <span key={e.id}>
                   {i > 0 && <span style={{ color: 'rgba(255,255,255,0.2)' }}> · </span>}
                   <strong style={{ color: 'rgba(255,255,255,0.78)' }}>{e.title}</strong>
-                  {' '}{milestoneLabel(e.years)} in {e.daysUntil}d
+                  {' '}{e.isMilestone ? milestoneLabel(e.years) : `${e.years}th Anniversary`} in {e.daysUntil}d
                 </span>
               ))}
           </div>
@@ -283,110 +292,118 @@ export function SpecialEventsBanner({ preferenceEnabled }: { preferenceEnabled: 
               </span>
               <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.07)' }} />
               <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 10.5, color: 'rgba(255,255,255,0.3)' }}>
-                next 180 days
+                next 30 days
               </span>
             </div>
 
-            {/* Cards */}
+            {/* Cards (scrollable) */}
             <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))',
-              gap: 14,
+              maxHeight: 420,
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              paddingRight: 4,
+              marginRight: -4,
             }}>
-              {anniversaries.map((a) => {
-                const ms = milestoneStyle(a.years)
-                const isImminent = a.daysUntil < 90
-                const isSoon = a.daysUntil < 270
-                const rel = new Date(a.release_date + 'T00:00:00')
-                const dateStr = a.anniversaryDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
-                const origYear = rel.getFullYear()
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))',
+                gap: 14,
+              }}>
+                {anniversaries.map((a) => {
+                  const ms = milestoneStyle(a.years, a.isMilestone)
+                  const isImminent = a.daysUntil < 90
+                  const isSoon = a.daysUntil < 270
+                  const rel = new Date(a.release_date + 'T00:00:00')
+                  const dateStr = a.anniversaryDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
+                  const origYear = rel.getFullYear()
 
-                return (
-                  <Link
-                    key={`${a.id}-${a.years}`}
-                    href={`/movies/${a.id}`}
-                    style={{
-                      display: 'flex', gap: 14, padding: 14, borderRadius: 13, textDecoration: 'none',
-                      background: `rgba(255,255,255,${isImminent ? '0.09' : '0.05'})`,
-                      border: `1px solid rgba(255,255,255,${isImminent ? '0.13' : '0.07'})`,
-                      boxShadow: isImminent ? '0 0 0 1px rgba(255,255,255,0.06), inset 0 0 40px rgba(255,255,255,0.015)' : 'none',
-                      position: 'relative', overflow: 'hidden',
-                      transition: 'background .2s, transform .2s, box-shadow .2s',
-                    }}
-                    onMouseEnter={e => {
-                      const el = e.currentTarget as HTMLElement
-                      el.style.background = 'rgba(255,255,255,0.13)'
-                      el.style.transform = 'translateY(-2px)'
-                      el.style.boxShadow = '0 12px 32px -12px rgba(0,0,0,0.5)'
-                    }}
-                    onMouseLeave={e => {
-                      const el = e.currentTarget as HTMLElement
-                      el.style.background = `rgba(255,255,255,${isImminent ? '0.09' : '0.05'})`
-                      el.style.transform = 'none'
-                      el.style.boxShadow = isImminent ? '0 0 0 1px rgba(255,255,255,0.06)' : 'none'
-                    }}
-                  >
-                    {/* imminent radial glow */}
-                    {isImminent && (
-                      <div style={{
-                        position: 'absolute', top: -30, right: -30, width: 100, height: 100, borderRadius: '50%',
-                        background: 'radial-gradient(circle, oklch(0.65 0.18 18 / 0.25), transparent 70%)',
-                        pointerEvents: 'none',
-                      }} />
-                    )}
+                  return (
+                    <Link
+                      key={`${a.id}-${a.years}`}
+                      href={`/movies/${a.id}`}
+                      style={{
+                        display: 'flex', gap: 14, padding: 14, borderRadius: 13, textDecoration: 'none',
+                        background: `rgba(255,255,255,${isImminent ? '0.09' : '0.05'})`,
+                        border: `1px solid rgba(255,255,255,${isImminent ? '0.13' : '0.07'})`,
+                        boxShadow: isImminent ? '0 0 0 1px rgba(255,255,255,0.06), inset 0 0 40px rgba(255,255,255,0.015)' : 'none',
+                        position: 'relative', overflow: 'hidden',
+                        transition: 'background .2s, transform .2s, box-shadow .2s',
+                      }}
+                      onMouseEnter={e => {
+                        const el = e.currentTarget as HTMLElement
+                        el.style.background = 'rgba(255,255,255,0.13)'
+                        el.style.transform = 'translateY(-2px)'
+                        el.style.boxShadow = '0 12px 32px -12px rgba(0,0,0,0.5)'
+                      }}
+                      onMouseLeave={e => {
+                        const el = e.currentTarget as HTMLElement
+                        el.style.background = `rgba(255,255,255,${isImminent ? '0.09' : '0.05'})`
+                        el.style.transform = 'none'
+                        el.style.boxShadow = isImminent ? '0 0 0 1px rgba(255,255,255,0.06)' : 'none'
+                      }}
+                    >
+                      {/* imminent radial glow */}
+                      {isImminent && (
+                        <div style={{
+                          position: 'absolute', top: -30, right: -30, width: 100, height: 100, borderRadius: '50%',
+                          background: 'radial-gradient(circle, oklch(0.65 0.18 18 / 0.25), transparent 70%)',
+                          pointerEvents: 'none',
+                        }} />
+                      )}
 
-                    {/* left: title block */}
-                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {/* left: title block */}
+                      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
 
-                      {/* milestone badge */}
-                      <div style={{
-                        display: 'inline-flex', alignItems: 'center', gap: 5, alignSelf: 'flex-start',
-                        padding: '3px 8px', borderRadius: 999,
-                        background: ms.bg, border: `1px solid ${ms.border}`,
-                        fontSize: 10.5, fontWeight: 800, letterSpacing: '0.04em', color: ms.color,
-                      }}>
-                        {milestoneIcon(a.years)} {milestoneLabel(a.years)}
+                        {/* milestone badge */}
+                        <div style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 5, alignSelf: 'flex-start',
+                          padding: '3px 8px', borderRadius: 999,
+                          background: ms.bg, border: `1px solid ${ms.border}`,
+                          fontSize: 10.5, fontWeight: 800, letterSpacing: '0.04em', color: ms.color,
+                        }}>
+                          {a.isMilestone ? `${milestoneIcon(a.years)} ${milestoneLabel(a.years)}` : `${a.years}th Anniversary`}
+                        </div>
+
+                        {/* title */}
+                        <div style={{ fontSize: 15, lineHeight: 1.2, color: 'white', fontWeight: 600 }}>
+                          {a.title}
+                        </div>
+
+                        {/* original release year + anniversary date */}
+                        <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', lineHeight: 1.4 }}>
+                          Released {origYear} · {dateStr}
+                        </div>
+
+                        {/* distance label */}
+                        <div style={{ marginTop: 'auto', paddingTop: 6 }}>
+                          {a.daysUntil === 0
+                            ? <span style={{ fontSize: 11.5, fontWeight: 700, color: 'oklch(0.84 0.18 18)' }}>🎉 Celebrating today!</span>
+                            : isImminent
+                              ? <span style={{ fontSize: 11, fontWeight: 700, color: 'oklch(0.82 0.16 18)' }}>⚡ {a.daysUntil} days away</span>
+                              : isSoon
+                                ? <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>
+                                  {a.daysUntil}d · ~{Math.round(a.daysUntil / 30)}mo away
+                                </span>
+                                : <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>
+                                  ~{Math.round(a.daysUntil / 30)}mo away
+                                </span>
+                          }
+                        </div>
                       </div>
 
-                      {/* title */}
-                      <div style={{ fontSize: 15, lineHeight: 1.2, color: 'white', fontWeight: 600 }}>
-                        {a.title}
-                      </div>
-
-                      {/* original release year + anniversary date */}
-                      <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', lineHeight: 1.4 }}>
-                        Released {origYear} · {dateStr}
-                      </div>
-
-                      {/* distance label */}
-                      <div style={{ marginTop: 'auto', paddingTop: 6 }}>
-                        {a.daysUntil === 0
-                          ? <span style={{ fontSize: 11.5, fontWeight: 700, color: 'oklch(0.84 0.18 18)' }}>🎉 Celebrating today!</span>
-                          : isImminent
-                            ? <span style={{ fontSize: 11, fontWeight: 700, color: 'oklch(0.82 0.16 18)' }}>⚡ {a.daysUntil} days away</span>
-                            : isSoon
-                              ? <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 11, color: 'rgba(255,255,255,0.45)' }}>
-                                {a.daysUntil}d · ~{Math.round(a.daysUntil / 30)}mo away
-                              </span>
-                              : <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>
-                                ~{Math.round(a.daysUntil / 30)}mo away
-                              </span>
-                        }
-                      </div>
-                    </div>
-
-                    {/* right: countdown ring (imminent only) */}
-                    {isImminent && <CountdownRing days={a.daysUntil} size={68} />}
-                  </Link>
-                )
-              })}
+                      {/* right: countdown ring (imminent only) */}
+                      {isImminent && <CountdownRing days={a.daysUntil} size={68} />}
+                    </Link>
+                  )
+                })}
+              </div>
             </div>
 
             {/* Footer */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 18 }}>
               <Star style={{ width: 12, height: 12, color: 'rgba(255,255,255,0.25)', flexShrink: 0 }} />
               <span style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.28)' }}>
-                Showing 1st, 5-year milestones, and jubilees within 180 days. Manage in{' '}
+                Showing all upcoming anniversaries within 30 days; milestone years and jubilees are highlighted. Manage in{' '}
                 <Link href="/settings/notifications" style={{ color: 'rgba(255,255,255,0.45)', textDecoration: 'underline', textUnderlineOffset: 3 }}
                   onClick={e => e.stopPropagation()}>
                   Notification Settings

@@ -1,16 +1,19 @@
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
-import { sendRecensorReminders } from "@/lib/email/notification-service";
+import { sendAgreementEndReminders } from "@/lib/email/notification-service";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /**
- * Send recensor reminders (every 2 weeks) for A-certified movies with recensor_flag = true.
+ * Send acquired-movie agreement-end-date reminders (email + in-app for
+ * internal users, email-only for external contacts) for agreements ending
+ * within the next 90 days.
  *
- * Triggered automatically by Vercel Cron (GET, via vercel.json) or manually
- * (POST, e.g. for testing) — both paths run the same authorized logic.
- * Protected by CRON_SECRET / Vercel's x-vercel-cron header / an authenticated session.
+ * Triggered automatically by Vercel Cron every 2 weeks (GET, via vercel.json)
+ * or manually (POST, e.g. for testing) — both paths run the same authorized
+ * logic. Protected by CRON_SECRET / Vercel's x-vercel-cron header / an
+ * authenticated session.
  */
 async function isAuthorizedRequest(): Promise<boolean> {
   const headersList = await headers();
@@ -26,8 +29,8 @@ async function isAuthorizedRequest(): Promise<boolean> {
   return !!user;
 }
 
-async function handleRecensorReminders() {
-  const result = await sendRecensorReminders();
+async function handleAgreementEndReminders() {
+  const result = await sendAgreementEndReminders();
   return NextResponse.json({
     success: true,
     sent: result.sent,
@@ -37,7 +40,7 @@ async function handleRecensorReminders() {
 }
 
 /**
- * GET /api/notifications/recensor-reminders
+ * GET /api/notifications/agreement-end-reminders
  * Invoked automatically by Vercel Cron (see vercel.json).
  */
 export async function GET() {
@@ -45,15 +48,15 @@ export async function GET() {
     if (!(await isAuthorizedRequest())) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    return await handleRecensorReminders();
+    return await handleAgreementEndReminders();
   } catch (error) {
-    console.error("Error sending recensor reminders:", error);
-    return NextResponse.json({ error: "Failed to send recensor reminders" }, { status: 500 });
+    console.error("Error sending agreement end reminders:", error);
+    return NextResponse.json({ error: "Failed to send agreement end reminders" }, { status: 500 });
   }
 }
 
 /**
- * POST /api/notifications/recensor-reminders
+ * POST /api/notifications/agreement-end-reminders
  * Manual/test trigger — same logic and auth as GET.
  */
 export async function POST() {
@@ -61,9 +64,9 @@ export async function POST() {
     if (!(await isAuthorizedRequest())) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    return await handleRecensorReminders();
+    return await handleAgreementEndReminders();
   } catch (error) {
-    console.error("Error sending recensor reminders:", error);
-    return NextResponse.json({ error: "Failed to send recensor reminders" }, { status: 500 });
+    console.error("Error sending agreement end reminders:", error);
+    return NextResponse.json({ error: "Failed to send agreement end reminders" }, { status: 500 });
   }
 }

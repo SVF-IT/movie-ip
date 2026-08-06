@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/contexts/auth-context";
 import { useAppToast } from "@/hooks/use-app-toast";
@@ -11,19 +12,23 @@ import {
   ArrowLeft,
   Bell,
   BellOff,
-  Clock,
   Info,
   Loader2,
   Mail,
+  Pencil,
+  Plus,
   ShieldCheck,
   Sparkles,
+  Trash2,
   User,
+  Users,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-const categoryOrder = ["alerts", "activity", "digest", "account", "special_events"];
+const categoryOrder = ["alerts", "activity", "account", "special_events"];
 
 const categoryConfig: Record<string, {
   title: string;
@@ -52,15 +57,6 @@ const categoryConfig: Record<string, {
     accentBorder: "border-blue-200",
     accentText: "text-blue-700",
   },
-  digest: {
-    title: "Summary Emails",
-    description: "Periodic summaries of activity and status",
-    icon: Clock,
-    accent: "text-amber-600",
-    accentBg: "bg-amber-50",
-    accentBorder: "border-amber-200",
-    accentText: "text-amber-700",
-  },
   account: {
     title: "Account Notifications",
     description: "Important account-related emails",
@@ -82,33 +78,25 @@ const categoryConfig: Record<string, {
 };
 
 const notificationLabels: Record<string, { title: string; description: string }> = {
-  rights_expiring_critical: {
-    title: "Critical — 7 days",
-    description: "Rights expiring within the next 7 days",
+  rights_expiring_digest: {
+    title: "Expiring Rights Digest",
+    description: "Every 2 weeks, a summary of all rights expiring within 90 days",
   },
-  rights_expiring_urgent: {
-    title: "Urgent — 30 days",
-    description: "Rights expiring within the next 30 days",
-  },
-  rights_expiring_upcoming: {
-    title: "Upcoming — 60 days",
-    description: "Rights expiring within the next 60 days",
-  },
-  agreement_created: {
-    title: "New Agreements",
-    description: "When a new rights agreement is created",
+  agreement_end_reminder: {
+    title: "Agreement End Date Digest",
+    description: "Every 2 weeks, acquired-movie agreements ending within 90 days",
   },
   movie_created: {
     title: "New Movies",
     description: "When a new movie is added to the catalog",
   },
-  daily_digest: {
-    title: "Daily Digest",
-    description: "Morning summary of activity and expiring rights",
-  },
   recensor_reminder: {
     title: "Censor Reminder",
-    description: "Monthly reminder for A-certified movies with censor flag",
+    description: "Every 2 weeks, all A-certified movies pending re-censoring",
+  },
+  pending_approvals_reminder: {
+    title: "Pending Approvals Reminder",
+    description: "Every 2 days, all movie change submissions awaiting review",
   },
   user_created: {
     title: "Welcome Email",
@@ -120,9 +108,289 @@ const notificationLabels: Record<string, { title: string; description: string }>
   },
   anniversary_notification: {
     title: "Anniversary & Milestone",
-    description: "Special Events banner and email for upcoming movie anniversaries",
+    description: "Every 10 days, upcoming movie anniversaries within the next 4 weeks",
   },
 };
+
+interface ExternalRecipient {
+  id: string;
+  name: string;
+  email: string;
+  tag: string | null;
+  notification_types: NotificationType[];
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+const ALL_NOTIFICATION_TYPES = Object.keys(notificationLabels) as NotificationType[];
+
+function ExternalContactForm({
+  initial,
+  onCancel,
+  onSaved,
+}: {
+  initial: ExternalRecipient | null;
+  onCancel: () => void;
+  onSaved: () => void;
+}) {
+  const toast = useAppToast();
+  const [name, setName] = useState(initial?.name ?? "");
+  const [email, setEmail] = useState(initial?.email ?? "");
+  const [tag, setTag] = useState(initial?.tag ?? "");
+  const [types, setTypes] = useState<NotificationType[]>(initial?.notification_types ?? []);
+  const [saving, setSaving] = useState(false);
+
+  const toggleType = (t: NotificationType) => {
+    setTypes(prev => (prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]));
+  };
+
+  const handleSubmit = async () => {
+    if (!name.trim() || !email.trim()) {
+      toast.error("Name and email are required");
+      return;
+    }
+    setSaving(true);
+    try {
+      const url = initial
+        ? `/api/notifications/external-recipients/${initial.id}`
+        : "/api/notifications/external-recipients";
+      const method = initial ? "PATCH" : "POST";
+      const response = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim(),
+          tag: tag.trim() || null,
+          notification_types: types,
+        }),
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to save contact");
+      }
+      toast.success(initial ? "Contact updated" : "Contact added");
+      onSaved();
+    } catch (err) {
+      const error = err as Error;
+      toast.error(error.message || "Failed to save contact");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-(--svf-accent-line) bg-(--svf-accent-soft) p-4 space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div>
+          <label className="text-xs font-medium text-(--text-faint) mb-1 block">Name</label>
+          <Input value={name} onChange={e => setName(e.target.value)} placeholder="Contact name" />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-(--text-faint) mb-1 block">Email</label>
+          <Input value={email} onChange={e => setEmail(e.target.value)} placeholder="name@example.com" type="email" />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-(--text-faint) mb-1 block">Tag (optional)</label>
+          <Input value={tag} onChange={e => setTag(e.target.value)} placeholder="e.g. Distributor" />
+        </div>
+      </div>
+
+      <div>
+        <p className="text-xs font-medium text-(--text-faint) mb-2">Notification types</p>
+        <div className="flex flex-wrap gap-1.5">
+          {ALL_NOTIFICATION_TYPES.map(t => {
+            const isActive = types.includes(t);
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => toggleType(t)}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border transition-all cursor-pointer ${
+                  isActive
+                    ? "bg-(--svf-accent-soft) border-(--svf-accent-line) text-(--svf-accent-bright)"
+                    : "bg-(--bg-deep) border-(--svf-border) text-(--text-faint) hover:text-(--text) hover:bg-(--hover)"
+                }`}
+              >
+                {notificationLabels[t]?.title || t}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-end gap-2 pt-1">
+        <Button variant="ghost" size="sm" onClick={onCancel} disabled={saving}>
+          Cancel
+        </Button>
+        <Button size="sm" onClick={handleSubmit} disabled={saving}>
+          {saving && <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />}
+          {initial ? "Save changes" : "Add contact"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function ExternalContactsTab() {
+  const toast = useAppToast();
+  const [contacts, setContacts] = useState<ExternalRecipient[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const loadContacts = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/notifications/external-recipients");
+      if (!res.ok) throw new Error("Failed to load contacts");
+      const data = await res.json();
+      setContacts(data.recipients || []);
+    } catch {
+      toast.error("Failed to load external contacts");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadContacts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleDelete = async (id: string) => {
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/notifications/external-recipients/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete contact");
+      setContacts(prev => prev.filter(c => c.id !== id));
+      toast.success("Contact removed");
+    } catch {
+      toast.error("Failed to delete contact");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start gap-2.5 px-3.5 py-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-sm">
+        <Info className="h-4 w-4 mt-0.5 shrink-0 text-blue-500" />
+        <span>
+          External contacts receive email notifications only (no in-app account or login). Assign them to any
+          notification type below.
+        </span>
+      </div>
+
+      <div className="flex items-center justify-between px-1">
+        <p className="text-sm font-semibold text-(--text)">
+          {contacts.length} external contact{contacts.length === 1 ? "" : "s"}
+        </p>
+        {!showAddForm && (
+          <Button size="sm" onClick={() => setShowAddForm(true)}>
+            <Plus className="h-3.5 w-3.5 mr-1.5" />
+            Add contact
+          </Button>
+        )}
+      </div>
+
+      {showAddForm && (
+        <ExternalContactForm
+          initial={null}
+          onCancel={() => setShowAddForm(false)}
+          onSaved={() => {
+            setShowAddForm(false);
+            loadContacts();
+          }}
+        />
+      )}
+
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-5 w-5 animate-spin text-(--text-faint)" />
+        </div>
+      ) : contacts.length === 0 && !showAddForm ? (
+        <div className="rounded-xl border border-(--svf-border) bg-(--bg-raise) py-16 text-center">
+          <Users className="h-8 w-8 mx-auto mb-3 text-(--text-faint) opacity-40" />
+          <p className="text-sm font-medium text-(--text)">No external contacts yet</p>
+          <p className="text-xs text-(--text-faint) mt-1">Add someone outside the app to receive email notifications.</p>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-(--svf-border) bg-(--bg-raise) divide-y divide-(--svf-border) overflow-hidden">
+          {contacts.map(contact =>
+            editingId === contact.id ? (
+              <div key={contact.id} className="p-4">
+                <ExternalContactForm
+                  initial={contact}
+                  onCancel={() => setEditingId(null)}
+                  onSaved={() => {
+                    setEditingId(null);
+                    loadContacts();
+                  }}
+                />
+              </div>
+            ) : (
+              <div key={contact.id} className="px-4 py-3.5 hover:bg-(--hover) transition-colors">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium text-(--text)">{contact.name}</span>
+                      {contact.tag && (
+                        <span className="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-(--bg-deep) border border-(--svf-border) text-(--text-faint)">
+                          {contact.tag}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-(--text-faint) mt-0.5">{contact.email}</p>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {contact.notification_types.length === 0 ? (
+                        <span className="text-xs text-(--text-faint) italic">No notification types selected</span>
+                      ) : (
+                        contact.notification_types.map(t => (
+                          <span
+                            key={t}
+                            className="inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded-full bg-(--bg-deep) border border-(--svf-border) text-(--text-dim)"
+                          >
+                            {notificationLabels[t]?.title || t}
+                          </span>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => setEditingId(contact.id)}
+                      className="text-(--text-faint) hover:text-(--text)"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => handleDelete(contact.id)}
+                      disabled={deletingId === contact.id}
+                      className="text-(--text-faint) hover:text-red-600"
+                    >
+                      {deletingId === contact.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3.5 w-3.5" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function NotificationPreferencesPage() {
   const { profile, loading: authLoading } = useAuth();
@@ -135,7 +403,8 @@ export default function NotificationPreferencesPage() {
 
   const [preferences, setPreferences] = useState<EffectivePreference[]>([]);
   const [globalSettings, setGlobalSettings] = useState<GlobalNotificationSettings[]>([]);
-  const [isAdminView, setIsAdminView] = useState(false);
+  const [activeTab, setActiveTab] = useState<"preferences" | "global" | "external">("preferences");
+  const isAdminView = activeTab === "global";
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const toast = useAppToast();
@@ -275,9 +544,9 @@ export default function NotificationPreferencesPage() {
         {isAdmin && (
           <div className="flex items-center gap-1 bg-(--bg-deep) border border-(--svf-border) rounded-lg p-1">
             <button
-              onClick={() => setIsAdminView(false)}
+              onClick={() => setActiveTab("preferences")}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                !isAdminView
+                activeTab === "preferences"
                   ? "bg-(--bg-raise) text-(--text) shadow-sm border border-(--svf-border)"
                   : "text-(--text-faint) hover:text-(--text)"
               }`}
@@ -285,14 +554,24 @@ export default function NotificationPreferencesPage() {
               My Preferences
             </button>
             <button
-              onClick={() => setIsAdminView(true)}
+              onClick={() => setActiveTab("global")}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                isAdminView
+                activeTab === "global"
                   ? "bg-(--bg-raise) text-(--text) shadow-sm border border-(--svf-border)"
                   : "text-(--text-faint) hover:text-(--text)"
               }`}
             >
               Global Settings
+            </button>
+            <button
+              onClick={() => setActiveTab("external")}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                activeTab === "external"
+                  ? "bg-(--bg-raise) text-(--text) shadow-sm border border-(--svf-border)"
+                  : "text-(--text-faint) hover:text-(--text)"
+              }`}
+            >
+              External Contacts
             </button>
           </div>
         )}
@@ -301,20 +580,34 @@ export default function NotificationPreferencesPage() {
       {/* Page title + summary */}
       <div className="flex items-start gap-4 px-1">
         <div className="p-2.5 rounded-xl bg-(--svf-accent-soft) border border-(--svf-accent-line)">
-          <Bell className="h-5 w-5 text-(--svf-accent-bright)" />
+          {activeTab === "external" ? (
+            <Users className="h-5 w-5 text-(--svf-accent-bright)" />
+          ) : (
+            <Bell className="h-5 w-5 text-(--svf-accent-bright)" />
+          )}
         </div>
         <div className="flex-1">
           <h1 className="text-lg font-semibold text-(--text)">
-            {isAdminView ? "Global Notification Settings" : "Notification Preferences"}
+            {activeTab === "external"
+              ? "External Contacts"
+              : isAdminView
+              ? "Global Notification Settings"
+              : "Notification Preferences"}
           </h1>
           <p className="text-sm text-(--text-faint) mt-0.5">
-            {isAdminView
+            {activeTab === "external"
+              ? "Send email notifications to people without an app login"
+              : isAdminView
               ? "Control which notifications are available organisation-wide"
               : `${enabledCount} of ${totalAvailable} notifications enabled`}
           </p>
         </div>
       </div>
 
+      {activeTab === "external" ? (
+        <ExternalContactsTab />
+      ) : (
+        <>
       {/* Info strip */}
       <div className="flex items-start gap-2.5 px-3.5 py-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-sm">
         <Info className="h-4 w-4 mt-0.5 shrink-0 text-blue-500" />
@@ -470,6 +763,8 @@ export default function NotificationPreferencesPage() {
           Critical alerts (7-day expiry) are sent immediately; digests go out once each morning.
         </span>
       </div>
+        </>
+      )}
     </div>
   );
 }

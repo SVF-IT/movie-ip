@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     const todayItems = mockAnniversaries.filter(a => a.daysUntil === 0);
     const inAppTitle = todayItems.length > 0
       ? `🎉 ${todayItems.map(a => a.title).join(", ")} celebrating today!`
-      : `🎬 ${mockAnniversaries.length} upcoming movie anniversaries in the next 30 days`;
+      : `🎬 ${mockAnniversaries.length} upcoming movie anniversaries in the next 4 weeks`;
     const inAppMessage = mockAnniversaries
       .map(a => `${a.title} — ${a.milestone}${ordinal(a.milestone)} anniversary${a.daysUntil === 0 ? " (today!)" : ` in ${a.daysUntil} days`}`)
       .join("\n");
@@ -66,9 +66,9 @@ export async function POST(request: Request) {
       const template = anniversaryTemplate({
         userName,
         anniversaries: [
-          { title: "Piku", milestone: 10, releaseYear: 2015, anniversaryDate: "29 June 2025", daysUntil: 0, movieId: "mock-1" },
-          { title: "Chander Pahar", milestone: 15, releaseYear: 2013, anniversaryDate: "2 July 2028", daysUntil: 3, movieId: "mock-2" },
-          { title: "Apur Sansar", milestone: 25, releaseYear: 2013, anniversaryDate: "11 July 2038", daysUntil: 12, movieId: "mock-3" },
+          { title: "Piku", milestone: 10, isMilestone: true, releaseYear: 2015, anniversaryDate: "29 June 2025", daysUntil: 0, movieId: "mock-1" },
+          { title: "Chander Pahar", milestone: 15, isMilestone: true, releaseYear: 2013, anniversaryDate: "2 July 2028", daysUntil: 3, movieId: "mock-2" },
+          { title: "Apur Sansar", milestone: 7, isMilestone: false, releaseYear: 2013, anniversaryDate: "11 July 2038", daysUntil: 12, movieId: "mock-3" },
         ],
       });
       await sendEmail({

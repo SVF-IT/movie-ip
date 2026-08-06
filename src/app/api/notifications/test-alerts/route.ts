@@ -27,7 +27,7 @@ export async function POST(request: Request) {
         const body = await request.json().catch(() => ({}));
         const mockDate = body.mockDate ? new Date(body.mockDate) : undefined;
 
-        const result = await sendExpiringRightsAlerts(mockDate, true); // Use range mode for manual testing
+        const result = await sendExpiringRightsAlerts(mockDate);
 
         return NextResponse.json({
             success: true,
