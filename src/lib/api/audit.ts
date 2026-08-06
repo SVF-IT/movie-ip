@@ -121,25 +121,6 @@ export async function getAuditLogStats(): Promise<{
   }
 }
 
-// Fire-and-forget activity logging
-export function logActivity(
-  action: string,
-  resourceType: string,
-  resourceId?: string,
-  metadata?: Record<string, unknown>
-): void {
-  supabase
-    .from("user_activity")
-    .insert({
-      action,
-      resource_type: resourceType,
-      resource_id: resourceId,
-      metadata,
-    })
-    .then(() => {})
-    .catch((err: unknown) => console.error("Activity log error:", err));
-}
-
 // Fire-and-forget audit log entry (writes to audit_logs table)
 export function logAudit(
   action: "INSERT" | "UPDATE" | "DELETE",

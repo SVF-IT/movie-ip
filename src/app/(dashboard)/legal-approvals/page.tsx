@@ -19,7 +19,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/auth-context";
 import { useAppToast } from "@/hooks/use-app-toast";
-import { useMultiSelectFilterState } from "@/hooks/use-multi-select-filter-state";
 import {
   approveMovie,
   getMovieApprovalHistory,
@@ -563,7 +562,6 @@ export default function LegalApprovalsPage() {
   const [loading, setLoading] = useState(true);
   const toast = useAppToast();
   const [searchQuery, setSearchQuery] = useState("");
-  const APPROVAL_STATUS_OPTIONS: ApprovalStatus[] = ["pending", "approved", "rejected"];
   const [statusFilter, setStatusFilter] = useState<ApprovalStatus[]>(["pending"]);
 
   // Approve dialog (new movies)
@@ -587,7 +585,6 @@ export default function LegalApprovalsPage() {
   const [changesCount, setChangesCount] = useState(0);
   const [changesLoading, setChangesLoading] = useState(true);
   const [changesSearch, setChangesSearch] = useState("");
-  const CHANGES_STATUS_OPTIONS: ("pending" | "approved" | "rejected")[] = ["pending", "approved", "rejected"];
   const [changesStatusFilter, setChangesStatusFilter] = useState<("pending" | "approved" | "rejected")[]>(["pending"]);
 
   // Approve dialog (changes)

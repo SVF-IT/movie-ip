@@ -1,14 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
 
-export interface FileObject {
-  name: string;
-  id: string;
-  updated_at: string;
-  created_at: string;
-  last_accessed_at: string;
-  metadata: Record<string, unknown>;
-}
-
 export async function uploadFile(
   bucket: string,
   path: string,
@@ -36,21 +27,6 @@ export async function uploadFile(
   return urlData.publicUrl;
 }
 
-export async function getSignedUrl(
-  bucket: string,
-  path: string,
-  expiresIn = 3600
-): Promise<string> {
-  const supabase = createClient();
-
-  const { data, error } = await supabase.storage
-    .from(bucket)
-    .createSignedUrl(path, expiresIn);
-
-  if (error) throw new Error(`Failed to get signed URL: ${error.message}`);
-  return data.signedUrl;
-}
-
 export async function deleteFile(
   bucket: string,
   path: string
@@ -60,16 +36,4 @@ export async function deleteFile(
   const { error } = await supabase.storage.from(bucket).remove([path]);
 
   if (error) throw new Error(`Delete failed: ${error.message}`);
-}
-
-export async function listFiles(
-  bucket: string,
-  folder: string
-): Promise<FileObject[]> {
-  const supabase = createClient();
-
-  const { data, error } = await supabase.storage.from(bucket).list(folder);
-
-  if (error) throw new Error(`List failed: ${error.message}`);
-  return (data as FileObject[]) || [];
 }

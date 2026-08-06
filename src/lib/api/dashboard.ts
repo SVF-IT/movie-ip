@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/client'
-import type { DashboardStats, MovieWithDetails, Person, Platform, RightsNatureType } from '@/lib/types/database'
+import type { MovieWithDetails, Platform, RightsNatureType } from '@/lib/types/database'
 import { buildHoldbackInfo, flattenHoldbackInfo, hasHoldbackToken, type HoldbackInfo } from '@/lib/utils/holdbacks'
 import { escapeOrSearchTerm } from '@/lib/utils/search'
 
@@ -143,148 +143,6 @@ function isOtherExploitationPlatform(pt: string): boolean {
 }
 
 
-//test
-export async function getDashboardStats(): Promise<DashboardStats> {
-  // Try to get from view first
-  const { data, error } = await supabase.from('dashboard_stats').select('*').single()
-
-  if (!error && data) {
-    return data
-  }
-
-  // If view doesn't exist, calculate manually
-  return calculateStats()
-}
-
-async function calculateStats(): Promise<DashboardStats> {
-  try {
-    const [moviesResult, homeResult, acquiredResult, actorsResult, directorsResult, activeRightsResult] = await Promise.all([
-      supabase.from('movies').select('*', { count: 'exact', head: true }).eq('approval_status', 'approved'),
-      supabase.from('movies').select('*', { count: 'exact', head: true }).eq('source', 'home_production').eq('approval_status', 'approved'),
-      supabase.from('movies').select('*', { count: 'exact', head: true }).eq('source', 'acquired').eq('approval_status', 'approved'),
-      supabase.from('people').select('*', { count: 'exact', head: true }),
-      supabase.from('movie_people').select('person_id', { count: 'exact', head: true }).eq('role', 'Director'),
-      supabase.from('platform_rights').select('*', { count: 'exact', head: true }).eq('is_current', true),
-    ])
-
-    // Calculate expiring rights
-    const today = new Date()
-    const thirtyDaysFromNow = new Date(today)
-    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30)
-    const ninetyDaysFromNow = new Date(today)
-    ninetyDaysFromNow.setDate(ninetyDaysFromNow.getDate() + 90)
-
-    const { count: expiring30 } = await supabase
-      .from('platform_rights')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_current', true)
-      .gte('end_date', today.toISOString().split('T')[0])
-      .lte('end_date', thirtyDaysFromNow.toISOString().split('T')[0])
-
-    const { count: expiring90 } = await supabase
-      .from('platform_rights')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_current', true)
-      .gte('end_date', today.toISOString().split('T')[0])
-      .lte('end_date', ninetyDaysFromNow.toISOString().split('T')[0])
-
-    return {
-      total_movies: moviesResult.count || 0,
-      home_productions: homeResult.count || 0,
-      acquired_movies: acquiredResult.count || 0,
-      total_actors: actorsResult.count || 0,
-      total_directors: directorsResult.count || 0,
-      active_rights: activeRightsResult.count || 0,
-      rights_expiring_30_days: expiring30 || 0,
-      rights_expiring_90_days: expiring90 || 0,
-    }
-  } catch (error) {
-    console.error('Error calculating stats:', error)
-    return {
-      total_movies: 0,
-      home_productions: 0,
-      acquired_movies: 0,
-      total_actors: 0,
-      total_directors: 0,
-      active_rights: 0,
-      rights_expiring_30_days: 0,
-      rights_expiring_90_days: 0,
-    }
-  }
-}
-
-export async function getMoviesByYear(): Promise<{ year: number; count: number }[]> {
-  try {
-    const { data, error } = await supabase.from('movies').select('release_year').not('release_year', 'is', null).order('release_year')
-
-    if (error) throw error
-
-    // Group by year and count (skip non-numeric values like "UNRELEASED")
-    const yearCounts: Record<number, number> = {}
-    data?.forEach((movie: { release_year: string | null }) => {
-      if (movie.release_year) {
-        const y = parseInt(movie.release_year)
-        if (!isNaN(y)) yearCounts[y] = (yearCounts[y] || 0) + 1
-      }
-    })
-
-    return Object.entries(yearCounts)
-      .map(([year, count]: [string, number]) => ({ year: parseInt(year), count }))
-      .sort((a, b) => a.year - b.year)
-  } catch (error) {
-    console.error('Error fetching movies by year:', error)
-    return []
-  }
-}
-
-export async function getMoviesBySource(): Promise<{ source: string; count: number }[]> {
-  try {
-    const { count: homeCount } = await supabase.from('movies').select('*', { count: 'exact', head: true }).eq('source', 'home_production')
-
-    const { count: acquiredCount } = await supabase.from('movies').select('*', { count: 'exact', head: true }).eq('source', 'acquired')
-
-    return [
-      { source: 'Home Production', count: homeCount || 0 },
-      { source: 'Acquired', count: acquiredCount || 0 },
-    ]
-  } catch (error) {
-    console.error('Error fetching movies by source:', error)
-    return []
-  }
-}
-
-export async function getRightsByPlatform(): Promise<{ platform: string; count: number }[]> {
-  try {
-    const { data, error } = await supabase
-      .from('platform_rights')
-      .select(
-        `
-        platform_id,
-        platforms(name)
-      `,
-      )
-      .eq('is_current', true)
-
-    if (error) throw error
-
-    // Group by platform
-    const platformCounts: Record<string, number> = {}
-    const rightsData = data as unknown as Array<{ platform_id: string; platforms: { name: string } | null }>
-    rightsData?.forEach((right) => {
-      const name = right.platforms?.name || 'Unknown'
-      platformCounts[name] = (platformCounts[name] || 0) + 1
-    })
-
-    return Object.entries(platformCounts)
-      .map(([platform, count]) => ({ platform, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 10)
-  } catch (error) {
-    console.error('Error fetching rights by platform:', error)
-    return []
-  }
-}
-
 export async function getPlatforms(): Promise<Platform[]> {
   try {
     const { data, error } = await supabase.from('platforms').select('*').order('name')
@@ -293,30 +151,6 @@ export async function getPlatforms(): Promise<Platform[]> {
     return data || []
   } catch (error) {
     console.error('Error fetching platforms:', error)
-    return []
-  }
-}
-
-export async function getPeople(options?: { search?: string; limit?: number }): Promise<Person[]> {
-  try {
-    let query = supabase.from('people').select('*')
-
-    if (options?.search) {
-      query = query.ilike('name', `%${options.search}%`)
-    }
-
-    if (options?.limit) {
-      query = query.limit(options.limit)
-    }
-
-    query = query.order('name')
-
-    const { data, error } = await query
-
-    if (error) throw error
-    return data || []
-  } catch (error) {
-    console.error('Error fetching people:', error)
     return []
   }
 }
@@ -2068,18 +1902,6 @@ export async function getDistinctCertifications(): Promise<string[]> {
 }
 
 // Get unique nature values from actual platform_rights data
-export async function getUniqueNatureValues(): Promise<{ nature_value: string; usage_count: number }[]> {
-  try {
-    const { data, error } = await supabase.rpc('get_unique_nature_values')
-
-    if (error) throw error
-    return data || []
-  } catch (error) {
-    console.error('Error fetching unique nature values:', error)
-    return []
-  }
-}
-
 // Add a new nature type
 export async function addNatureType(name: string, description?: string): Promise<string> {
   try {

@@ -35,10 +35,6 @@ export default function SettingsPage() {
   const [profileSuccess, setProfileSuccess] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
 
-  // Import/Export state
-  const [showImportDialog, setShowImportDialog] = useState(false);
-  const [showExportDialog, setShowExportDialog] = useState(false);
-
   // Password form state
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -348,39 +344,6 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Database Settings */}
-        {/* <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Database className="h-5 w-5" />
-              Database
-            </CardTitle>
-            <CardDescription>
-              Data management and import/export
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-4">
-              <Button variant="outline" onClick={() => setShowExportDialog(true)}>Export All Data</Button>
-              <Button variant="outline" onClick={() => setShowImportDialog(true)}>Import CSV</Button>
-            </div>
-
-            <CSVImportDialog
-              open={showImportDialog}
-              onOpenChange={setShowImportDialog}
-              onSuccess={() => {}}
-            />
-            <ExportDialog
-              open={showExportDialog}
-              onOpenChange={setShowExportDialog}
-            />
-            <Separator />
-            <div className="text-sm text-muted-foreground">
-              <p>Last sync: January 31, 2024 at 10:30 AM</p>
-              <p>Total records: 636 movies, 1,005 people, 2,500 rights</p>
-            </div>
-          </CardContent>
-        </Card> */}
       </div>
     </div>
   );

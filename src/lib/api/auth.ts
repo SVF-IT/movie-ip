@@ -41,18 +41,6 @@ export async function getSession() {
   return session;
 }
 
-// Get current user
-export async function getCurrentUser() {
-  const supabase = createClient();
-  const { data: { user }, error } = await supabase.auth.getUser();
-
-  if (error) {
-    throw sanitizeError(error);
-  }
-
-  return user;
-}
-
 // Get user profile from database
 export async function getUserProfile(userId: string): Promise<UserProfile | null> {
   const supabase = createClient();
@@ -207,54 +195,3 @@ export async function toggleUserStatus(userId: string, isActive: boolean) {
   return result.user;
 }
 
-// Admin: Reset user password (sends reset email)
-export async function resetUserPassword(email: string) {
-  const response = await fetch("/api/admin/reset-password", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ email }),
-  });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.message || "Failed to reset password");
-  }
-
-  return response.json();
-}
-
-// Check if user needs to change password (first login)
-export async function checkPasswordChangeRequired(userId: string): Promise<boolean> {
-  const supabase = createClient();
-
-  const { data, error } = await supabase
-    .from("user_profiles")
-    .select("must_change_password")
-    .eq("id", userId)
-    .single();
-
-  if (error) {
-    return false;
-  }
-
-  return data?.must_change_password ?? false;
-}
-
-// Mark password as changed
-export async function markPasswordChanged(userId: string) {
-  const supabase = createClient();
-
-  const { error } = await supabase
-    .from("user_profiles")
-    .update({
-      must_change_password: false,
-      updated_at: new Date().toISOString()
-    })
-    .eq("id", userId);
-
-  if (error) {
-    throw sanitizeError(error);
-  }
-}

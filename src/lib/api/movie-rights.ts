@@ -28,69 +28,6 @@ export async function getMovieRightsOwned(
   return data || []
 }
 
-export async function getAllMovieRightsOwned(options?: {
-  rightType?: string
-  nature?: string
-  territory?: string
-  movieSearch?: string
-  endDateFrom?: string
-  endDateTo?: string
-  isExpired?: boolean
-  limit?: number
-  offset?: number
-}): Promise<{ data: MovieRight[]; count: number }> {
-  let movieIds: string[] | null = null
-
-  if (options?.movieSearch) {
-    const { data: movies, error: movieError } = await supabase
-      .from('movies')
-      .select('id')
-      .ilike('title', `%${options.movieSearch}%`)
-    if (movieError) throw sanitizeError(movieError)
-    const ids = (movies || []).map((m: { id: string }) => m.id)
-    if (ids.length === 0) return { data: [], count: 0 }
-    movieIds = ids
-  }
-
-  let query = supabase
-    .from('movie_rights')
-    .select('*, movie:movies(id, title, source)', { count: 'exact' })
-
-  if (movieIds) query = query.in('movie_id', movieIds)
-  if (options?.rightType) query = query.eq('right_type', options.rightType)
-  if (options?.nature) query = query.eq('nature', options.nature)
-  if (options?.territory) query = query.ilike('territory', `%${options.territory}%`)
-
-  if (options?.isExpired === true) {
-    query = query.lt('end_date', new Date().toISOString().split('T')[0])
-  } else if (options?.isExpired === false) {
-    query = query.or(`end_date.is.null,end_date.gte.${new Date().toISOString().split('T')[0]}`)
-  }
-
-  if (options?.endDateFrom) query = query.gte('end_date', options.endDateFrom)
-  if (options?.endDateTo) query = query.lte('end_date', options.endDateTo)
-
-  const limit = Math.min(options?.limit || 50, 10000)
-  query = query.limit(limit)
-  if (options?.offset) query = query.range(options.offset, options.offset + limit - 1)
-  query = query.order('right_type').order('end_date', { ascending: true, nullsFirst: false })
-
-  const { data, error, count } = await query
-  if (error) throw sanitizeError(error)
-  return { data: data || [], count: count || 0 }
-}
-
-export async function createMovieRight(right: Omit<MovieRight, 'id' | 'created_at' | 'updated_at' | 'movie'>): Promise<MovieRight> {
-  const { data, error } = await supabase
-    .from('movie_rights')
-    .insert(right)
-    .select()
-    .single()
-
-  if (error) throw sanitizeError(error)
-  return data
-}
-
 export async function createMovieRights(rights: Omit<MovieRight, 'id' | 'created_at' | 'updated_at' | 'movie'>[]): Promise<MovieRight[]> {
   if (rights.length === 0) return []
 
@@ -122,11 +59,6 @@ export async function updateMovieRight(id: string, right: Partial<Omit<MovieRigh
 
 export async function deleteMovieRight(id: string): Promise<void> {
   const { error } = await supabase.from('movie_rights').delete().eq('id', id)
-  if (error) throw sanitizeError(error)
-}
-
-export async function deleteAllMovieRights(movieId: string): Promise<void> {
-  const { error } = await supabase.from('movie_rights').delete().eq('movie_id', movieId)
   if (error) throw sanitizeError(error)
 }
 

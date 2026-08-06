@@ -5,17 +5,13 @@ import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
-import { History, Loader2, ChevronDown, ChevronRight, Search, X, FilePlus, FilePen, Trash2 } from "lucide-react";
+import { Loader2, ChevronRight, X, FilePlus, FilePen, Trash2 } from "lucide-react";
 import { useAppToast } from "@/hooks/use-app-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { useMultiSelectFilterState } from "@/hooks/use-multi-select-filter-state";
 import { format, formatDistanceToNow } from "date-fns";
 import { getAuditLogs, getAuditLogStats } from "@/lib/api/audit";
-import { EnhancedStatsCard } from "@/components/dashboard/enhanced-stats-card";
 import type { AuditLogEntry } from "@/lib/types/database";
-
-const selectCls = "bg-(--bg-raise)/40 border-(--svf-border) text-(--text) h-9";
-const inputCls  = "bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) focus:border-(--svf-border-strong) h-9";
 
 // ── Human-readable field labels ──────────────────────────────
 const FIELD_LABELS: Record<string, string> = {

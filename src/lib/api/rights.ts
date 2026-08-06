@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/client'
-import type { ExpiringRight, PlatformRight } from '@/lib/types/database'
+import type { PlatformRight } from '@/lib/types/database'
 import { sanitizeError } from '@/lib/utils/sanitize-error'
 
 const supabase = createClient()
@@ -167,13 +167,6 @@ export async function deleteRight(id: string): Promise<void> {
   const { error } = await supabase.from('platform_rights').delete().eq('id', id)
   if (error) throw sanitizeError(error)
   if (existing?.movie_id) await recalculateWtpLibrary(existing.movie_id)
-}
-
-export async function getExpiringRightsAlert(): Promise<ExpiringRight[]> {
-  const { data, error } = await supabase.from('expiring_rights').select('*').lte('days_until_expiry', 30).order('days_until_expiry')
-
-  if (error) throw sanitizeError(error)
-  return data || []
 }
 
 export async function getMovieRights(movieIds: string[]) {

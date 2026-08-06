@@ -189,10 +189,6 @@ export default function DubbedPage() {
     URL.revokeObjectURL(url)
   }
 
-  const dubbedCount = groups.filter((g) => g.total_versions > 1).length
-  const eligibleNotDubbedCount = groups.filter((g) => g.total_versions <= 1 && (g.source === 'home_production' || isAcquiredEligibleForDubbing(g, []))).length
-  const cannotBeDubbedCount = groups.filter((g) => g.total_versions <= 1 && g.source === 'acquired' && !isAcquiredEligibleForDubbing(g, [])).length
-
   const dubbedLabel =
     dubbedFilter.includes('all') || (dubbedFilter.includes('dubbed') && dubbedFilter.includes('not_dubbed') && dubbedFilter.includes('cannot_be_dubbed'))
       ? 'All Status'
@@ -329,7 +325,6 @@ export default function DubbedPage() {
               ) : (
                 filtered.map((group) => {
                   const isDubbed = group.total_versions > 1
-                  const groupLangs = new Set(group.versions.map((v) => v.language).filter(Boolean))
                   const allowedDubbingLangs = group.source === 'acquired'
                     ? getDubbingRightsLanguages(group.primary_version?.dubbing_rights)
                     : null

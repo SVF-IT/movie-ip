@@ -112,34 +112,3 @@ export async function markAllAsRead(): Promise<void> {
     .eq("is_read", false);
 }
 
-export async function createNotification(params: {
-  userId?: string;
-  title: string;
-  message: string;
-  type: string;
-  severity?: "info" | "warning" | "critical";
-  resourceType?: string;
-  resourceId?: string;
-}): Promise<void> {
-  const supabase = createClient();
-
-  // Use provided userId or fall back to current authenticated user
-  let targetUserId = params.userId;
-  if (!targetUserId) {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
-    targetUserId = user.id;
-  }
-
-  await supabase.from("notifications").insert({
-    user_id: targetUserId,
-    title: params.title,
-    message: params.message,
-    type: params.type,
-    severity: params.severity || "info",
-    resource_type: params.resourceType,
-    resource_id: params.resourceId,
-  });
-}

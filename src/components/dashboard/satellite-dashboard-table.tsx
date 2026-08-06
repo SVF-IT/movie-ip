@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Checkbox } from '@/components/ui/checkbox'
 import { MultiSelectFilter } from '@/components/ui/multi-select-filter'
 import { Calendar } from '@/components/ui/calendar'
-import { Search, ChevronRight, Download, Loader2, CalendarRange, X, CalendarIcon, Filter } from 'lucide-react'
+import { Search, ChevronRight, Download, Loader2, CalendarRange, X, CalendarIcon } from 'lucide-react'
 import {
   getOpenTitlesForMode,
   getExpiringSatelliteTitles,
@@ -21,7 +21,6 @@ import {
 import { useSortableTable } from '@/hooks/use-sortable-table'
 import { useMultiSelectFilterState } from '@/hooks/use-multi-select-filter-state'
 import { SortableHeader } from '@/components/ui/sortable-header'
-import type { MovieWithDetails } from '@/lib/types/database'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { DataExportDialog, type ExportFieldDef } from '@/components/import-export/data-export-dialog'
@@ -172,7 +171,6 @@ export function SatelliteDashboardTable({
   const [showExportDialog, setShowExportDialog] = useState(false)
   const [exportData, setExportData] = useState<Record<string, unknown>[]>([])
   const [exportLoading, setExportLoading] = useState(false)
-  const [totalCount, setTotalCount] = useState(0)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   const getEffectiveLicensor = (movie: any) => movie.source === 'home_production' ? 'SVF' : (movie.assignor_licensor || '')
@@ -228,7 +226,7 @@ export function SatelliteDashboardTable({
       const wtpParam = wtpFilter.length < WTP_OPTIONS.length ? wtpFilter : undefined
 
       if (activeCard === 'open_titles') {
-        const { data, count } = await getOpenTitlesForMode('satellite', {
+        const { data } = await getOpenTitlesForMode('satellite', {
           search: debouncedSearch || undefined,
           language: languageParam,
           sourceFilter,
@@ -243,9 +241,8 @@ export function SatelliteDashboardTable({
         })
         if (forExport) return data
         setMovies(data)
-        setTotalCount(count)
       } else if (activeCard === 'expiring') {
-        const { data, count } = await getExpiringSatelliteTitles({
+        const { data } = await getExpiringSatelliteTitles({
           fromDate: expiryFrom || undefined,
           toDate: expiryTo || undefined,
           language: languageParam,
@@ -258,10 +255,9 @@ export function SatelliteDashboardTable({
         })
         if (forExport) return data
         setMovies(data)
-        setTotalCount(count)
       } else {
         // WTP — server-side filtering with language, source, search, and pagination
-        const { data, count } = await getMoviesForDashboard({
+        const { data } = await getMoviesForDashboard({
           category: 'wtp',
           search: debouncedSearch || undefined,
           language: languageParam,
@@ -273,7 +269,6 @@ export function SatelliteDashboardTable({
         })
         if (forExport) return data as MovieWithSatelliteRights[]
         setMovies(data as MovieWithSatelliteRights[])
-        setTotalCount(count)
       }
     } catch (error) {
       console.error('Error loading satellite table:', error)

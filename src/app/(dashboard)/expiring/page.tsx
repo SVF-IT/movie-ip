@@ -6,19 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { SortableHeader } from "@/components/ui/sortable-header";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Tooltip,
   TooltipContent,
@@ -176,35 +165,10 @@ export default function ExpiringRightsPage() {
     return true;
   }), [typeFiltered, platformFilter, platformOptions.length, subTypeFilter, subTypeOptions, searchQuery]);
 
-  const { sortedData: sortedFiltered, sortConfig, requestSort } = useSortableTable(filteredRights);
+  const { sortedData: sortedFiltered } = useSortableTable(filteredRights);
 
   const criticalRights = sortedFiltered.filter((r) => r.days_until_expiry <= 7);
   const urgentRights = sortedFiltered.filter((r) => r.days_until_expiry > 7 && r.days_until_expiry <= 30);
-  const upcomingRights = sortedFiltered.filter((r) => r.days_until_expiry > 30);
-
-  const getUrgencyRowClass = (days: number) => {
-    if (days <= 7) return "border-l-2 border-l-red-500/70 bg-red-500/5";
-    if (days <= 30) return "border-l-2 border-l-amber-500/70 bg-amber-500/5";
-    return "";
-  };
-
-  const getUrgencyBadge = (days: number) => {
-    if (days <= 7) return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-red-500/15 text-red-400 border border-red-500/30 animate-pulse">
-        <Zap className="h-3 w-3" />{days}d
-      </span>
-    );
-    if (days <= 30) return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30">
-        <Clock className="h-3 w-3" />{days}d
-      </span>
-    );
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-(--bg-deep) text-(--text-faint) border border-(--svf-border-strong)">
-        {days}d
-      </span>
-    );
-  };
 
   const exportToExcel = async () => {
     const XLSX = await import("xlsx");
@@ -241,16 +205,6 @@ export default function ExpiringRightsPage() {
       </div>
     );
   }
-
-  const dateFilterLabels: Record<string, string> = {
-    "7d": "Next 7 Days",
-    "30d": "Next 30 Days",
-    "60d": "Next 60 Days",
-    "90d": "Next 90 Days",
-    "1y": "Next 1 Year",
-    "all": "All Time",
-    "custom": "Custom Range",
-  };
 
   const rightsTypeConfig = [
     { value: "all", label: "All Rights", icon: Shield },

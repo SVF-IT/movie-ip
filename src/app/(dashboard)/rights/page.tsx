@@ -80,7 +80,6 @@ const RIGHTS_TYPE_GROUPS: { group: string; types: string[] }[] = [
 
 export default function RightsPage() {
   const [rights, setRights] = useState<RightWithDetails[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
 
   // All exact platform_type strings across the grouped list, e.g. "Satellite TV", "SVOD"
   const ALL_RIGHTS_TYPES = RIGHTS_TYPE_GROUPS.flatMap((g) => g.types);
@@ -131,7 +130,7 @@ export default function RightsPage() {
       const platformParam = platformOptions.length > 0 && platformFilter.length < platformOptions.length ? platformFilter : undefined;
       const rightsTypeParam = rightsTypeFilter.length < ALL_RIGHTS_TYPES.length ? rightsTypeFilter : undefined;
 
-      const { data, count } = await getAllRights({
+      const { data } = await getAllRights({
         platformId: platformParam,
         platformTypeExact: rightsTypeParam,
         movieId: movieIdFilter !== "all" ? movieIdFilter : undefined,
@@ -141,7 +140,6 @@ export default function RightsPage() {
       });
 
       setRights(data as RightWithDetails[]);
-      setTotalCount(count);
     } catch (err) {
       console.error("Error fetching rights:", err);
       toast.error(err instanceof Error ? err.message : "Failed to load rights");

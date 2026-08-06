@@ -66,29 +66,6 @@ export async function getPlatformsWithStats(options?: { search?: string; platfor
   }
 }
 
-export async function getPlatformById(id: string): Promise<PlatformWithStats | null> {
-  try {
-    const { data: platform, error } = await supabase.from('platforms').select('*').eq('id', id).single()
-
-    if (error) throw sanitizeError(error)
-    if (!platform) return null
-
-    const [activeResult, totalResult] = await Promise.all([
-      supabase.from('platform_rights').select('*', { count: 'exact', head: true }).eq('platform_id', id).eq('is_current', true),
-      supabase.from('platform_rights').select('*', { count: 'exact', head: true }).eq('platform_id', id),
-    ])
-
-    return {
-      ...platform,
-      active_rights: activeResult.count || 0,
-      total_rights: totalResult.count || 0,
-    }
-  } catch (error) {
-    console.error('Error fetching platform:', error)
-    return null
-  }
-}
-
 export async function createPlatform(data: { name: string; platform_type?: string; agreement_doc_url?: string }): Promise<Platform> {
   const { data: platform, error } = await supabase
     .from('platforms')

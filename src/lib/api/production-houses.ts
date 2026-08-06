@@ -61,32 +61,6 @@ export async function getProductionHousesWithStats(options?: {
   }
 }
 
-export async function getProductionHouseById(id: string): Promise<ProductionHouseWithStats | null> {
-  try {
-    const { data: house, error } = await supabase
-      .from("production_houses")
-      .select("*")
-      .eq("id", id)
-      .single();
-
-    if (error) throw sanitizeError(error);
-    if (!house) return null;
-
-    const { count } = await supabase
-      .from("movies")
-      .select("*", { count: "exact", head: true })
-      .eq("production_house_name", house.name);
-
-    return {
-      ...house,
-      movie_count: count || 0,
-    };
-  } catch (error) {
-    console.error("Error fetching production house:", error);
-    return null;
-  }
-}
-
 export async function getProductionHouses(): Promise<ProductionHouse[]> {
   const { data, error } = await supabase
     .from("production_houses")

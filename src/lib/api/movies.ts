@@ -240,18 +240,6 @@ export async function getBulkMoviePlatformRights(movieIds: string[]): Promise<Re
   return map;
 }
 
-export async function getMoviePeople(movieId: string): Promise<MoviePeople[]> {
-  const { data, error } = await supabase
-    .from("movie_people")
-    .select(`*, person:people(id, name, role)`)
-    .eq("movie_id", movieId)
-    .order("role")
-    .order("billing_order");
-
-  if (error) throw sanitizeError(error);
-  return data || [];
-}
-
 export async function getMovieCast(movieId: string): Promise<MoviePeople[]> {
   const { data, error } = await supabase
     .from("movie_people")
@@ -316,27 +304,6 @@ export async function getExpiringRights(
       days_until_expiry: daysUntilExpiry,
     } as ExpiringRight;
   });
-}
-
-export async function getAvailableForRights(): Promise<MovieWithDetails[]> {
-  // First try the view
-  const { data, error } = await supabase
-    .from("available_for_rights")
-    .select("*")
-    .limit(50);
-
-  if (!error && data) {
-    return data;
-  }
-
-  // Fall back to getting movies without active rights
-  const { data: moviesData, error: moviesError } = await supabase
-    .from("movies")
-    .select("*")
-    .limit(50);
-
-  if (moviesError) throw sanitizeError(moviesError);
-  return moviesData || [];
 }
 
 export async function createMovie(
@@ -464,22 +431,6 @@ async function syncPersonRole(personId: string): Promise<void> {
   else if (roles.has("Actor")) newRole = "actor";
 
   await supabase.from("people").update({ role: newRole }).eq("id", personId);
-}
-
-// ─── Legacy shims (kept for any existing callers) ────────────────────────────
-export async function addMovieCast(movieId: string, personId: string, _role = "Actor", billingOrder = 0): Promise<MoviePeople> {
-  return addMoviePerson(movieId, personId, "Actor", billingOrder);
-}
-export async function removeMovieCast(id: string): Promise<void> {
-  const { data } = await supabase.from("movie_people").select("person_id").eq("id", id).single();
-  await removeMoviePerson(id, data?.person_id ?? "");
-}
-export async function addMovieDirector(movieId: string, personId: string): Promise<MoviePeople> {
-  return addMoviePerson(movieId, personId, "Director");
-}
-export async function removeMovieDirector(id: string): Promise<void> {
-  const { data } = await supabase.from("movie_people").select("person_id").eq("id", id).single();
-  await removeMoviePerson(id, data?.person_id ?? "");
 }
 
 /**
