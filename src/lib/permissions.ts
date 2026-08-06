@@ -50,7 +50,15 @@ const permissionMatrix: Record<
     agreement: ["create", "edit", "delete", "import", "export"],
     report: ["create", "edit", "export"],
   },
-  viewer: {},
+  viewer: {
+    movie: ["export"],
+    platform: ["export"],
+    production_house: ["export"],
+    person: ["export"],
+    right: ["export"],
+    agreement: ["export"],
+    report: ["export"],
+  },
 };
 
 export function canPerform(

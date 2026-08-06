@@ -1,5 +1,7 @@
 "use client";
 
+import { DisabledActionButton } from "@/components/disabled-action-button";
+import { RoleGate } from "@/components/role-gate";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -453,13 +455,27 @@ export default function MovieDetailPage() {
                 {!expired && (
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-(--text-faint) hover:text-amber-400 hover:bg-amber-500/10" asChild>
-                        <Link href={`/rights/${right.id}/edit`}><Edit className="h-3.5 w-3.5" /></Link>
-                      </Button>
-                      {canRequestDelete && (
+                      <RoleGate
+                        action="edit"
+                        resource="right"
+                        fallback={
+                          <DisabledActionButton size="sm" variant="ghost" className="h-7 w-7 p-0" reason="You don't have permission to edit rights.">
+                            <Edit className="h-3.5 w-3.5" />
+                          </DisabledActionButton>
+                        }
+                      >
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-(--text-faint) hover:text-amber-400 hover:bg-amber-500/10" asChild>
+                          <Link href={`/rights/${right.id}/edit`}><Edit className="h-3.5 w-3.5" /></Link>
+                        </Button>
+                      </RoleGate>
+                      {canRequestDelete ? (
                         <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-(--text-faint) hover:text-red-400 hover:bg-red-500/10" onClick={() => setRequestDeletingRight(right)}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
+                      ) : (
+                        <DisabledActionButton size="sm" variant="ghost" className="h-7 w-7 p-0" reason="You don't have permission to request deletion of rights.">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </DisabledActionButton>
                       )}
                     </div>
                   </TableCell>
@@ -607,9 +623,19 @@ export default function MovieDetailPage() {
 
             {/* Actions */}
             <div className="flex gap-2 pt-1 flex-wrap items-center">
-              <Button asChild size="sm" className="h-8 px-4 bg-red-600 hover:bg-red-500 text-white border-0 shadow-lg shadow-red-900/30 gap-2">
-                <Link href={`/movies/${selectedVersionId}/edit`}><Edit className="h-3.5 w-3.5" />Edit Movie</Link>
-              </Button>
+              <RoleGate
+                action="edit"
+                resource="movie"
+                fallback={
+                  <DisabledActionButton className="h-8 px-4 bg-red-600 border-0 shadow-lg shadow-red-900/30 gap-2" reason="You don't have permission to edit movies.">
+                    <Edit className="h-3.5 w-3.5" />Edit Movie
+                  </DisabledActionButton>
+                }
+              >
+                <Button asChild size="sm" className="h-8 px-4 bg-red-600 hover:bg-red-500 text-white border-0 shadow-lg shadow-red-900/30 gap-2">
+                  <Link href={`/movies/${selectedVersionId}/edit`}><Edit className="h-3.5 w-3.5" />Edit Movie</Link>
+                </Button>
+              </RoleGate>
               {movie.trailer_link && movie.trailer_link !== "N/A" && (
                 <Button variant="outline" size="sm" className="h-8 px-4 bg-(--bg-raise) border-(--svf-border) text-(--text) hover:bg-(--hover) gap-2" asChild>
                   <a href={movie.trailer_link} target="_blank" rel="noopener noreferrer">
@@ -617,11 +643,15 @@ export default function MovieDetailPage() {
                   </a>
                 </Button>
               )}
-              {canDelete && (
+              {canDelete ? (
                 <Button variant="outline" size="sm" onClick={() => setShowDeleteDialog(true)}
                   className="h-8 px-3 bg-red-500/10 border-red-500/30 text-red-500 hover:bg-red-500/20 hover:border-red-500/50 gap-1.5">
                   <Trash2 className="h-3.5 w-3.5" />Delete
                 </Button>
+              ) : (
+                <DisabledActionButton variant="outline" className="h-8 px-3 bg-red-500/10 border-red-500/30 text-red-500 gap-1.5" reason="You don't have permission to delete this movie.">
+                  <Trash2 className="h-3.5 w-3.5" />Delete
+                </DisabledActionButton>
               )}
             </div>
           </div>

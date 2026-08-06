@@ -1,5 +1,6 @@
 "use client";
 
+import { DisabledActionButton } from "@/components/disabled-action-button";
 import { DataExportDialog, type ExportFieldDef } from "@/components/import-export/data-export-dialog";
 import { RoleGate } from "@/components/role-gate";
 import { Button } from "@/components/ui/button";
@@ -111,7 +112,16 @@ export default function ProductionHousesPage() {
             {exportLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             Export
           </Button>
-          <RoleGate action="create" resource="production_house">
+          <RoleGate
+            action="create"
+            resource="production_house"
+            fallback={
+              <DisabledActionButton className="h-9 gap-2 bg-red-600 border-0 shadow-lg shadow-red-900/30" reason="You don't have permission to add production houses.">
+                <Plus className="h-4 w-4" />
+                Add Production House
+              </DisabledActionButton>
+            }
+          >
             <Button asChild size="sm" className="h-9 gap-2 bg-red-600 hover:bg-red-500 text-white border-0 shadow-lg shadow-red-900/30">
               <Link href="/production-houses/new">
                 <Plus className="h-4 w-4" />
@@ -186,27 +196,35 @@ export default function ProductionHousesPage() {
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
-                        <RoleGate action="edit" resource="production_house">
-                          <div className="flex justify-end gap-1">
+                        <div className="flex justify-end gap-1">
+                          <RoleGate
+                            action="edit"
+                            resource="production_house"
+                            fallback={
+                              <DisabledActionButton size="sm" variant="ghost" className="h-7 w-7 p-0" reason="You don't have permission to edit production houses.">
+                                <Edit className="h-3.5 w-3.5" />
+                              </DisabledActionButton>
+                            }
+                          >
                             <Button variant="ghost" size="sm" aria-label={`Edit ${house.name}`} asChild
                               className="h-7 w-7 p-0 text-(--text-faint) hover:text-amber-400 hover:bg-amber-500/10">
                               <Link href={`/production-houses/${house.id}/edit`}>
                                 <Edit className="h-3.5 w-3.5" />
                               </Link>
                             </Button>
-                            <RoleGate action="delete" resource="production_house">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                aria-label={`Delete ${house.name}`}
-                                className="h-7 w-7 p-0 text-(--text-faint) hover:text-red-400 hover:bg-red-500/10"
-                                onClick={() => { setDeletingHouse(house); setShowDeleteConfirm(true); }}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </RoleGate>
-                          </div>
-                        </RoleGate>
+                          </RoleGate>
+                          <RoleGate action="delete" resource="production_house" showDisabledFallback disabledReason="You don't have permission to delete production houses.">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              aria-label={`Delete ${house.name}`}
+                              className="h-7 w-7 p-0 text-(--text-faint) hover:text-red-400 hover:bg-red-500/10"
+                              onClick={() => { setDeletingHouse(house); setShowDeleteConfirm(true); }}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </RoleGate>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

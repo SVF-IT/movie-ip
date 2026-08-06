@@ -1,5 +1,6 @@
 "use client";
 
+import { DisabledActionButton } from "@/components/disabled-action-button";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -243,7 +244,7 @@ export default function PersonDetailPage() {
               <Download className="h-4 w-4" /> Export
             </Button>
           )}
-          {canEdit && (
+          {canEdit ? (
             <>
               <Button variant="outline" size="sm" className="gap-1.5 h-8 border-(--svf-border) text-(--text) hover:bg-(--hover)" onClick={() => setEditDialogOpen(true)}>
                 <Edit className="h-3.5 w-3.5" /> Edit
@@ -251,6 +252,15 @@ export default function PersonDetailPage() {
               <Button size="sm" className="gap-1.5 h-8 bg-red-600/80 hover:bg-red-600 text-white border-0" onClick={() => setDeleteDialogOpen(true)}>
                 <Trash2 className="h-3.5 w-3.5" /> Delete
               </Button>
+            </>
+          ) : (
+            <>
+              <DisabledActionButton variant="outline" className="gap-1.5 h-8" reason="You don't have permission to edit people.">
+                <Edit className="h-3.5 w-3.5" /> Edit
+              </DisabledActionButton>
+              <DisabledActionButton className="gap-1.5 h-8 bg-red-600/80 border-0" reason="You don't have permission to delete people.">
+                <Trash2 className="h-3.5 w-3.5" /> Delete
+              </DisabledActionButton>
             </>
           )}
         </div>

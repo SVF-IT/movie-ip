@@ -1,5 +1,6 @@
 "use client";
 
+import { DisabledActionButton } from "@/components/disabled-action-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -213,25 +214,36 @@ function MovieCard({ movie, onApprove, onReject, isLegalOrAdmin, selectable, sel
                 </Button>
               </Link>
             )}
-            {isLegalOrAdmin && movie.approval_status === "pending" && (
-              <>
-                <Button
-                  size="sm"
-                  onClick={() => onApprove(movie)}
-                  className="bg-green-600/20 hover:bg-green-600/40 text-green-400 border border-green-500/30 h-8 px-3"
-                  variant="outline"
-                >
-                  <Check className="h-3.5 w-3.5 mr-1" /> Approve
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => onReject(movie)}
-                  className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 h-8 px-3"
-                  variant="outline"
-                >
-                  <X className="h-3.5 w-3.5 mr-1" /> Reject
-                </Button>
-              </>
+            {movie.approval_status === "pending" && (
+              isLegalOrAdmin ? (
+                <>
+                  <Button
+                    size="sm"
+                    onClick={() => onApprove(movie)}
+                    className="bg-green-600/20 hover:bg-green-600/40 text-green-400 border border-green-500/30 h-8 px-3"
+                    variant="outline"
+                  >
+                    <Check className="h-3.5 w-3.5 mr-1" /> Approve
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => onReject(movie)}
+                    className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 h-8 px-3"
+                    variant="outline"
+                  >
+                    <X className="h-3.5 w-3.5 mr-1" /> Reject
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <DisabledActionButton variant="outline" className="bg-green-600/20 border-green-500/30 text-green-400 h-8 px-3" reason="Only legal or admin can approve movies.">
+                    <Check className="h-3.5 w-3.5 mr-1" /> Approve
+                  </DisabledActionButton>
+                  <DisabledActionButton variant="outline" className="bg-red-600/20 border-red-500/30 text-red-400 h-8 px-3" reason="Only legal or admin can reject movies.">
+                    <X className="h-3.5 w-3.5 mr-1" /> Reject
+                  </DisabledActionButton>
+                </>
+              )
             )}
           </div>
         </div>
@@ -383,16 +395,29 @@ function PendingChangeCard({
             </div>
           </div>
 
-          {isLegalOrAdmin && change.status === "pending" && (
+          {change.status === "pending" && (
             <div className="flex gap-2 shrink-0">
-              <Button size="sm" onClick={() => onApprove(change)}
-                className="bg-green-600/20 hover:bg-green-600/40 text-green-400 border border-green-500/30 h-8 px-3" variant="outline">
-                <Check className="h-3.5 w-3.5 mr-1" /> Approve
-              </Button>
-              <Button size="sm" onClick={() => onReject(change)}
-                className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 h-8 px-3" variant="outline">
-                <X className="h-3.5 w-3.5 mr-1" /> Reject
-              </Button>
+              {isLegalOrAdmin ? (
+                <>
+                  <Button size="sm" onClick={() => onApprove(change)}
+                    className="bg-green-600/20 hover:bg-green-600/40 text-green-400 border border-green-500/30 h-8 px-3" variant="outline">
+                    <Check className="h-3.5 w-3.5 mr-1" /> Approve
+                  </Button>
+                  <Button size="sm" onClick={() => onReject(change)}
+                    className="bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 h-8 px-3" variant="outline">
+                    <X className="h-3.5 w-3.5 mr-1" /> Reject
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <DisabledActionButton variant="outline" className="bg-green-600/20 border-green-500/30 text-green-400 h-8 px-3" reason="Only legal or admin can approve changes.">
+                    <Check className="h-3.5 w-3.5 mr-1" /> Approve
+                  </DisabledActionButton>
+                  <DisabledActionButton variant="outline" className="bg-red-600/20 border-red-500/30 text-red-400 h-8 px-3" reason="Only legal or admin can reject changes.">
+                    <X className="h-3.5 w-3.5 mr-1" /> Reject
+                  </DisabledActionButton>
+                </>
+              )}
             </div>
           )}
         </div>

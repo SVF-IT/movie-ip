@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { History, Loader2, ChevronDown, ChevronRight, Search, X, FilePlus, FilePen, Trash2 } from "lucide-react";
 import { useAppToast } from "@/hooks/use-app-toast";
+import { useAuth } from "@/contexts/auth-context";
 import { useMultiSelectFilterState } from "@/hooks/use-multi-select-filter-state";
 import { format, formatDistanceToNow } from "date-fns";
 import { getAuditLogs, getAuditLogStats } from "@/lib/api/audit";
@@ -175,6 +177,13 @@ const actionCfg: Record<string, { label: string; cls: string; icon: React.Elemen
 };
 
 export default function AuditLogPage() {
+  const { isAdmin, loading: authLoading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!authLoading && !isAdmin) router.replace("/");
+  }, [authLoading, isAdmin, router]);
+
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [stats, setStats] = useState({ totalEvents: 0, eventsToday: 0, eventsThisWeek: 0 });
@@ -213,6 +222,7 @@ export default function AuditLogPage() {
   };
   const hasFilters = tableFilter.length < TABLE_OPTIONS.length || actionFilter.length < ACTION_OPTIONS.length || dateFrom || dateTo;
 
+  if (authLoading || !isAdmin) return null;
 
   return (
     <div className="space-y-4 min-w-0">

@@ -67,7 +67,7 @@ export async function GET(request: Request) {
 
     const { data: profile } = await serverClient.from('user_profiles').select('role').eq('id', user.id).single()
 
-    if (!profile || !['admin', 'editor', 'legal'].includes(profile.role)) {
+    if (!profile || !['admin', 'editor', 'legal', 'viewer'].includes(profile.role)) {
       return NextResponse.json({ message: 'You do not have permission to export data' }, { status: 403 })
     }
 

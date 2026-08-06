@@ -81,7 +81,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
 // Update user profile (only own profile)
 export async function updateUserProfile(
   userId: string,
-  updates: Partial<Pick<UserProfile, "full_name" | "department">>
+  updates: Partial<Pick<UserProfile, "full_name">> & { department?: string | null }
 ) {
   const supabase = createClient();
 

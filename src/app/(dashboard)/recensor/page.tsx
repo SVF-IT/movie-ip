@@ -1,5 +1,6 @@
 "use client";
 
+import { DisabledActionButton } from "@/components/disabled-action-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,8 +13,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAppToast } from "@/hooks/use-app-toast";
 import { useMultiSelectFilterState } from "@/hooks/use-multi-select-filter-state";
+import { usePermission } from "@/hooks/use-permission";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { sanitizeError } from "@/lib/utils/sanitize-error";
@@ -48,6 +51,7 @@ type FilterStatus = "all" | "pending" | "done";
 
 export default function RecensorPage() {
   const supabase = createClient();
+  const { allowed: canEditMovie } = usePermission("edit", "movie");
 
   const [movies, setMovies] = useState<RecensorMovie[]>([]);
   const [loading, setLoading] = useState(true);
@@ -130,6 +134,7 @@ export default function RecensorPage() {
   useEffect(() => { fetchMovies(); }, [fetchMovies]);
 
   const toggleRecensor = async (movie: RecensorMovie) => {
+    if (!canEditMovie) return;
     setTogglingId(movie.id);
     try {
       const { error: updateError } = await supabase
@@ -342,29 +347,50 @@ export default function RecensorPage() {
                       <td className="px-4 py-3.5 text-center">
                         {togglingId === movie.id ? (
                           <Loader2 className="h-4 w-4 animate-spin text-(--text-faint) mx-auto" />
-                        ) : (
+                        ) : canEditMovie ? (
                           <Switch
                             checked={movie.recensor_flag}
                             onCheckedChange={() => toggleRecensor(movie)}
                             className="data-[state=checked]:bg-rose-500 mx-auto"
                             aria-label={`Toggle recensor flag for ${movie.title}`}
                           />
+                        ) : (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-block cursor-not-allowed mx-auto">
+                                <Switch
+                                  checked={movie.recensor_flag}
+                                  disabled
+                                  className="data-[state=checked]:bg-rose-500 pointer-events-none"
+                                  aria-label={`Toggle recensor flag for ${movie.title}`}
+                                />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>You don&apos;t have permission to change censor status.</TooltipContent>
+                          </Tooltip>
                         )}
                       </td>
 
                       {/* Edit */}
                       <td className="px-6 py-3.5 text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 gap-1.5 text-(--text-faint) hover:text-amber-400 hover:bg-amber-500/10"
-                          asChild
-                        >
-                          <Link href={`/movies/${movie.id}/edit`}>
+                        {canEditMovie ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 gap-1.5 text-(--text-faint) hover:text-amber-400 hover:bg-amber-500/10"
+                            asChild
+                          >
+                            <Link href={`/movies/${movie.id}/edit`}>
+                              <Edit className="h-3.5 w-3.5" />
+                              <span className="text-xs">Edit</span>
+                            </Link>
+                          </Button>
+                        ) : (
+                          <DisabledActionButton size="sm" variant="ghost" className="h-7 gap-1.5" reason="You don't have permission to edit movies.">
                             <Edit className="h-3.5 w-3.5" />
                             <span className="text-xs">Edit</span>
-                          </Link>
-                        </Button>
+                          </DisabledActionButton>
+                        )}
                       </td>
                     </tr>
                   ))}

@@ -1,5 +1,6 @@
 "use client";
 
+import { DisabledActionButton } from "@/components/disabled-action-button";
 import { RoleGate } from "@/components/role-gate";
 import { Button } from "@/components/ui/button";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
@@ -574,7 +575,15 @@ export default function ExpiringRightsPage() {
 
                   {/* Actions */}
                   <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <RoleGate action="edit" resource="right">
+                    <RoleGate
+                      action="edit"
+                      resource="right"
+                      fallback={
+                        <DisabledActionButton size="icon" variant="ghost" className="h-7 w-7" reason="You don't have permission to edit rights.">
+                          <Edit className="h-3.5 w-3.5" />
+                        </DisabledActionButton>
+                      }
+                    >
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button size="icon" variant="ghost" className="h-7 w-7 hover:text-amber-400 hover:bg-amber-500/10" style={{ color: "var(--text-faint)" }} asChild>
@@ -584,7 +593,7 @@ export default function ExpiringRightsPage() {
                         <TooltipContent>Edit</TooltipContent>
                       </Tooltip>
                     </RoleGate>
-                    {canDelete && (
+                    {canDelete ? (
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button size="icon" variant="ghost" className="h-7 w-7 hover:text-red-400 hover:bg-red-500/10" style={{ color: "var(--text-faint)" }} onClick={() => setDeletingRight(right)}>
@@ -593,6 +602,10 @@ export default function ExpiringRightsPage() {
                         </TooltipTrigger>
                         <TooltipContent>Request Deletion</TooltipContent>
                       </Tooltip>
+                    ) : (
+                      <DisabledActionButton size="icon" variant="ghost" className="h-7 w-7" reason="You don't have permission to request deletion of rights.">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </DisabledActionButton>
                     )}
                   </div>
                 </div>

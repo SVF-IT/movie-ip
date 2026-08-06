@@ -1,5 +1,6 @@
 "use client";
 
+import { DisabledActionButton } from "@/components/disabled-action-button";
 import { DataExportDialog, type ExportFieldDef } from "@/components/import-export/data-export-dialog";
 import { RoleGate } from "@/components/role-gate";
 import { Button } from "@/components/ui/button";
@@ -156,7 +157,16 @@ export default function PlatformsPage() {
             {exportLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             Export
           </Button>
-          <RoleGate action="create" resource="platform">
+          <RoleGate
+            action="create"
+            resource="platform"
+            fallback={
+              <DisabledActionButton className="h-9 gap-2 bg-red-600 border-0 shadow-lg shadow-red-900/30" reason="You don't have permission to add platforms.">
+                <Plus className="h-4 w-4" />
+                Add Platform
+              </DisabledActionButton>
+            }
+          >
             <Button asChild size="sm" className="h-9 gap-2 bg-red-600 hover:bg-red-500 text-white border-0 shadow-lg shadow-red-900/30">
               <Link href="/platforms/new">
                 <Plus className="h-4 w-4" />
@@ -256,26 +266,34 @@ export default function PlatformsPage() {
                         <span className="font-bold tabular-nums text-(--text)">{platform.total_rights || 0}</span>
                       </TableCell>
                       <TableCell className="text-right">
-                        <RoleGate action="edit" resource="platform">
-                          <div className="flex justify-end gap-0.5">
+                        <div className="flex justify-end gap-0.5">
+                          <RoleGate
+                            action="edit"
+                            resource="platform"
+                            fallback={
+                              <DisabledActionButton size="icon" variant="ghost" className="h-8 w-8" reason="You don't have permission to edit platforms.">
+                                <Edit className="h-3.5 w-3.5 text-amber-500" />
+                              </DisabledActionButton>
+                            }
+                          >
                             <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-amber-500/10 hover:text-amber-400" asChild aria-label={`Edit ${platform.name}`}>
                               <Link href={`/platforms/${platform.id}/edit`}>
                                 <Edit className="h-3.5 w-3.5 text-amber-500" />
                               </Link>
                             </Button>
-                            <RoleGate action="delete" resource="platform">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 hover:bg-red-500/10 hover:text-red-400"
-                                aria-label={`Delete ${platform.name}`}
-                                onClick={() => { setDeletingPlatform(platform); setShowDeleteConfirm(true); }}
-                              >
-                                <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                              </Button>
-                            </RoleGate>
-                          </div>
-                        </RoleGate>
+                          </RoleGate>
+                          <RoleGate action="delete" resource="platform" showDisabledFallback disabledReason="You don't have permission to delete platforms.">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 hover:bg-red-500/10 hover:text-red-400"
+                              aria-label={`Delete ${platform.name}`}
+                              onClick={() => { setDeletingPlatform(platform); setShowDeleteConfirm(true); }}
+                            >
+                              <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                            </Button>
+                          </RoleGate>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

@@ -1,5 +1,6 @@
 "use client";
 
+import { DisabledActionButton } from "@/components/disabled-action-button";
 import { DataExportDialog, type ExportFieldDef } from "@/components/import-export/data-export-dialog";
 import { MovieSelector } from "@/components/movies/movie-selector";
 import { RoleGate } from "@/components/role-gate";
@@ -268,7 +269,15 @@ export default function RightsPage() {
           {exportLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
           Export
         </Button>
-        <RoleGate action="create" resource="right">
+        <RoleGate
+          action="create"
+          resource="right"
+          fallback={
+            <DisabledActionButton className="h-9 gap-2 bg-red-600 border-0 shadow-lg shadow-red-900/30" reason="You don't have permission to add rights.">
+              <Plus className="h-4 w-4" />Add Right
+            </DisabledActionButton>
+          }
+        >
           <Button asChild size="sm" className="h-9 gap-2 bg-red-600 hover:bg-red-500 text-white border-0 shadow-lg shadow-red-900/30">
             <Link href="/rights/new"><Plus className="h-4 w-4" />Add Right</Link>
           </Button>
@@ -357,8 +366,16 @@ export default function RightsPage() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right pr-6 py-3.5">
-                            <RoleGate action="edit" resource="right">
-                              <div className="flex justify-end gap-0.5">
+                            <div className="flex justify-end gap-0.5">
+                              <RoleGate
+                                action="edit"
+                                resource="right"
+                                fallback={
+                                  <DisabledActionButton size="icon" variant="ghost" className="h-5 w-5" reason="You don't have permission to edit rights.">
+                                    <Edit className="h-3.5 w-3.5" />
+                                  </DisabledActionButton>
+                                }
+                              >
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <Button size="icon" variant="ghost" className="h-5 w-5 text-(--text-faint) hover:text-amber-400 hover:bg-amber-500/10" asChild>
@@ -367,23 +384,27 @@ export default function RightsPage() {
                                   </TooltipTrigger>
                                   <TooltipContent>Edit</TooltipContent>
                                 </Tooltip>
-                                {canRequestDelete && (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        size="icon"
-                                        variant="ghost"
-                                        className="h-5 w-5 text-(--text-faint) hover:text-red-400 hover:bg-red-500/10"
-                                        onClick={() => setDeletingRight(right)}
-                                      >
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Request Deletion</TooltipContent>
-                                  </Tooltip>
-                                )}
-                              </div>
-                            </RoleGate>
+                              </RoleGate>
+                              {canRequestDelete ? (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-5 w-5 text-(--text-faint) hover:text-red-400 hover:bg-red-500/10"
+                                      onClick={() => setDeletingRight(right)}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Request Deletion</TooltipContent>
+                                </Tooltip>
+                              ) : (
+                                <DisabledActionButton size="icon" variant="ghost" className="h-5 w-5" reason="You don't have permission to request deletion of rights.">
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </DisabledActionButton>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       );

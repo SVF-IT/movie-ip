@@ -1,5 +1,6 @@
 "use client";
 
+import { DisabledActionButton } from "@/components/disabled-action-button";
 import { ComprehensiveCSVImportDialog } from "@/components/import-export/comprehensive-csv-import-dialog";
 import type { ExportFieldDef } from "@/components/import-export/data-export-dialog";
 import { BulkPostersUploadDialog } from "@/components/movies/bulk-posters-upload-dialog";
@@ -629,7 +630,20 @@ export default function MoviesPage() {
 
       {/* Count + actions + view toggle — all in one row */}
       <div className="flex flex-wrap items-center gap-2">
-        <RoleGate action="import" resource="movie">
+        <RoleGate
+          action="import"
+          resource="movie"
+          fallback={
+            <>
+              <DisabledActionButton variant="outline" className="gap-2 h-9 px-4" reason="You don't have permission to import movies.">
+                <Upload className="h-4 w-4" /><span>Upload CSV</span>
+              </DisabledActionButton>
+              <DisabledActionButton variant="outline" className="gap-2 h-9 px-4" reason="You don't have permission to bulk-upload posters.">
+                <ImageIcon className="h-4 w-4" /><span>Bulk Posters</span>
+              </DisabledActionButton>
+            </>
+          }
+        >
           <Button variant="outline" size="sm" className="gap-2 h-9 px-4 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover)" onClick={() => setShowImportDialog(true)}>
             <Upload className="h-4 w-4" /><span>Upload CSV</span>
           </Button>
@@ -653,7 +667,15 @@ export default function MoviesPage() {
             <Download className="h-4 w-4" /><span>Export</span>
           </Button>
         </RoleGate>
-        <RoleGate action="create" resource="movie">
+        <RoleGate
+          action="create"
+          resource="movie"
+          fallback={
+            <DisabledActionButton className="gap-2 h-9 px-4" reason="You don't have permission to add movies.">
+              <Plus className="h-4 w-4" /><span>New Movie</span>
+            </DisabledActionButton>
+          }
+        >
           <Button asChild size="sm" className="gap-2 h-9 px-4">
             <Link href="/movies/new"><Plus className="h-4 w-4" /><span>New Movie</span></Link>
           </Button>
@@ -933,7 +955,15 @@ export default function MoviesPage() {
 
                           <TableCell className="text-right pr-6 py-3">
                             <div className="flex items-center justify-end gap-1">
-                              <RoleGate action="edit" resource="movie">
+                              <RoleGate
+                                action="edit"
+                                resource="movie"
+                                fallback={
+                                  <DisabledActionButton size="sm" variant="ghost" className="h-7 w-7 p-0" reason="You don't have permission to edit movies.">
+                                    <Edit className="h-3.5 w-3.5" />
+                                  </DisabledActionButton>
+                                }
+                              >
                                 <Button variant="ghost" size="sm" className="h-7 w-7 p-0 hover:text-amber-400 hover:bg-amber-500/10" style={{ color: "var(--text-faint)" }} asChild>
                                   <Link href={`/movies/${movieId}/edit`}><Edit className="h-3.5 w-3.5" /></Link>
                                 </Button>

@@ -1,5 +1,6 @@
 "use client";
 
+import { DisabledActionButton } from "@/components/disabled-action-button";
 import { DataExportDialog, type ExportFieldDef } from "@/components/import-export/data-export-dialog";
 import { PersonCard } from "@/components/people/person-card";
 import { Button } from "@/components/ui/button";
@@ -236,7 +237,7 @@ export default function PeoplePage() {
             >
               <Download className="h-4 w-4" /> Export
             </Button>
-            {canEdit && (
+            {canEdit ? (
               <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
                 <DialogTrigger asChild>
                   <Button size="sm" className="h-9 gap-2 bg-red-600 hover:bg-red-500 text-white border-0 shadow-lg shadow-red-900/30">
@@ -289,6 +290,11 @@ export default function PeoplePage() {
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
+            ) : (
+              <DisabledActionButton className="h-9 gap-2 bg-red-600 border-0 shadow-lg shadow-red-900/30" reason="You don't have permission to add people.">
+                <Plus className="h-4 w-4" />
+                Add Person
+              </DisabledActionButton>
             )}
           </div>
       </div>

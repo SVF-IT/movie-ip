@@ -102,7 +102,8 @@ export function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { isAdmin, profile, signOut } = useAuth();
-  const isLegal = profile?.role === "legal" || isAdmin;
+  const isViewer = profile?.role === "viewer";
+  const isLegal = profile?.role === "legal" || isAdmin || isViewer;
   const isEditor = profile?.role === "editor" && !isAdmin;
 
   const sidebarCounts = useSidebarCounts();

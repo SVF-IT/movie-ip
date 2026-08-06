@@ -40,9 +40,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchInFlightRef = useRef<string | null>(null);
   const profileLoadedIdRef = useRef<string | null>(null);
 
-  const fetchProfile = useCallback(async (userId: string) => {
-    // Skip if already fetching or if profile already exists for this user
-    if (fetchInFlightRef.current === userId || profileLoadedIdRef.current === userId) return true;
+  const fetchProfile = useCallback(async (userId: string, force = false) => {
+    // Skip if already fetching or if profile already exists for this user,
+    // unless a fresh fetch was explicitly requested (e.g. after a profile edit).
+    if (fetchInFlightRef.current === userId || (!force && profileLoadedIdRef.current === userId)) return true;
     fetchInFlightRef.current = userId;
 
     try {
@@ -76,7 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshProfile = useCallback(async () => {
     if (user) {
-      await fetchProfile(user.id);
+      await fetchProfile(user.id, true);
     }
   }, [user, fetchProfile]);
 

@@ -21,6 +21,7 @@ import {
   User,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const categoryOrder = ["alerts", "activity", "digest", "account", "special_events"];
@@ -126,6 +127,13 @@ const notificationLabels: Record<string, { title: string; description: string }>
 
 export default function NotificationPreferencesPage() {
   const { profile, loading: authLoading } = useAuth();
+  const router = useRouter();
+  const isViewer = profile?.role === "viewer";
+
+  useEffect(() => {
+    if (!authLoading && isViewer) router.replace("/");
+  }, [authLoading, isViewer, router]);
+
   const [preferences, setPreferences] = useState<EffectivePreference[]>([]);
   const [globalSettings, setGlobalSettings] = useState<GlobalNotificationSettings[]>([]);
   const [isAdminView, setIsAdminView] = useState(false);
@@ -244,7 +252,7 @@ export default function NotificationPreferencesPage() {
     ? globalSettings.length
     : preferences.filter(p => p.globally_enabled).length;
 
-  if (authLoading || loading) {
+  if (authLoading || loading || isViewer) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Loader2 className="h-6 w-6 animate-spin text-(--svf-accent)" />

@@ -64,7 +64,7 @@ export default function SettingsPage() {
     try {
       await updateUserProfile(profile.id, {
         full_name: fullName,
-        department: department || undefined,
+        department: department || null,
       });
 
       await refreshProfile();
@@ -203,6 +203,8 @@ export default function SettingsPage() {
                   value={department}
                   onChange={(e) => setDepartment(e.target.value)}
                   placeholder="e.g., Legal & Rights"
+                  autoComplete="off"
+                  name="department-field"
                   className="bg-(--bg-deep)/50 border-(--svf-border) text-(--text) focus-visible:ring-red-500/30 focus-visible:border-red-500/50 placeholder:text-(--text-faint) transition-colors"
                 />
               </div>
