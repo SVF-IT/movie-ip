@@ -3,6 +3,7 @@
 import { DisabledActionButton } from "@/components/disabled-action-button";
 import { ComprehensiveCSVImportDialog } from "@/components/import-export/comprehensive-csv-import-dialog";
 import type { ExportFieldDef } from "@/components/import-export/data-export-dialog";
+import { BulkCertificatesUploadDialog } from "@/components/movies/bulk-certificates-upload-dialog";
 import { BulkPostersUploadDialog } from "@/components/movies/bulk-posters-upload-dialog";
 import { SpecialEventsBanner } from "@/components/movies/special-events-banner";
 import { RoleGate } from "@/components/role-gate";
@@ -51,6 +52,7 @@ export default function MoviesPage() {
   const { profile } = useAuth();
   const canSeeAllStatuses = profile?.role === "admin" || profile?.role === "legal";
   const canFilterByApproval = canSeeAllStatuses || profile?.role === "editor";
+  const canBulkUploadCertificates = profile?.role === "admin" || profile?.role === "editor";
 
   const [movies, setMovies] = useState<GroupedMovie[]>([]);
   const [allFilteredMovies, setAllFilteredMovies] = useState<GroupedMovie[]>([]);
@@ -79,6 +81,7 @@ export default function MoviesPage() {
   const [exportWithPlatformRights, setExportWithPlatformRights] = useState(false);
   const [exportingXlsx, setExportingXlsx] = useState(false);
   const [showBulkPostersDialog, setShowBulkPostersDialog] = useState(false);
+  const [showBulkCertificatesDialog, setShowBulkCertificatesDialog] = useState(false);
   const [view, setView] = useState<"list" | "grid">("list");
   const [anniversaryEnabled, setAnniversaryEnabled] = useState(false);
 
@@ -651,6 +654,15 @@ export default function MoviesPage() {
             <ImageIcon className="h-4 w-4" /><span>Bulk Posters</span>
           </Button>
         </RoleGate>
+        {canBulkUploadCertificates ? (
+          <Button variant="outline" size="sm" className="gap-2 h-9 px-4 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover)" onClick={() => setShowBulkCertificatesDialog(true)}>
+            <ShieldCheck className="h-4 w-4" /><span>Bulk Certificates</span>
+          </Button>
+        ) : (
+          <DisabledActionButton variant="outline" className="gap-2 h-9 px-4" reason="Only editors and admins can bulk-upload certificates.">
+            <ShieldCheck className="h-4 w-4" /><span>Bulk Certificates</span>
+          </DisabledActionButton>
+        )}
         {!loading && (
           <p className="text-xs" style={{ color: "var(--text-faint)" }}>
             <strong style={{ color: "var(--text)" }}>{totalCount}</strong> films
@@ -987,6 +999,9 @@ export default function MoviesPage() {
 
 
       <BulkPostersUploadDialog open={showBulkPostersDialog} onOpenChange={setShowBulkPostersDialog} onSuccess={() => fetchMovies()} />
+      {canBulkUploadCertificates && (
+        <BulkCertificatesUploadDialog open={showBulkCertificatesDialog} onOpenChange={setShowBulkCertificatesDialog} onSuccess={() => fetchMovies()} />
+      )}
       <ComprehensiveCSVImportDialog open={showImportDialog} onOpenChange={setShowImportDialog} onSuccess={() => fetchMovies()} />
 
       {/* Export dialog */}
