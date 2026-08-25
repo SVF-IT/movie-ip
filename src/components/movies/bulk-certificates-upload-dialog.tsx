@@ -66,6 +66,9 @@ export function BulkCertificatesUploadDialog({
 
     const tightNormalize = (str: string) => normalize(str).replace(/\s+/g, "");
 
+    // Certificate PDFs are often prefixed with "CC" (e.g. "CC - Title.pdf", "CC_Title.pdf", "CC__Title.pdf")
+    const stripCcPrefix = (str: string) => str.replace(/^\s*cc[\s_-]+/i, "");
+
     const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = Array.from(e.target.files || []);
         if (files.length === 0) return;
@@ -80,7 +83,7 @@ export function BulkCertificatesUploadDialog({
             if (error) throw error;
 
             const newMatches: MatchResult[] = files.map((file) => {
-                const fullFileName = file.name.replace(/\.[^./]+$/, "");
+                const fullFileName = stripCcPrefix(file.name.replace(/\.[^./]+$/, ""));
                 const normalizedFileName = normalize(fullFileName);
                 const tightFileName = tightNormalize(fullFileName);
 
