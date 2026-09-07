@@ -772,7 +772,10 @@ export async function sendAnniversaryNotifications(): Promise<{ sent: number; er
     .select("id, title, release_date, language")
     .not("release_date", "is", null);
 
-  if (error || !movies || movies.length === 0) return { sent, errors };
+  if (error || !movies || movies.length === 0) {
+    console.log("[anniversary] no movies with release_date", { error: error?.message, count: movies?.length ?? 0 });
+    return { sent, errors };
+  }
 
   const upcoming: AnniversaryEmailData["anniversaries"] = [];
 
@@ -807,7 +810,10 @@ export async function sendAnniversaryNotifications(): Promise<{ sent: number; er
     }
   }
 
-  if (upcoming.length === 0) return { sent, errors };
+  if (upcoming.length === 0) {
+    console.log("[anniversary] no anniversaries within 28 days", { moviesChecked: movies.length });
+    return { sent, errors };
+  }
 
   upcoming.sort((a: AnniversaryEmailData["anniversaries"][number], b: AnniversaryEmailData["anniversaries"][number]) => a.daysUntil - b.daysUntil);
 
@@ -821,10 +827,17 @@ export async function sendAnniversaryNotifications(): Promise<{ sent: number; er
     .join("\n") + (upcoming.length > 5 ? `\n…and ${upcoming.length - 5} more` : "");
 
   const { internal: users, external } = await getRecipientsForNotification("anniversary_notification");
+  console.log("[anniversary] resolved recipients", {
+    upcoming: upcoming.length,
+    internal: users.length,
+    external: external.length,
+    hasResendKey: !!process.env.RESEND_API_KEY,
+    emailFrom: process.env.EMAIL_FROM ?? "(default)",
+  });
   for (const user of users) {
     try {
       const template = anniversaryTemplate({ userName: user.full_name || "User", anniversaries: upcoming });
-      await Promise.all([
+      const [emailRes] = await Promise.all([
         sendEmail({
           to: user.email,
           subject: template.subject,
@@ -839,8 +852,12 @@ export async function sendAnniversaryNotifications(): Promise<{ sent: number; er
           severity: todayItems.length > 0 ? "warning" : "info",
         }),
       ]);
+      if (!emailRes.success) {
+        console.error("[anniversary] Resend rejected email for", user.email, emailRes.error);
+      }
       sent++;
-    } catch {
+    } catch (e) {
+      console.error("[anniversary] failed sending to internal user", user.email, e);
       errors++;
     }
   }
@@ -861,7 +878,8 @@ export async function sendAnniversaryNotifications(): Promise<{ sent: number; er
       });
       await sendBatchEmails(emails);
       sent += external.length;
-    } catch {
+    } catch (e) {
+      console.error("[anniversary] failed sending to external recipients", e);
       errors += external.length;
     }
   }

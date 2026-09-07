@@ -3,8 +3,8 @@
     { "path": "/api/notifications/send-alerts", "schedule": "30 2 1,15 * *" },
     { "path": "/api/notifications/agreement-end-reminders", "schedule": "30 2 8,22 * *" },
     { "path": "/api/notifications/recensor-reminders", "schedule": "30 2 1,15 * *" },
-    { "path": "/api/notifications/pending-approvals-reminders", "schedule": "0 3 */2 * *" },
+    { "path": "/api/notifications/pending-approvals-reminders", "schedule": "30 2 */2 * *" },
     { "path": "/api/notifications/anniversary-reminders", "schedule": "30 2 1,11,21 * *" },
-    { "path": "/api/notifications/cleanup", "schedule": "30 3 1,15 * *" }
+    { "path": "/api/notifications/cleanup", "schedule": "30 2 1,15 * *" }
   ]
 }
