@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -29,7 +30,9 @@ async function isAuthorizedRequest(): Promise<boolean> {
 }
 
 async function handleCleanup() {
-  const supabase = await createClient();
+  // Service-role client: this runs from Vercel Cron with no user session, and
+  // the notifications RLS delete policy only lets a user remove their own rows.
+  const supabase = createAdminClient();
   const { data, error } = await supabase.rpc("cleanup_old_notifications", {
     retention_days: RETENTION_DAYS,
   });

@@ -4,7 +4,17 @@
  * Admin configures global settings, users can select which ones to receive (but not disable all)
  */
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+
+/**
+ * Client used by cron-triggered send* functions below. These run with no user
+ * session, so the RLS-scoped anon client returns zero rows for `movies`,
+ * `notification_settings`, `user_profiles`, etc. The service-role client
+ * bypasses RLS. Never use this outside the trusted cron/test routes.
+ */
+type DbClient = SupabaseClient;
 import { sendEmail, sendBatchEmails, type EmailOptions } from "./resend";
 import {
   rightsExpiringTemplate,
@@ -337,9 +347,10 @@ export async function shouldSendNotification(
  */
 export async function getUsersForNotification(
   notificationType: NotificationType,
-  options?: { excludeUserIds?: string[]; roleFilter?: string[] }
+  options?: { excludeUserIds?: string[]; roleFilter?: string[] },
+  client?: DbClient
 ): Promise<{ id: string; email: string; full_name: string }[]> {
-  const supabase = await createServerClient();
+  const supabase = client ?? (await createServerClient());
 
   // First check if globally enabled and get role filters
   const { data: globalSetting } = await supabase
@@ -397,9 +408,10 @@ export async function getUsersForNotification(
  * auth.users row, so they can never receive an in-app notification.
  */
 async function getExternalRecipientsForNotification(
-  notificationType: NotificationType
+  notificationType: NotificationType,
+  client?: DbClient
 ): Promise<{ name: string; email: string }[]> {
-  const supabase = await createServerClient();
+  const supabase = client ?? (await createServerClient());
 
   const { data, error } = await supabase
     .from("notification_external_recipients")
@@ -423,14 +435,15 @@ async function getExternalRecipientsForNotification(
  */
 export async function getRecipientsForNotification(
   notificationType: NotificationType,
-  options?: { excludeUserIds?: string[]; roleFilter?: string[] }
+  options?: { excludeUserIds?: string[]; roleFilter?: string[] },
+  client?: DbClient
 ): Promise<{
   internal: { id: string; email: string; full_name: string }[];
   external: { name: string; email: string }[];
 }> {
   const [internal, external] = await Promise.all([
-    getUsersForNotification(notificationType, options),
-    getExternalRecipientsForNotification(notificationType),
+    getUsersForNotification(notificationType, options, client),
+    getExternalRecipientsForNotification(notificationType, client),
   ]);
   return { internal, external };
 }
@@ -450,8 +463,8 @@ export async function createInternalNotification(params: {
   severity?: "info" | "warning" | "critical";
   resourceType?: string;
   resourceId?: string;
-}): Promise<boolean> {
-  const supabase = await createServerClient();
+}, client?: DbClient): Promise<boolean> {
+  const supabase = client ?? (await createServerClient());
 
   const { error } = await supabase.from("notifications").insert({
     user_id: params.userId,
@@ -474,7 +487,10 @@ export async function createInternalNotification(params: {
 /**
  * Send expiring items notification (Email + UI)
  */
-export async function notifyRightsExpiring(data: RightsExpiringData & { recipientEmail: string; userId: string }) {
+export async function notifyRightsExpiring(
+  data: RightsExpiringData & { recipientEmail: string; userId: string },
+  client?: DbClient
+) {
   const template = rightsExpiringTemplate(data);
 
   // 1. Send Email
@@ -499,7 +515,7 @@ export async function notifyRightsExpiring(data: RightsExpiringData & { recipien
     message,
     type: data.urgencyLevel === "agreement_end_digest" ? "agreement_end_reminder" : "rights_expiring_digest",
     severity: "warning",
-  });
+  }, client);
 
   return emailRes;
 }
@@ -602,7 +618,7 @@ export async function sendExpiringRightsAlerts(
   let sent = 0;
   let errors = 0;
 
-  const supabase = await createServerClient();
+  const supabase = createAdminClient();
   const today = referenceDate || new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -628,7 +644,7 @@ export async function sendExpiringRightsAlerts(
 
   if (items.length === 0) return { sent, errors };
 
-  const { internal: users, external } = await getRecipientsForNotification("rights_expiring_digest");
+  const { internal: users, external } = await getRecipientsForNotification("rights_expiring_digest", undefined, supabase);
 
   for (const user of users) {
     try {
@@ -638,7 +654,7 @@ export async function sendExpiringRightsAlerts(
         userId: user.id,
         urgencyLevel: "digest",
         items,
-      });
+      }, supabase);
       sent++;
     } catch {
       errors++;
@@ -681,7 +697,7 @@ export async function sendAgreementEndReminders(
   let sent = 0;
   let errors = 0;
 
-  const supabase = await createServerClient();
+  const supabase = createAdminClient();
   const today = referenceDate || new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -710,7 +726,7 @@ export async function sendAgreementEndReminders(
 
   if (items.length === 0) return { sent, errors };
 
-  const { internal: users, external } = await getRecipientsForNotification("agreement_end_reminder");
+  const { internal: users, external } = await getRecipientsForNotification("agreement_end_reminder", undefined, supabase);
 
   for (const user of users) {
     try {
@@ -720,7 +736,7 @@ export async function sendAgreementEndReminders(
         userId: user.id,
         urgencyLevel: "agreement_end_digest",
         items,
-      });
+      }, supabase);
       sent++;
     } catch {
       errors++;
@@ -759,7 +775,7 @@ const ANNIVERSARY_MILESTONES = [1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 60, 75
  * lookahead window intentionally overlaps between runs so nothing near a boundary is missed.
  */
 export async function sendAnniversaryNotifications(): Promise<{ sent: number; errors: number }> {
-  const supabase = await createServerClient();
+  const supabase = createAdminClient();
   let sent = 0;
   let errors = 0;
 
@@ -826,7 +842,7 @@ export async function sendAnniversaryNotifications(): Promise<{ sent: number; er
     .map(a => `${a.title} — ${a.milestone}yr anniversary${a.daysUntil === 0 ? " (today!)" : ` in ${a.daysUntil} days`}`)
     .join("\n") + (upcoming.length > 5 ? `\n…and ${upcoming.length - 5} more` : "");
 
-  const { internal: users, external } = await getRecipientsForNotification("anniversary_notification");
+  const { internal: users, external } = await getRecipientsForNotification("anniversary_notification", undefined, supabase);
   console.log("[anniversary] resolved recipients", {
     upcoming: upcoming.length,
     internal: users.length,
@@ -850,7 +866,7 @@ export async function sendAnniversaryNotifications(): Promise<{ sent: number; er
           message: inAppMessage,
           type: "anniversary_notification",
           severity: todayItems.length > 0 ? "warning" : "info",
-        }),
+        }, supabase),
       ]);
       if (!emailRes.success) {
         console.error("[anniversary] Resend rejected email for", user.email, emailRes.error);
@@ -893,7 +909,7 @@ export async function sendAnniversaryNotifications(): Promise<{ sent: number; er
  * Stops listing a movie once admin sets recensor_flag = false.
  */
 export async function sendRecensorReminders(): Promise<{ sent: number; errors: number }> {
-  const supabase = await createServerClient();
+  const supabase = createAdminClient();
   let sent = 0;
   let errors = 0;
 
@@ -906,7 +922,7 @@ export async function sendRecensorReminders(): Promise<{ sent: number; errors: n
 
   if (error || !movies || movies.length === 0) return { sent, errors };
 
-  const { internal: users, external } = await getRecipientsForNotification("recensor_reminder");
+  const { internal: users, external } = await getRecipientsForNotification("recensor_reminder", undefined, supabase);
   if (users.length === 0 && external.length === 0) return { sent, errors };
 
   const templateMovies = movies.map((m) => ({
@@ -941,7 +957,7 @@ export async function sendRecensorReminders(): Promise<{ sent: number; errors: n
           type: "recensor_reminder",
           severity: "warning",
           resourceType: "movie",
-        }),
+        }, supabase),
       ]);
       sent++;
     } catch {
@@ -976,7 +992,7 @@ export async function sendRecensorReminders(): Promise<{ sent: number; errors: n
  * /api/notifications/pending-approvals-reminders).
  */
 export async function sendPendingApprovalsReminders(): Promise<{ sent: number; errors: number }> {
-  const supabase = await createServerClient();
+  const supabase = createAdminClient();
   let sent = 0;
   let errors = 0;
 
@@ -1001,7 +1017,7 @@ export async function sendPendingApprovalsReminders(): Promise<{ sent: number; e
     createdAt: c.created_at,
   }));
 
-  const { internal: users, external } = await getRecipientsForNotification("pending_approvals_reminder");
+  const { internal: users, external } = await getRecipientsForNotification("pending_approvals_reminder", undefined, supabase);
   if (users.length === 0 && external.length === 0) return { sent, errors };
 
   const title = `${changes.length} pending approval${changes.length !== 1 ? "s" : ""} awaiting review`;
@@ -1025,7 +1041,7 @@ export async function sendPendingApprovalsReminders(): Promise<{ sent: number; e
           message,
           type: "pending_approvals_reminder",
           severity: "warning",
-        }),
+        }, supabase),
       ]);
       sent++;
     } catch {
