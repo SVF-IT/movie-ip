@@ -10,7 +10,8 @@ export type Resource =
   | "agreement"
   | "user"
   | "report"
-  | "censor_certificate";
+  | "censor_certificate"
+  | "barc";
 
 /**
  * RBAC matrix:
@@ -33,6 +34,7 @@ const permissionMatrix: Record<
     user: ["create", "edit", "delete"],
     report: ["create", "edit", "delete", "export"],
     censor_certificate: ["create", "edit", "delete", "export"],
+    barc: ["create", "edit", "delete", "import", "export"],
   },
   editor: {
     movie: ["create", "edit", "delete", "import", "export"],
@@ -43,6 +45,7 @@ const permissionMatrix: Record<
     agreement: ["create", "edit", "delete", "import", "export"],
     report: ["create", "edit", "export"],
     censor_certificate: ["create", "edit", "delete", "export"],
+    barc: ["create", "edit", "delete", "import", "export"],
   },
   legal: {
     movie: ["create", "edit", "delete", "import", "export"],
@@ -53,6 +56,7 @@ const permissionMatrix: Record<
     agreement: ["create", "edit", "delete", "import", "export"],
     report: ["create", "edit", "export"],
     censor_certificate: ["create", "edit", "delete", "export"],
+    barc: ["export"],
   },
   viewer: {
     movie: ["export"],
@@ -63,6 +67,7 @@ const permissionMatrix: Record<
     agreement: ["export"],
     report: ["export"],
     censor_certificate: ["export"],
+    barc: ["export"],
   },
 };
 

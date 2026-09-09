@@ -20,7 +20,7 @@ import { usePermission } from "@/hooks/use-permission";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { sanitizeError } from "@/lib/utils/sanitize-error";
-import { escapeOrSearchTerm } from "@/lib/utils/search";
+import { orContains } from "@/lib/utils/search";
 import {
   Bell,
   CheckCircle2,
@@ -83,7 +83,7 @@ export default function RecensorPage() {
         .ilike("certification", "A");
 
       if (debouncedSearch) {
-        query = query.or(`title.ilike.${escapeOrSearchTerm(debouncedSearch)}%,production_no.ilike.${escapeOrSearchTerm(debouncedSearch)}%`);
+        query = query.or(orContains(debouncedSearch, ["title", "production_no"]));
       }
 
       if (statusFilter === "pending") {

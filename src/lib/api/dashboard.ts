@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/client'
 import type { MovieWithDetails, Platform, RightsNatureType } from '@/lib/types/database'
 import { buildHoldbackInfo, flattenHoldbackInfo, hasHoldbackToken, type HoldbackInfo } from '@/lib/utils/holdbacks'
-import { escapeOrSearchTerm } from '@/lib/utils/search'
+import { orContains } from '@/lib/utils/search'
 
 const supabase = createClient()
 
@@ -468,7 +468,7 @@ export async function getOpenTitlesForMode(
     let query = supabase.from('movies_with_details').select('*').eq('approval_status', 'approved')
 
     if (options?.search) {
-      query = query.or(`title.ilike.${escapeOrSearchTerm(options.search)}%,production_no.ilike.${escapeOrSearchTerm(options.search)}%`)
+      query = query.or(orContains(options.search, ["title", "production_no"]))
     }
 
     if (options?.language && options.language.length > 0) {
@@ -704,7 +704,7 @@ export async function getOpenOtherRightsTitles(options?: {
     let query = supabase.from('movies_with_details').select('*').eq('approval_status', 'approved')
 
     if (options?.search) {
-      query = query.or(`title.ilike.${escapeOrSearchTerm(options.search)}%,production_no.ilike.${escapeOrSearchTerm(options.search)}%`)
+      query = query.or(orContains(options.search, ["title", "production_no"]))
     }
     if (options?.language && options.language.length > 0) {
       query = query.in('language', options.language)
@@ -821,7 +821,7 @@ export async function getExpiringOtherRightsTitles(options?: {
     const toDate = options?.toDate || null
 
     let moviesQuery = supabase.from('movies_with_details').select('*').eq('approval_status', 'approved').eq('source', 'acquired')
-    if (options?.search) moviesQuery = moviesQuery.or(`title.ilike.${escapeOrSearchTerm(options.search)}%,production_no.ilike.${escapeOrSearchTerm(options.search)}%`)
+    if (options?.search) moviesQuery = moviesQuery.or(orContains(options.search, ["title", "production_no"]))
     if (options?.language && options.language.length > 0) moviesQuery = moviesQuery.in('language', options.language)
     if (options?.certification && options.certification.length > 0) {
       const certs = [...options.certification]
@@ -1033,7 +1033,7 @@ export async function getActiveOtherRightsTitles(options?: {
     const sortBy = options?.sortBy || 'title_asc'
 
     let query = supabase.from('movies_with_details').select('*').eq('approval_status', 'approved')
-    if (options?.search) query = query.or(`title.ilike.${escapeOrSearchTerm(options.search)}%,production_no.ilike.${escapeOrSearchTerm(options.search)}%`)
+    if (options?.search) query = query.or(orContains(options.search, ["title", "production_no"]))
     if (options?.language && options.language.length > 0) query = query.in('language', options.language)
     if (options?.certification && options.certification.length > 0) {
       const certs = [...options.certification]
@@ -1123,7 +1123,7 @@ export async function getClipRightsMovies(options?: {
     let query = supabase.from('movies_with_details').select('*').eq('approval_status', 'approved')
 
     if (options?.search) {
-      query = query.or(`title.ilike.${escapeOrSearchTerm(options.search)}%,production_no.ilike.${escapeOrSearchTerm(options.search)}%`)
+      query = query.or(orContains(options.search, ["title", "production_no"]))
     }
     if (options?.language && options.language.length > 0) {
       query = query.in('language', options.language)
@@ -1220,7 +1220,7 @@ export async function getExpiringSatelliteTitles(options?: {
     // Fetch all valid movies with language filter
     let moviesQuery = supabase.from('movies_with_details').select('*').eq('approval_status', 'approved')
 
-    if (options?.search) moviesQuery = moviesQuery.or(`title.ilike.${escapeOrSearchTerm(options.search)}%,production_no.ilike.${escapeOrSearchTerm(options.search)}%`)
+    if (options?.search) moviesQuery = moviesQuery.or(orContains(options.search, ["title", "production_no"]))
     if (options?.language && options.language.length > 0) moviesQuery = moviesQuery.in('language', options.language)
     if (options?.certification && options.certification.length > 0) {
       const certs = [...options.certification]
@@ -1371,7 +1371,7 @@ export async function getExpiringInternetTitles(options?: {
 
     // Fetch valid movies
     let moviesQuery = supabase.from('movies_with_details').select('*').eq('approval_status', 'approved')
-    if (options?.search) moviesQuery = moviesQuery.or(`title.ilike.${escapeOrSearchTerm(options.search)}%,production_no.ilike.${escapeOrSearchTerm(options.search)}%`)
+    if (options?.search) moviesQuery = moviesQuery.or(orContains(options.search, ["title", "production_no"]))
     if (options?.language && options.language.length > 0) moviesQuery = moviesQuery.in('language', options.language)
     if (options?.certification && options.certification.length > 0) {
       const certs = [...options.certification]
@@ -1477,7 +1477,7 @@ export async function getActiveInternetTitles(options?: {
     const sortBy = options?.sortBy || 'title_asc'
 
     let moviesQuery = supabase.from('movies_with_details').select('*').eq('approval_status', 'approved')
-    if (options?.search) moviesQuery = moviesQuery.or(`title.ilike.${escapeOrSearchTerm(options.search)}%,production_no.ilike.${escapeOrSearchTerm(options.search)}%`)
+    if (options?.search) moviesQuery = moviesQuery.or(orContains(options.search, ["title", "production_no"]))
     if (options?.language && options.language.length > 0) moviesQuery = moviesQuery.in('language', options.language)
     if (options?.certification && options.certification.length > 0) {
       const certs = [...options.certification]
@@ -1665,7 +1665,7 @@ export async function getMoviesForDashboard(options?: {
 
     // Apply search filter
     if (options?.search) {
-      query = query.or(`title.ilike.${escapeOrSearchTerm(options.search)}%,production_no.ilike.${escapeOrSearchTerm(options.search)}%`)
+      query = query.or(orContains(options.search, ["title", "production_no"]))
     }
 
     // Apply language filter

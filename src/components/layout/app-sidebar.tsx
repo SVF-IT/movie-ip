@@ -15,6 +15,7 @@ import {
 import { useAuth } from "@/contexts/auth-context";
 import { useSidebarCounts } from "@/hooks/use-sidebar-counts";
 import {
+  BarChart3,
   Bell,
   Building2,
   Clock,
@@ -53,6 +54,7 @@ const NAV_BASE = [
       { title: "Rights Management", icon: Scale, href: "/rights" },
       { title: "Expiring Rights", icon: Clock, href: "/expiring", badgeKey: "expiringRights" as const },
       { title: "Analytics", icon: TrendingUp, href: "/analytics" },
+      { title: "BARC", icon: BarChart3, href: "/barc" },
       { title: "Dubbed", icon: Languages, href: "/dubbed" },
     ],
   },
@@ -138,15 +140,16 @@ export function AppSidebar() {
       className="backdrop-blur-xl"
     >
       {/* ── Logo header ── */}
+      {/* h-[66px] matches the main Header, so both bottom borders line up. */}
       <SidebarHeader
-        style={{ borderBottom: "1px solid var(--svf-border)", padding: "18px 18px 14px" }}
-        className="bg-transparent group-data-[collapsible=icon]:px-2 group-data-[collapsible=icon]:py-3"
+        style={{ borderBottom: "1px solid var(--svf-border)" }}
+        className="h-[66px] shrink-0 justify-center bg-transparent px-[18px] py-0 group-data-[collapsible=icon]:px-2"
       >
         <Link href="/" className="flex items-center gap-2.5 hover:opacity-90 transition-opacity">
           <div style={{ filter: "drop-shadow(0 0 14px color-mix(in oklch, var(--svf-accent) 35%, transparent))" }}>
-            <Image src="/svf-logo.png" alt="SVF Entertainment" width={80} height={80}
+            <Image src="/svf-logo.png" alt="SVF Entertainment" width={44} height={44}
               className="object-contain group-data-[collapsible=icon]:hidden" />
-            <Image src="/svf-logo.png" alt="SVF" width={32} height={32}
+            <Image src="/svf-logo.png" alt="SVF" width={28} height={28}
               className="object-contain hidden group-data-[collapsible=icon]:block" />
           </div>
           <div className="leading-tight group-data-[collapsible=icon]:hidden">
