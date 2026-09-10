@@ -34,7 +34,6 @@ import {
   SendHorizonal,
   ShieldAlert,
   ShieldCheck,
-  TrendingUp,
   Users,
 } from "lucide-react";
 import Image from "next/image";
@@ -53,7 +52,6 @@ const NAV_BASE = [
       { title: "Censor Tracker", icon: ShieldAlert, href: "/recensor" },
       { title: "Rights Management", icon: Scale, href: "/rights" },
       { title: "Expiring Rights", icon: Clock, href: "/expiring", badgeKey: "expiringRights" as const },
-      { title: "Analytics", icon: TrendingUp, href: "/analytics" },
       { title: "BARC", icon: BarChart3, href: "/barc" },
       { title: "Dubbed", icon: Languages, href: "/dubbed" },
     ],

@@ -33,7 +33,7 @@ import { useMultiSelectFilterState } from "@/hooks/use-multi-select-filter-state
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { getDistinctCertifications, getPlatforms } from "@/lib/api/dashboard";
 import { getBulkMoviePlatformRights, getGroupedMovies, getLanguages } from "@/lib/api/movies";
-import type { ApprovalStatus, GroupedMovie, MovieLanguageVersion, Platform, PlatformRight } from "@/lib/types/database";
+import type { GroupedMovie, MovieLanguageVersion, Platform, PlatformRight } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
 import {
   Activity,
@@ -50,8 +50,6 @@ import * as XLSX from "xlsx";
 
 export default function MoviesPage() {
   const { profile } = useAuth();
-  const canSeeAllStatuses = profile?.role === "admin" || profile?.role === "legal";
-  const canFilterByApproval = canSeeAllStatuses || profile?.role === "editor";
   const canBulkUploadCertificates = profile?.role === "admin" || profile?.role === "editor";
 
   const [movies, setMovies] = useState<GroupedMovie[]>([]);
@@ -59,9 +57,6 @@ export default function MoviesPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
-  const [approvalFilter, setApprovalFilter] = useState<ApprovalStatus | "all">(
-    canSeeAllStatuses ? "approved" : "all"
-  );
   const [versionFilter, setVersionFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const toast = useAppToast();
@@ -130,7 +125,7 @@ export default function MoviesPage() {
         language: (versionFilter === "multi") ? undefined : (languageFilter.length < languages.length ? languageFilter : undefined),
         certification: certificationFilter.length < certificationOptions.length ? certificationFilter : undefined,
         sortBy,
-        approvalStatus: canFilterByApproval ? approvalFilter : "approved",
+        approvalStatus: "approved" as const,
       };
 
       let allGroupedData: GroupedMovie[];
@@ -187,7 +182,7 @@ export default function MoviesPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, sourceFilter, versionFilter, languageFilter, languages.length, certificationFilter, certificationOptions.length, wtpFilter, sortBy, agreementExpiryYear, approvalFilter, canFilterByApproval]);
+  }, [searchQuery, sourceFilter, versionFilter, languageFilter, languages.length, certificationFilter, certificationOptions.length, wtpFilter, sortBy, agreementExpiryYear]);
 
   useEffect(() => { fetchMovies(); }, [fetchMovies]);
 
@@ -575,27 +570,6 @@ export default function MoviesPage() {
               </Select>
             </div>
 
-            {canFilterByApproval && (
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>
-                  {canSeeAllStatuses ? "Approval" : "Show"}
-                </label>
-                <Select value={approvalFilter} onValueChange={(v) => { setApprovalFilter(v as ApprovalStatus | "all"); }}>
-                  <SelectTrigger className="h-9 w-full">
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} />
-                      <SelectValue placeholder="All" />
-                    </div>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Movies</SelectItem>
-                    <SelectItem value="approved">Approved only</SelectItem>
-                    <SelectItem value="pending">Pending Review</SelectItem>
-                    <SelectItem value="rejected">Rejected</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
             {hasFilters && (
               <div className="flex items-end">
                 <Button variant="outline" size="sm" className="h-9 gap-1.5 w-full bg-red-500/5 border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50" onClick={() => {
@@ -604,7 +578,6 @@ export default function MoviesPage() {
                   setLanguageFilter(bengali ? [bengali] : []);
                   setCertificationFilter(certificationOptions); setWtpFilter(WTP_OPTIONS);
                   setAgreementExpiryYear("all");
-                  setApprovalFilter(canSeeAllStatuses ? "approved" : "all");
                 }}>
                   <X className="h-3.5 w-3.5" />Clear Filters
                 </Button>
@@ -688,7 +661,7 @@ export default function MoviesPage() {
             </DisabledActionButton>
           }
         >
-          <Button asChild size="sm" className="gap-2 h-9 px-4">
+          <Button asChild size="sm" className="h-9 gap-2 px-4 bg-red-600 hover:bg-red-500 text-white border-0 shadow-lg shadow-red-900/30">
             <Link href="/movies/new"><Plus className="h-4 w-4" /><span>New Movie</span></Link>
           </Button>
         </RoleGate>
@@ -889,8 +862,6 @@ export default function MoviesPage() {
                                 {movie.source === "acquired" ? "Acquired" : (movie.primary_version as any)?.jointly_owned ? "Jointly Owned" : "Home"}
                               </Badge>
                               {isExpired && <Badge variant="destructive" className="text-[10px] w-fit font-semibold px-2 py-0.5">Expired</Badge>}
-                              {canFilterByApproval && (movie as any).approval_status === "pending" && <Badge variant="warning" className="text-[10px] w-fit font-semibold px-2 py-0.5">Pending</Badge>}
-                              {canFilterByApproval && (movie as any).approval_status === "rejected" && <Badge variant="destructive" className="text-[10px] w-fit font-semibold px-2 py-0.5">Rejected</Badge>}
                             </div>
                           </TableCell>
 

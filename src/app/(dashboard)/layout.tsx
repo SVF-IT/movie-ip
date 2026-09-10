@@ -21,7 +21,6 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/recensor": { title: "Censor Tracker", subtitle: "Manage re-censoring status for A-certified titles" },
   "/rights": { title: "Platform Rights Management", subtitle: "View and manage all platform rights" },
   "/expiring": { title: "Expiring Rights", subtitle: "Rights approaching expiry — act before they lapse" },
-  "/analytics": { title: "Analytics", subtitle: "Portfolio performance and rights coverage insights" },
   "/barc": { title: "BARC", subtitle: "Telecast ratings imported from BARC sheets, grouped by movie" },
   "/dubbed": { title: "Dubbed Titles", subtitle: "Manage dubbed language versions" },
   "/legal-approvals": { title: "Movie Approvals", subtitle: "Review and approve pending changes to rights records" },
