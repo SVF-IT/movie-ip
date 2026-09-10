@@ -8,10 +8,11 @@ import { Calendar as CalendarPicker } from '@/components/ui/calendar'
 import { Card } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { MultiSelectFilter } from '@/components/ui/multi-select-filter'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { useMultiSelectFilterState } from '@/hooks/use-multi-select-filter-state'
 import {
   getActiveInternetTitles,
   getExpiringInternetTitles,
@@ -21,6 +22,7 @@ import {
 } from '@/lib/api/dashboard'
 import type { MovieWithDetails } from '@/lib/types/database'
 import { cn } from '@/lib/utils'
+import { EXPLOITATION_TYPE_LABELS, INTERNET_EXPLOITATION_TYPES, type ExploitationType } from '@/lib/utils/holdbacks'
 import {
   Calendar,
   CalendarIcon,
@@ -37,7 +39,6 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
-import { useMultiSelectFilterState } from '@/hooks/use-multi-select-filter-state'
 
 function isoToDisplay(iso: string): string {
   if (!iso) return ''
@@ -105,6 +106,12 @@ interface InternetDashboardTableProps {
   onOpenToChange: (v: string) => void
   yearOptions: number[]
   fullPage?: boolean
+  /**
+   * Reports the count AFTER every in-table filter (licensor, holdback, open-to type,
+   * agreement-end, …) so the stat card can show the same number the table lists.
+   * The table fetches the full result set (limit 10000), so this is the true total.
+   */
+  onFilteredCountChange?: (counts: { total: number; home: number; acquired: number }) => void
 }
 
 const cardLabels: Record<ActiveCard, string> = {
@@ -178,6 +185,7 @@ export function InternetDashboardTable({
   onOpenToChange,
   yearOptions,
   fullPage = false,
+  onFilteredCountChange,
 }: InternetDashboardTableProps) {
   const CERT_OPTIONS = ['U', 'UA', 'UA 7+', 'UA 13+', 'UA 16+', 'A', 'S']
 
@@ -195,7 +203,12 @@ export function InternetDashboardTable({
     { value: 'library', label: 'Library' },
   ]
   const [wtpFilter, setWtpFilter] = useMultiSelectFilterState(WTP_OPTIONS.map(o => o.value))
-  const [showHoldback, setShowHoldback] = useState(false)
+  // Holdback narrowing: 'all' (default) shows every title; 'with'/'without' narrow by
+  // holdback presence. Any non-'all' choice also reveals the Holdback column.
+  const [holdbackFilter, setHoldbackFilter] = useState<'all' | 'with' | 'without'>('all')
+  // Defaults to SVOD — the type most often asked about. Selecting several asks for titles
+  // open on ALL of them; clearing the selection falls back to "open on at least one type".
+  const [openToTypes, setOpenToTypes] = useState<ExploitationType[]>(['svod'])
   const [bangladeshiOnly, setBangladeshiOnly] = useState(false)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [showExportDialog, setShowExportDialog] = useState(false)
@@ -221,16 +234,29 @@ export function InternetDashboardTable({
   const [licensorFilter, setLicensorFilter] = useMultiSelectFilterState(licensorOptions)
 
   // Reset selection on filter changes
-  useEffect(() => { setSelectedIds(new Set()) }, [activeCard, language, expiryFrom, expiryTo, openFrom, openTo, sourceFilter, licensorFilter, certFilter, wtpFilter, bangladeshiOnly, agreementEndBy])
+  useEffect(() => { setSelectedIds(new Set()) }, [activeCard, language, expiryFrom, expiryTo, openFrom, openTo, sourceFilter, licensorFilter, certFilter, wtpFilter, bangladeshiOnly, agreementEndBy, openToTypes, holdbackFilter])
 
   const filteredMovies = movies.filter((m: any) =>
-    licensorFilter.length >= licensorOptions.length || licensorFilter.includes(getEffectiveLicensor(m))
+    // Titles with no licensor aren't represented in licensorOptions, so they must not be
+    // filtered out by a partial selection — they'd disappear with no way to get them back.
+    licensorFilter.length >= licensorOptions.length || !getEffectiveLicensor(m) || licensorFilter.includes(getEffectiveLicensor(m))
   ).filter((m: any) => {
     if (!agreementEndBy) return true
     // Acquired-only: home productions have no agreement_end_date, so this filter excludes them.
     if (m.source !== 'acquired' || !m.agreement_end_date) return false
     return m.agreement_end_date <= agreementEndBy
   })
+
+  const total = filteredMovies.length
+  const home = filteredMovies.filter((m: any) => m.source === 'home_production').length
+  const acquired = total - home
+
+  // Keep the stat card in sync with what the table actually shows.
+  useEffect(() => {
+    onFilteredCountChange?.({ total, home, acquired })
+    // Depend on the numbers, not the array — a fresh array identity each render would
+    // otherwise re-fire this effect on every pass.
+  }, [total, home, acquired, onFilteredCountChange])
 
   // Debounce search
   useEffect(() => {
@@ -275,6 +301,8 @@ export function InternetDashboardTable({
           bangladeshiOnly: bangladeshiOnly || undefined,
           openFrom: openFrom || undefined,
           openTo: openTo || undefined,
+          openToTypes: openToTypes.length > 0 ? openToTypes : undefined,
+          holdbackFilter: holdbackFilter === 'all' ? undefined : holdbackFilter,
           limit,
           offset,
         })
@@ -313,7 +341,7 @@ export function InternetDashboardTable({
     } finally {
       if (!forExport) setIsLoading(false)
     }
-  }, [activeCard, debouncedSearch, language, totalLanguageCount, sourceFilter, certFilter, expiryFrom, expiryTo, openFrom, openTo, sortBy, wtpFilter, bangladeshiOnly])
+  }, [activeCard, debouncedSearch, language, totalLanguageCount, sourceFilter, certFilter, expiryFrom, expiryTo, openFrom, openTo, sortBy, wtpFilter, bangladeshiOnly, openToTypes, holdbackFilter])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -321,8 +349,8 @@ export function InternetDashboardTable({
   const flatExpiryRows = activeCard === 'expiring'
   const flatRightRows: Array<{ movie: any; right: InternetRight }> = flatExpiryRows
     ? filteredMovies.flatMap((movie: any) =>
-        ((movie as MovieWithInternetRights).internet_rights_list || []).map((right) => ({ movie, right }))
-      )
+      ((movie as MovieWithInternetRights).internet_rights_list || []).map((right) => ({ movie, right }))
+    )
     : []
 
   const toggleSelectAll = () => {
@@ -338,13 +366,13 @@ export function InternetDashboardTable({
       const rawData = await fetchData(true)
       const data = activeCard !== 'expiring'
         ? (rawData as any[]).filter((m: any) => {
-            if (licensorFilter.length < licensorOptions.length && !licensorFilter.includes(getEffectiveLicensor(m))) return false
-            if (agreementEndBy) {
-              if (m.source !== 'acquired' || !m.agreement_end_date) return false
-              if (m.agreement_end_date > agreementEndBy) return false
-            }
-            return true
-          })
+          if (licensorFilter.length < licensorOptions.length && getEffectiveLicensor(m) && !licensorFilter.includes(getEffectiveLicensor(m))) return false
+          if (agreementEndBy) {
+            if (m.source !== 'acquired' || !m.agreement_end_date) return false
+            if (m.agreement_end_date > agreementEndBy) return false
+          }
+          return true
+        })
         : rawData
       let preparedData: Record<string, unknown>[]
       if (activeCard === 'expiring') {
@@ -352,8 +380,8 @@ export function InternetDashboardTable({
         let idx = 1
         const sourceData = selectedIds.size > 0
           ? (data as MovieWithInternetRights[]).filter(m =>
-              (m.internet_rights_list || []).some(r => selectedIds.has(r.id))
-            )
+            (m.internet_rights_list || []).some(r => selectedIds.has(r.id))
+          )
           : (data as MovieWithInternetRights[])
         for (const movie of sourceData || []) {
           const rights = movie.internet_rights_list || []
@@ -446,9 +474,11 @@ export function InternetDashboardTable({
   const hasSubRows = activeCard === 'active'
   const showWtpCol = activeCard === 'open_titles'
   const showLicensorCol = activeCard === 'open_titles' && (sourceFilter === 'acquired' || (licensorFilter.length > 0 && licensorFilter.length < licensorOptions.length))
-  const showHoldbackCol = activeCard === 'open_titles' && showHoldback
+  // Holdbacks are always shown on Open Titles — the column is informational and the
+  // dropdown only narrows which rows appear, it no longer gates the column's visibility.
+  const showHoldbackCol = activeCard === 'open_titles'
   // +1 for checkbox column in each branch
-  const colCount = flatExpiryRows ? 10 : hasSubRows ? 8 : showWtpCol ? (showLicensorCol ? 11 : 10) + (showHoldbackCol ? 1 : 0) : 7
+  const colCount = (flatExpiryRows ? 10 : hasSubRows ? 8 : showWtpCol ? (showLicensorCol ? 11 : 10) + (showHoldbackCol ? 1 : 0) : 7) + (activeCard === 'open_titles' ? 1 : 0)
 
   const exportFields = activeCard === 'open_titles' ? EXPORT_FIELDS_OPEN
     : activeCard === 'expiring' ? EXPORT_FIELDS_EXPIRING
@@ -587,10 +617,27 @@ export function InternetDashboardTable({
               )}
             </div>
 
-            <label className="flex items-center gap-1.5 h-9 px-2.5 rounded-md border border-(--svf-border) bg-(--bg-raise) hover:border-(--svf-border-strong) transition-colors cursor-pointer">
-              <Checkbox checked={showHoldback} onCheckedChange={(v) => setShowHoldback(v === true)} className="h-3.5 w-3.5" />
-              <span className="text-xs text-(--text)">Show Holdback</span>
-            </label>
+            {activeCard === 'open_titles' && (
+              <MultiSelectFilter
+                label="Open to"
+                options={INTERNET_EXPLOITATION_TYPES.map((t) => ({ value: t, label: EXPLOITATION_TYPE_LABELS[t] }))}
+                value={openToTypes}
+                onChange={(next) => setOpenToTypes(next as ExploitationType[])}
+                accent="emerald"
+                triggerWidth="w-[170px]"
+              />
+            )}
+
+            <Select value={holdbackFilter} onValueChange={(v) => setHoldbackFilter(v as 'all' | 'with' | 'without')}>
+              <SelectTrigger className={cn('h-9 w-[160px] text-xs', holdbackFilter !== 'all' && 'border-amber-500/60 bg-amber-500/5 text-amber-400')}>
+                <SelectValue placeholder="Holdbacks" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Holdbacks</SelectItem>
+                <SelectItem value="with">With holdback</SelectItem>
+                <SelectItem value="without">Without holdback</SelectItem>
+              </SelectContent>
+            </Select>
 
             <label className={cn(
               'flex items-center gap-1.5 h-9 px-2.5 rounded-md border transition-colors cursor-pointer',
@@ -700,6 +747,7 @@ export function InternetDashboardTable({
                 {showLicensorCol && <TableHead className={headCls}>Licensor</TableHead>}
                 {activeCard === 'open_titles' && <TableHead className={headCls}>Sunset Date</TableHead>}
                 {activeCard === 'active' && <TableHead className={headCls}>Rights Count</TableHead>}
+                {activeCard === 'open_titles' && <TableHead className={headCls}>Open For</TableHead>}
                 {showHoldbackCol && <TableHead className={cn('w-10', headCls)}>Holdback</TableHead>}
               </>
             )}
@@ -815,6 +863,15 @@ export function InternetDashboardTable({
                           <span className="font-normal ml-1" style={{ color: 'var(--text-faint)' }}>({movie.release_year || movie.release_date?.split('-')[0]})</span>
                         )}
                       </Link>
+                      {activeCard === 'open_titles' && (movie as any).hoichoi_occupied && (
+                        <Badge
+                          variant="outline"
+                          title="Currently on Hoichoi (in-house) — counted as open, but the slot is occupied."
+                          className="mt-1 bg-sky-500/10 text-sky-400 border-sky-500/30 text-[10px] font-medium px-1.5 py-0"
+                        >
+                          On Hoichoi
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell className={cellCls} onClick={(e) => e.stopPropagation()}>{getSourceBadge(movie.source)}</TableCell>
                     <TableCell className={cn('text-muted-foreground', cellCls)}>{movie.certification || '—'}</TableCell>
@@ -850,6 +907,22 @@ export function InternetDashboardTable({
                         <Badge variant="outline" className="bg-(--bg-raise)/60 text-(--text-faint) border-(--svf-border) text-xs">
                           {internetRights.length} right{internetRights.length !== 1 ? 's' : ''}
                         </Badge>
+                      </TableCell>
+                    )}
+                    {activeCard === 'open_titles' && (
+                      <TableCell className={cellCls}>
+                        <div className="flex flex-wrap gap-1">
+                          {((movie as any).open_types || []).length === 0 ? (
+                            <span style={{ color: 'var(--text-faint)' }}>—</span>
+                          ) : (
+                            ((movie as any).open_types as ExploitationType[]).map((t) => (
+                              <Badge key={t} variant="outline"
+                                className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px] font-medium px-1.5 py-0">
+                                {EXPLOITATION_TYPE_LABELS[t]}
+                              </Badge>
+                            ))
+                          )}
+                        </div>
                       </TableCell>
                     )}
                     {showHoldbackCol && (

@@ -59,6 +59,14 @@ export default function RightsDashboardPage() {
   const [loading, setLoading] = useState(true)
   const toast = useAppToast();
   const [statsLoading, setStatsLoading] = useState(false)
+  // Counts reported by each table AFTER its in-table filters (licensor, holdback, open-to
+  // type, agreement-end). null = table hasn't reported yet, so fall back to the server stat.
+  type FilteredCounts = { total: number; home: number; acquired: number }
+  const [satFilteredCount, setSatFilteredCount] = useState<FilteredCounts | null>(null)
+  const [intFilteredCount, setIntFilteredCount] = useState<FilteredCounts | null>(null)
+  // Stable identities: the tables call these from an effect keyed on the callback.
+  const handleSatFilteredCount = useCallback((c: FilteredCounts) => setSatFilteredCount(c), [])
+  const handleIntFilteredCount = useCallback((c: FilteredCounts) => setIntFilteredCount(c), [])
 
   // ── satellite state ──
   const [satStats, setSatStats] = useState<RightsModeStats | null>(null)
@@ -72,6 +80,11 @@ export default function RightsDashboardPage() {
   // ── other rights state ──
   const [otherStats, setOtherStats] = useState<OtherRightsModeStats | null>(null)
   const [otherActiveCard, setOtherActiveCard] = useState<OtherActiveCard>('open_titles')
+
+  // Drop the reported count when the card or language changes, so the card never shows a
+  // stale number from the previous view while the table refetches.
+  useEffect(() => { setSatFilteredCount(null) }, [satActiveCard, language])
+  useEffect(() => { setIntFilteredCount(null) }, [intActiveCard, language])
 
   // ── expiry filters (per-mode) ──
   const [satExpiryYear, setSatExpiryYear] = useState<string>('all')
@@ -177,10 +190,12 @@ export default function RightsDashboardPage() {
     {
       id: 'open_titles' as SatActiveCard,
       title: 'Open Titles',
-      value: satStats?.openTitlesCount ?? 0,
+      // Headline and sub-values must come from the SAME source, or the parts won't sum
+      // to the whole once an in-table filter narrows the list.
+      value: satActiveCard === 'open_titles' && satFilteredCount ? satFilteredCount.total : (satStats?.openTitlesCount ?? 0),
       subValues: [
-        { label: 'Home', value: satStats?.openHomeTitlesCount ?? 0 },
-        { label: 'Acquired', value: satStats?.openAcquiredTitlesCount ?? 0 },
+        { label: 'Home', value: satActiveCard === 'open_titles' && satFilteredCount ? satFilteredCount.home : (satStats?.openHomeTitlesCount ?? 0) },
+        { label: 'Acquired', value: satActiveCard === 'open_titles' && satFilteredCount ? satFilteredCount.acquired : (satStats?.openAcquiredTitlesCount ?? 0) },
       ],
       description: 'Movies with no active rights',
       icon: Film,
@@ -218,12 +233,12 @@ export default function RightsDashboardPage() {
     {
       id: 'open_titles' as IntActiveCard,
       title: 'Open Internet Titles',
-      value: intStats?.openTitlesCount ?? 0,
+      value: intActiveCard === 'open_titles' && intFilteredCount ? intFilteredCount.total : (intStats?.openTitlesCount ?? 0),
       subValues: [
-        { label: 'Home', value: intStats?.openHomeTitlesCount ?? 0 },
-        { label: 'Acquired', value: intStats?.openAcquiredTitlesCount ?? 0 },
+        { label: 'Home', value: intActiveCard === 'open_titles' && intFilteredCount ? intFilteredCount.home : (intStats?.openHomeTitlesCount ?? 0) },
+        { label: 'Acquired', value: intActiveCard === 'open_titles' && intFilteredCount ? intFilteredCount.acquired : (intStats?.openAcquiredTitlesCount ?? 0) },
       ],
-      description: 'Movies with no active internet/SVOD rights',
+      description: 'Open on at least one internet sub-type',
       icon: Film,
       color: 'text-cyan-400',
       bgGradient: 'from-cyan-500/10 to-cyan-500/5',
@@ -369,6 +384,7 @@ export default function RightsDashboardPage() {
         <div className="flex-1 overflow-hidden">
           {isSatellite ? (
             <SatelliteDashboardTable
+              onFilteredCountChange={handleSatFilteredCount}
               activeCard={satActiveCard}
               language={language}
               totalLanguageCount={languages.length}
@@ -387,6 +403,7 @@ export default function RightsDashboardPage() {
             />
           ) : mode === 'internet' ? (
             <InternetDashboardTable
+              onFilteredCountChange={handleIntFilteredCount}
               activeCard={intActiveCard}
               language={language}
               totalLanguageCount={languages.length}
@@ -610,6 +627,7 @@ export default function RightsDashboardPage() {
       <div>
         {isSatellite ? (
           <SatelliteDashboardTable
+            onFilteredCountChange={handleSatFilteredCount}
             activeCard={satActiveCard}
             language={language}
             totalLanguageCount={languages.length}
@@ -627,6 +645,7 @@ export default function RightsDashboardPage() {
           />
         ) : mode === 'internet' ? (
           <InternetDashboardTable
+            onFilteredCountChange={handleIntFilteredCount}
             activeCard={intActiveCard}
             language={language}
             totalLanguageCount={languages.length}

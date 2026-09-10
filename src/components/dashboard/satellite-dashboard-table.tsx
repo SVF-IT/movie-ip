@@ -1,30 +1,30 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Card } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { HoldbackInfoIcon } from '@/components/dashboard/holdback-info-icon'
+import { DataExportDialog, type ExportFieldDef } from '@/components/import-export/data-export-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Checkbox } from '@/components/ui/checkbox'
-import { MultiSelectFilter } from '@/components/ui/multi-select-filter'
 import { Calendar } from '@/components/ui/calendar'
-import { Search, ChevronRight, Download, Loader2, CalendarRange, X, CalendarIcon } from 'lucide-react'
+import { Card } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Input } from '@/components/ui/input'
+import { MultiSelectFilter } from '@/components/ui/multi-select-filter'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { SortableHeader } from '@/components/ui/sortable-header'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { useMultiSelectFilterState } from '@/hooks/use-multi-select-filter-state'
+import { useSortableTable } from '@/hooks/use-sortable-table'
 import {
-  getOpenTitlesForMode,
   getExpiringSatelliteTitles,
   getMoviesForDashboard,
+  getOpenTitlesForMode,
   type MovieWithSatelliteRights,
 } from '@/lib/api/dashboard'
-import { useSortableTable } from '@/hooks/use-sortable-table'
-import { useMultiSelectFilterState } from '@/hooks/use-multi-select-filter-state'
-import { SortableHeader } from '@/components/ui/sortable-header'
-import Link from 'next/link'
 import { cn } from '@/lib/utils'
-import { DataExportDialog, type ExportFieldDef } from '@/components/import-export/data-export-dialog'
-import { HoldbackInfoIcon } from '@/components/dashboard/holdback-info-icon'
+import { CalendarIcon, CalendarRange, ChevronRight, Download, Loader2, Search, X } from 'lucide-react'
+import Link from 'next/link'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 function isoToDisplay(iso: string): string {
   if (!iso) return ''
@@ -92,6 +92,12 @@ interface SatelliteDashboardTableProps {
   onOpenToChange: (v: string) => void
   yearOptions: number[]
   fullPage?: boolean
+  /**
+   * Reports the count AFTER every in-table filter (licensor, holdback, open-to type,
+   * agreement-end, …) so the stat card can show the same number the table lists.
+   * The table fetches the full result set (limit 10000), so this is the true total.
+   */
+  onFilteredCountChange?: (counts: { total: number; home: number; acquired: number }) => void
 }
 
 const EXPORT_FIELDS: ExportFieldDef[] = [
@@ -148,9 +154,10 @@ export function SatelliteDashboardTable({
   onOpenToChange,
   yearOptions,
   fullPage = false,
+  onFilteredCountChange,
 }: SatelliteDashboardTableProps) {
   const CERT_OPTIONS = ['U', 'UA', 'UA 7+', 'UA 13+', 'UA 16+', 'A', 'S']
-  
+
 
   const [movies, setMovies] = useState<MovieWithSatelliteRights[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -166,7 +173,9 @@ export function SatelliteDashboardTable({
   ]
   const [wtpFilter, setWtpFilter] = useMultiSelectFilterState(WTP_OPTIONS.map(o => o.value))
   const [agreementEndBy, setAgreementEndBy] = useState('')
-  const [showHoldback, setShowHoldback] = useState(false)
+  // Holdback narrowing: 'all' (default) shows every title; 'with'/'without' narrow by
+  // holdback presence. Any non-'all' choice also reveals the Holdback column.
+  const [holdbackFilter, setHoldbackFilter] = useState<'all' | 'with' | 'without'>('all')
   const [bangladeshiOnly, setBangladeshiOnly] = useState(false)
   const [showExportDialog, setShowExportDialog] = useState(false)
   const [exportData, setExportData] = useState<Record<string, unknown>[]>([])
@@ -186,7 +195,7 @@ export function SatelliteDashboardTable({
 
   const [licensorFilter, setLicensorFilter] = useMultiSelectFilterState(licensorOptions)
 
-  useEffect(() => { setSelectedIds(new Set()) }, [activeCard, language, expiryFrom, expiryTo, openFrom, openTo, sourceFilter, licensorFilter, certFilter, wtpFilter, bangladeshiOnly, agreementEndBy])
+  useEffect(() => { setSelectedIds(new Set()) }, [activeCard, language, expiryFrom, expiryTo, openFrom, openTo, sourceFilter, licensorFilter, certFilter, wtpFilter, bangladeshiOnly, agreementEndBy, holdbackFilter])
 
   useEffect(() => {
     const timer = setTimeout(() => { setDebouncedSearch(search) }, 300)
@@ -236,6 +245,7 @@ export function SatelliteDashboardTable({
           bangladeshiOnly: bangladeshiOnly || undefined,
           openFrom: openFrom || undefined,
           openTo: openTo || undefined,
+          holdbackFilter: holdbackFilter === 'all' ? undefined : holdbackFilter,
           limit,
           offset,
         })
@@ -275,7 +285,7 @@ export function SatelliteDashboardTable({
     } finally {
       if (!forExport) setIsLoading(false)
     }
-  }, [activeCard, debouncedSearch, language, totalLanguageCount, sourceFilter, certFilter, expiryFrom, expiryTo, openFrom, openTo, sortBy, wtpFilter, bangladeshiOnly])
+  }, [activeCard, debouncedSearch, language, totalLanguageCount, sourceFilter, certFilter, expiryFrom, expiryTo, openFrom, openTo, sortBy, wtpFilter, bangladeshiOnly, holdbackFilter])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -285,13 +295,13 @@ export function SatelliteDashboardTable({
       const rawData = await fetchData(true)
       const data = activeCard !== 'expiring'
         ? (rawData as any[]).filter((m: any) => {
-            if (licensorFilter.length < licensorOptions.length && !licensorFilter.includes(getEffectiveLicensor(m))) return false
-            if (agreementEndBy) {
-              if (m.source !== 'acquired' || !m.agreement_end_date) return false
-              if (m.agreement_end_date > agreementEndBy) return false
-            }
-            return true
-          })
+          if (licensorFilter.length < licensorOptions.length && getEffectiveLicensor(m) && !licensorFilter.includes(getEffectiveLicensor(m))) return false
+          if (agreementEndBy) {
+            if (m.source !== 'acquired' || !m.agreement_end_date) return false
+            if (m.agreement_end_date > agreementEndBy) return false
+          }
+          return true
+        })
         : rawData
       let preparedData: Record<string, unknown>[]
       if (activeCard === 'expiring') {
@@ -299,8 +309,8 @@ export function SatelliteDashboardTable({
         let idx = 1
         const sourceData = selectedIds.size > 0
           ? (data as MovieWithSatelliteRights[]).filter(m =>
-              (m.satellite_rights_list || []).some(r => selectedIds.has(r.id))
-            )
+            (m.satellite_rights_list || []).some(r => selectedIds.has(r.id))
+          )
           : (data as MovieWithSatelliteRights[])
         for (const movie of sourceData || []) {
           const rights = movie.satellite_rights_list || []
@@ -353,13 +363,26 @@ export function SatelliteDashboardTable({
   }, [fetchData, activeCard, selectedIds, licensorFilter, agreementEndBy])
 
   const licensorFilteredMovies = movies.filter((m: any) =>
-    licensorFilter.length >= licensorOptions.length || licensorFilter.includes(getEffectiveLicensor(m))
+    // Titles with no licensor aren't represented in licensorOptions, so they must not be
+    // filtered out by a partial selection — they'd disappear with no way to get them back.
+    licensorFilter.length >= licensorOptions.length || !getEffectiveLicensor(m) || licensorFilter.includes(getEffectiveLicensor(m))
   ).filter((m: any) => {
     if (!agreementEndBy) return true
     // Acquired-only: home productions have no agreement_end_date, so this filter excludes them.
     if (m.source !== 'acquired' || !m.agreement_end_date) return false
     return m.agreement_end_date <= agreementEndBy
   })
+
+  const total = licensorFilteredMovies.length
+  const home = licensorFilteredMovies.filter((m: any) => m.source === 'home_production').length
+  const acquired = total - home
+
+  // Keep the stat card in sync with what the table actually shows.
+  useEffect(() => {
+    onFilteredCountChange?.({ total, home, acquired })
+    // Depend on the numbers, not the array — a fresh array identity each render would
+    // otherwise re-fire this effect on every pass.
+  }, [total, home, acquired, onFilteredCountChange])
 
   const { sortedData, sortConfig, requestSort } = useSortableTable(licensorFilteredMovies)
 
@@ -395,7 +418,9 @@ export function SatelliteDashboardTable({
   const showExpiryFilters = activeCard === 'expiring'
   const showWtpCol = activeCard === 'open_titles'
   const showLicensorCol = activeCard === 'open_titles' && (sourceFilter === 'acquired' || (licensorFilter.length > 0 && licensorFilter.length < licensorOptions.length))
-  const showHoldbackCol = activeCard === 'open_titles' && showHoldback
+  // Holdbacks are always shown on Open Titles — the column is informational and the
+  // dropdown only narrows which rows appear, it no longer gates the column's visibility.
+  const showHoldbackCol = activeCard === 'open_titles'
   // Expiring card: flat per-right rows (no expand/collapse)
   const flatExpiryRows = activeCard === 'expiring'
   const colSpan = flatExpiryRows ? 9 : showWtpCol ? (showLicensorCol ? 11 : 10) + (showHoldbackCol ? 1 : 0) : 7
@@ -535,10 +560,16 @@ export function SatelliteDashboardTable({
               )}
             </div>
 
-            <label className="flex items-center gap-1.5 h-9 px-2.5 rounded-md border border-(--svf-border) bg-(--bg-raise) hover:border-(--svf-border-strong) transition-colors cursor-pointer">
-              <Checkbox checked={showHoldback} onCheckedChange={(v) => setShowHoldback(v === true)} className="h-3.5 w-3.5" />
-              <span className="text-xs text-(--text)">Show Holdback</span>
-            </label>
+            <Select value={holdbackFilter} onValueChange={(v) => setHoldbackFilter(v as 'all' | 'with' | 'without')}>
+              <SelectTrigger className={cn('h-9 w-[160px] text-xs', holdbackFilter !== 'all' && 'border-amber-500/60 bg-amber-500/5 text-amber-400')}>
+                <SelectValue placeholder="Holdbacks" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Holdbacks</SelectItem>
+                <SelectItem value="with">With holdback</SelectItem>
+                <SelectItem value="without">Without holdback</SelectItem>
+              </SelectContent>
+            </Select>
 
             <label className={cn(
               'flex items-center gap-1.5 h-9 px-2.5 rounded-md border transition-colors cursor-pointer',
@@ -582,8 +613,8 @@ export function SatelliteDashboardTable({
   // For expiring card: flatten to one row per right
   const flatRightRows: Array<{ movie: any; right: any }> = flatExpiryRows
     ? sortedData.flatMap((movie: any) =>
-        ((movie as MovieWithSatelliteRights).satellite_rights_list || []).map((right) => ({ movie, right }))
-      )
+      ((movie as MovieWithSatelliteRights).satellite_rights_list || []).map((right) => ({ movie, right }))
+    )
     : []
 
   const getDaysBadge = (endDate?: string) => {
