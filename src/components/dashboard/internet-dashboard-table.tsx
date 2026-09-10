@@ -140,6 +140,8 @@ const EXPORT_FIELDS_OPEN: ExportFieldDef[] = [
   { key: 'licensee', label: 'Licensee' },
   { key: 'agreement_start_date', label: 'Agreement Start Date' },
   { key: 'agreement_end_date', label: 'Agreement End Date' },
+  { key: 'open_for', label: 'Open For' },
+  { key: 'holdbacks', label: 'Holdbacks' },
 ]
 
 const EXPORT_FIELDS_EXPIRING: ExportFieldDef[] = [
@@ -421,6 +423,10 @@ export function InternetDashboardTable({
           licensee: row.source === 'home_production' ? '' : (row.licensee || ''),
           agreement_start_date: row.source === 'home_production' ? '' : (row.agreement_start_date || ''),
           agreement_end_date: row.source === 'home_production' ? '' : (row.agreement_end_date || ''),
+          // Free internet sub-types, e.g. "AVOD, TVOD, FVOD" — same values as the Open For column.
+          open_for: ((row as any).open_types || []).map((t: ExploitationType) => EXPLOITATION_TYPE_LABELS[t]).join(', '),
+          // Flattened holdbacks with their source, e.g. "Platform right (Viacom): AVOD".
+          holdbacks: (row as any).holdback_summary || '',
           sl_no: idx + 1,
         })) as Record<string, unknown>[]
       }
