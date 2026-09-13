@@ -6,7 +6,6 @@ import { InternetDashboardTable } from '@/components/dashboard/internet-dashboar
 import { OtherRightsDashboardTable } from '@/components/dashboard/other-rights-dashboard-table'
 import { SatelliteDashboardTable } from '@/components/dashboard/satellite-dashboard-table'
 import { Button } from '@/components/ui/button'
-import { MultiSelectFilter } from '@/components/ui/multi-select-filter'
 import { useAuth } from '@/contexts/auth-context'
 import { useAppToast } from "@/hooks/use-app-toast"
 import { getPendingMovies } from '@/lib/api/approvals'
@@ -27,8 +26,6 @@ import {
   Film,
   Gavel,
   Globe,
-  Languages,
-  Maximize2,
   Plane,
   Satellite,
   Star
@@ -197,7 +194,7 @@ export default function RightsDashboardPage() {
         { label: 'Home', value: satActiveCard === 'open_titles' && satFilteredCount ? satFilteredCount.home : (satStats?.openHomeTitlesCount ?? 0) },
         { label: 'Acquired', value: satActiveCard === 'open_titles' && satFilteredCount ? satFilteredCount.acquired : (satStats?.openAcquiredTitlesCount ?? 0) },
       ],
-      description: 'Movies with no active rights',
+      description: '',
       icon: Film,
       color: 'text-cyan-400',
       bgGradient: 'from-cyan-500/10 to-cyan-500/5',
@@ -228,6 +225,14 @@ export default function RightsDashboardPage() {
     },
   ] as const
 
+  // Open-title counts shown as pills on the rights-type tabs. Clip Rights has no
+  // open-title concept, so it gets no pill rather than a misleading zero.
+  const modeCounts: Partial<Record<DashboardMode, number>> = {
+    satellite: satStats?.openTitlesCount,
+    internet: intStats?.openTitlesCount,
+    other: otherStats?.openTitlesCount,
+  }
+
   // ─── Internet stat cards config ───────────────────────────────────────────
   const intStatsConfig = [
     {
@@ -238,7 +243,7 @@ export default function RightsDashboardPage() {
         { label: 'Home', value: intActiveCard === 'open_titles' && intFilteredCount ? intFilteredCount.home : (intStats?.openHomeTitlesCount ?? 0) },
         { label: 'Acquired', value: intActiveCard === 'open_titles' && intFilteredCount ? intFilteredCount.acquired : (intStats?.openAcquiredTitlesCount ?? 0) },
       ],
-      description: 'Open on at least one internet sub-type',
+      description: '',
       icon: Film,
       color: 'text-cyan-400',
       bgGradient: 'from-cyan-500/10 to-cyan-500/5',
@@ -260,11 +265,8 @@ export default function RightsDashboardPage() {
       id: 'active' as IntActiveCard,
       title: 'Active Internet Rights',
       value: intActiveCount.total,
-      subValues: [
-        { label: 'Home', value: intActiveCount.home },
-        { label: 'Acquired', value: intActiveCount.acquired },
-      ],
-      description: 'Movies with currently active internet/SVOD rights',
+      subValues: [],
+      description: '',
       icon: Activity,
       color: 'text-emerald-400',
       bgGradient: 'from-emerald-500/10 to-emerald-500/5',
@@ -283,7 +285,7 @@ export default function RightsDashboardPage() {
         { label: 'Home', value: otherStats?.openHomeTitlesCount ?? 0 },
         { label: 'Acquired', value: otherStats?.openAcquiredTitlesCount ?? 0 },
       ],
-      description: 'Movies with no active Airborne/Ship/Other rights',
+      description: '',
       icon: Plane,
       color: 'text-cyan-400',
       bgGradient: 'from-cyan-500/10 to-cyan-500/5',
@@ -294,7 +296,7 @@ export default function RightsDashboardPage() {
       id: 'expiring' as OtherActiveCard,
       title: 'Expiring Other Rights',
       value: otherStats?.expiringRightsCount ?? 0,
-      description: 'Airborne/Ship/Other rights expiring this year',
+      description: 'Other rights expiring this year',
       icon: Clock,
       color: 'text-orange-400',
       bgGradient: 'from-orange-500/10 to-orange-500/5',
@@ -305,7 +307,7 @@ export default function RightsDashboardPage() {
       id: 'active' as OtherActiveCard,
       title: 'Active Other Rights',
       value: otherStats?.activeRightsCount ?? 0,
-      description: 'Movies with currently active Airborne/Ship/Other rights',
+      description: '',
       icon: Activity,
       color: 'text-emerald-400',
       bgGradient: 'from-emerald-500/10 to-emerald-500/5',
@@ -365,18 +367,6 @@ export default function RightsDashboardPage() {
             <span className="text-xs text-(--text-faint)">
               {isSatellite ? 'Satellite Rights' : isOther ? 'Other Rights' : 'Internet Rights'}
             </span>
-            {/* Language selector */}
-            <div className="flex items-center gap-1.5">
-              <Languages className="h-3.5 w-3.5 text-(--text-faint) shrink-0" />
-              <MultiSelectFilter
-                label="Language"
-                options={languages}
-                value={language}
-                onChange={setLanguage}
-                disabled={loading}
-                triggerWidth="w-32"
-              />
-            </div>
           </div>
         </div>
 
@@ -387,6 +377,8 @@ export default function RightsDashboardPage() {
               onFilteredCountChange={handleSatFilteredCount}
               activeCard={satActiveCard}
               language={language}
+              languageOptions={languages}
+              onLanguageChange={setLanguage}
               totalLanguageCount={languages.length}
               expiryYear={satExpiryYear}
               onExpiryYearChange={handleSatYearChange}
@@ -406,6 +398,8 @@ export default function RightsDashboardPage() {
               onFilteredCountChange={handleIntFilteredCount}
               activeCard={intActiveCard}
               language={language}
+              languageOptions={languages}
+              onLanguageChange={setLanguage}
               totalLanguageCount={languages.length}
               expiryYear={intExpiryYear}
               onExpiryYearChange={handleIntYearChange}
@@ -424,6 +418,8 @@ export default function RightsDashboardPage() {
             <OtherRightsDashboardTable
               activeCard={otherActiveCard}
               language={language}
+              languageOptions={languages}
+              onLanguageChange={setLanguage}
               totalLanguageCount={languages.length}
               expiryYear={otherExpiryYear}
               onExpiryYearChange={handleOtherYearChange}
@@ -439,7 +435,7 @@ export default function RightsDashboardPage() {
               fullPage
             />
           ) : (
-            <ClipRightsTable language={language} totalLanguageCount={languages.length} fullPage />
+            <ClipRightsTable language={language} languageOptions={languages} onLanguageChange={setLanguage} totalLanguageCount={languages.length} fullPage />
           )}
         </div>
       </div>
@@ -455,7 +451,7 @@ export default function RightsDashboardPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Pending approvals banner — unchanged */}
       {isLegalOrAdmin && pendingCount > 0 && (
         <div className="flex items-center justify-between gap-4 px-4 py-2.5 rounded-[10px]"
@@ -473,8 +469,11 @@ export default function RightsDashboardPage() {
       {/* ── Toolbar: mode toggle + language + export ── */}
       <div className="flex flex-wrap items-center gap-3">
         {/* Satellite / Internet segmented toggle */}
+        <span style={{ fontSize: 11.5, color: "var(--text-faint)", fontWeight: 600, letterSpacing: ".02em" }}>
+          Rights type
+        </span>
         <div style={{
-          display: "inline-flex", gap: 3, padding: 4, borderRadius: 11,
+          display: "inline-flex", gap: 3, padding: 4, borderRadius: 12,
           background: "var(--bg-deep)", border: "1px solid var(--svf-border)",
         }}>
           {([
@@ -485,18 +484,32 @@ export default function RightsDashboardPage() {
           ] as const).map(({ v, icon: Icon, label, color }) => {
             const on = mode === v
             return (
-              <button key={v} onClick={() => setMode(v)} style={{
-                display: "inline-flex", alignItems: "center", gap: 7,
-                padding: "7px 16px", borderRadius: 8, cursor: "pointer",
-                fontSize: 13.5, fontWeight: 600,
-                border: on ? "1px solid var(--svf-border-strong)" : "1px solid transparent",
-                background: on ? "var(--bg-raise)" : "transparent",
-                color: on ? color : "var(--text-faint)",
-                boxShadow: on ? "0 3px 10px -4px hsl(0deg 0% 0% / 0.5)" : "none",
-                transition: "all .2s ease",
-              }}>
-                <Icon style={{ width: 15, height: 15 }} />
+              <button
+                key={v}
+                onClick={() => setMode(v)}
+                aria-pressed={on}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 8,
+                  padding: "7px 13px", borderRadius: 9, cursor: "pointer",
+                  fontSize: 13, fontWeight: on ? 600 : 500,
+                  border: "0",
+                  background: on ? "var(--bg-raise)" : "transparent",
+                  color: on ? "var(--svf-accent)" : "var(--text-dim)",
+                  boxShadow: on ? "0 2px 8px -2px hsl(0deg 0% 0% / 0.18)" : "none",
+                  transition: "all .15s ease",
+                }}
+              >
+                <Icon style={{ width: 15, height: 15, opacity: on ? 1 : 0.7 }} />
                 {label}
+                {modeCounts[v] !== undefined && (
+                  <span className="num" style={{
+                    fontSize: 11, padding: "0 7px", borderRadius: 20,
+                    background: on ? "var(--svf-accent-soft)" : "var(--chip-bg)",
+                    color: on ? "var(--svf-accent)" : "var(--text-faint)",
+                  }}>
+                    {modeCounts[v]}
+                  </span>
+                )}
               </button>
             )
           })}
@@ -504,24 +517,11 @@ export default function RightsDashboardPage() {
 
         <div style={{ flex: 1 }} />
 
-        {/* Language selector */}
-        <div className="flex items-center gap-2">
-          <Languages className="h-4 w-4 shrink-0" style={{ color: "var(--text-faint)" }} />
-          <MultiSelectFilter
-            label="Language"
-            options={languages}
-            value={language}
-            onChange={setLanguage}
-            disabled={loading}
-            triggerWidth="w-36"
-          />
-        </div>
-
       </div>
 
       {/* ── Stat Cards — none for Clip Rights, which is a plain listing with no rights-lifecycle data ── */}
       {isClip ? null : loading || statsLoading ? (
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-3">
           {[...Array(3)].map((_, i) => (
             <div key={i} className="glass-card animate-pulse" style={{ padding: 20, height: 160 }}>
               <div className="h-4 rounded w-1/2 mb-3" style={{ background: "var(--hover)" }} />
@@ -531,7 +531,7 @@ export default function RightsDashboardPage() {
           ))}
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-3">
           {statsConfig.map((stat, index) => {
             const Icon = stat.icon
             const isActive = activeCard === stat.id
@@ -540,83 +540,88 @@ export default function RightsDashboardPage() {
               <div
                 key={stat.id}
                 onClick={() => setActiveCard(stat.id)}
+                role="button"
+                tabIndex={0}
+                aria-pressed={isActive}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveCard(stat.id) } }}
                 style={{
                   position: "relative",
-                  padding: 0,
                   overflow: "hidden",
-                  borderRadius: 14,
+                  borderRadius: "var(--r-card)",
+                  padding: "12px 15px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 15,
+                  minHeight: 66,
                   cursor: "pointer",
+                  color: "var(--text)",
                   background: "var(--panel)",
-                  backdropFilter: "blur(14px)",
-                  WebkitBackdropFilter: "blur(14px)",
-                  border: isActive ? `1.5px solid ${c.border}` : "1px solid var(--svf-border)",
+                  border: `1px solid ${isActive ? c.border : "var(--svf-border)"}`,
                   boxShadow: isActive
-                    ? `0 0 0 1px ${c.border}, 0 14px 40px -20px ${c.color}`
-                    : "0 8px 24px -16px hsl(0deg 0% 0% / 0.4)",
-                  transform: "none",
+                    ? `0 0 0 1px ${c.border}, 0 14px 34px -22px ${c.color}`
+                    : "var(--shadow-card)",
                   transition: "border .25s, box-shadow .25s, transform .25s cubic-bezier(.16,1,.3,1)",
                 }}
-                onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.transform = "translateY(-2px)" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(-2px)" }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = "none" }}
               >
-                {/* radial accent gradient */}
+                {/* blurred corner glow — warm on the hero, accent-tinted elsewhere */}
                 <div style={{
-                  position: "absolute", inset: 0,
-                  background: `radial-gradient(120% 120% at 100% 0%, ${c.bg}, transparent 55%)`,
-                  opacity: isActive ? 1 : 0.5,
+                  position: "absolute", width: 130, height: 130, borderRadius: "50%",
+                  filter: "blur(40px)", opacity: isActive ? 0.42 : 0.26,
+                  top: -55, right: -30, pointerEvents: "none",
+                  background: c.color,
                   transition: "opacity .3s",
-                  pointerEvents: "none",
                 }} />
-                <div style={{ position: "relative", padding: "var(--pad, 18px)" }}>
-                  {/* icon + open label */}
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-                    <div style={{
-                      width: 40, height: 40, borderRadius: 11,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      color: c.color,
-                      background: c.bg,
-                      border: `1px solid ${c.border}`,
-                    }}>
-                      <Icon style={{ width: 20, height: 20 }} />
-                    </div>
-                    <div style={{
-                      display: "flex", alignItems: "center", gap: 6,
-                      fontSize: 11.5, fontWeight: 600,
-                      color: c.color,
-                      opacity: isActive ? 1 : 0,
-                      transition: "opacity .2s",
-                    }}>
-                      <Maximize2 style={{ width: 13, height: 13 }} /> Open
-                    </div>
-                  </div>
 
-                  {/* title */}
-                  <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-dim)", marginBottom: 4 }}>
+                {/* icon tile */}
+                <div style={{
+                  position: "relative",
+                  width: 42, height: 42, borderRadius: 12, flex: "none",
+                  display: "grid", placeItems: "center",
+                  color: c.color,
+                  background: c.bg,
+                  border: `1px solid ${c.border}`,
+                }}>
+                  <Icon style={{ width: 20, height: 20 }} />
+                </div>
+
+                {/* label + number on one baseline */}
+                <div style={{ position: "relative", minWidth: 0, flex: 1 }}>
+                  <div style={{
+                    fontSize: 11.5, fontWeight: 600,
+                    color: "var(--text-dim)",
+                  }}>
                     {stat.title}
                   </div>
-
-                  {/* big number */}
-                  <div style={{ fontFamily: "var(--font-serif)", fontSize: 42, lineHeight: 1, letterSpacing: "0.01em", color: "var(--text)" }}>
-                    <AnimatedCounter value={stat.value} duration={800 + index * 100} />
-                  </div>
-
-                  {/* sub-values */}
-                  {'subValues' in stat && (
-                    <div style={{ display: "flex", gap: 16, marginTop: 12 }}>
-                      {stat.subValues.map((sv) => (
-                        <div key={sv.label} style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-                          <span style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", fontVariantNumeric: "tabular-nums" }}>{sv.value}</span>
-                          <span style={{ fontSize: 11.5, color: "var(--text-faint)" }}>{sv.label}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* description */}
-                  <div style={{ fontSize: 11.5, color: "var(--text-faint)", marginTop: 'subValues' in stat ? 12 : 14, lineHeight: 1.4 }}>
-                    {stat.description}
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 3, flexWrap: "wrap" }}>
+                    <span className="dsp num" style={{ fontWeight: 800, fontSize: 30, lineHeight: 1 }}>
+                      <AnimatedCounter value={stat.value} duration={800 + index * 100} />
+                    </span>
+                    <span style={{
+                      fontSize: 11,
+                      color: "var(--text-faint)",
+                    }}>
+                      {stat.description}
+                    </span>
                   </div>
                 </div>
+
+                {/* glassy split pills (Home / Acquired) */}
+                {'subValues' in stat && (
+                  <div style={{ position: "relative", display: "flex", gap: 7, marginLeft: "auto", flex: "none" }}>
+                    {stat.subValues.map((sv) => (
+                      <div key={sv.label} style={{
+                        background: "var(--bg-raise)",
+                        border: "1px solid var(--svf-border)",
+                        borderRadius: 10, padding: "6px 11px", textAlign: "center", lineHeight: 1.15,
+                      }}>
+                        <b className="dsp num" style={{ fontWeight: 700, fontSize: 16, display: "block" }}>{sv.value}</b>
+                        <span style={{ fontSize: 10, opacity: .85 }}>{sv.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )
           })}
@@ -630,6 +635,8 @@ export default function RightsDashboardPage() {
             onFilteredCountChange={handleSatFilteredCount}
             activeCard={satActiveCard}
             language={language}
+            languageOptions={languages}
+            onLanguageChange={setLanguage}
             totalLanguageCount={languages.length}
             expiryYear={satExpiryYear}
             onExpiryYearChange={handleSatYearChange}
@@ -648,6 +655,8 @@ export default function RightsDashboardPage() {
             onFilteredCountChange={handleIntFilteredCount}
             activeCard={intActiveCard}
             language={language}
+            languageOptions={languages}
+            onLanguageChange={setLanguage}
             totalLanguageCount={languages.length}
             expiryYear={intExpiryYear}
             onExpiryYearChange={handleIntYearChange}
@@ -665,6 +674,8 @@ export default function RightsDashboardPage() {
           <OtherRightsDashboardTable
             activeCard={otherActiveCard}
             language={language}
+            languageOptions={languages}
+            onLanguageChange={setLanguage}
             totalLanguageCount={languages.length}
             expiryYear={otherExpiryYear}
             onExpiryYearChange={handleOtherYearChange}
@@ -679,7 +690,7 @@ export default function RightsDashboardPage() {
             yearOptions={yearOptions}
           />
         ) : (
-          <ClipRightsTable language={language} totalLanguageCount={languages.length} />
+          <ClipRightsTable language={language} languageOptions={languages} onLanguageChange={setLanguage} totalLanguageCount={languages.length} />
         )}
       </div>
     </div>

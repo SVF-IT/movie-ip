@@ -405,24 +405,24 @@ export default function MovieDetailPage() {
         <Table>
           <TableHeader style={{ background: "var(--bg-deep)" }}>
             <TableRow className="border-(--svf-border) hover:bg-transparent">
-              <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Platform</TableHead>
-              <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Type</TableHead>
-              <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Category</TableHead>
-              <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Nature</TableHead>
-              <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Start</TableHead>
-              <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">End</TableHead>
-              <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Territory</TableHead>
-              <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Holdbacks</TableHead>
-              {!expired && <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Status</TableHead>}
-              {!expired && <TableHead className="text-right text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Actions</TableHead>}
+              <TableHead className="text-(--text-faint)">Platform</TableHead>
+              <TableHead className="text-(--text-faint)">Type</TableHead>
+              <TableHead className="text-(--text-faint)">Category</TableHead>
+              <TableHead className="text-(--text-faint)">Nature</TableHead>
+              <TableHead className="text-(--text-faint)">Start</TableHead>
+              <TableHead className="text-(--text-faint)">End</TableHead>
+              <TableHead className="text-(--text-faint)">Territory</TableHead>
+              <TableHead className="text-(--text-faint)">Holdbacks</TableHead>
+              {!expired && <TableHead className="text-(--text-faint)">Status</TableHead>}
+              {!expired && <TableHead className="text-right text-(--text-faint)">Actions</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {items.map((right) => (
               <TableRow key={right.id} className={cn("border-(--svf-border) hover:bg-(--hover) transition-colors", expired && "opacity-65")}>
-                <TableCell className="font-semibold text-sm text-(--text)">{right.platforms?.name || "—"}</TableCell>
-                <TableCell className="text-xs text-(--text-faint)">{right.platforms?.platform_type || "—"}</TableCell>
-                <TableCell className="text-xs text-(--text-faint)">{right.category || "—"}</TableCell>
+                <TableCell className="text-sm text-(--text)">{right.platforms?.name || "—"}</TableCell>
+                <TableCell className="text-(--text-faint)">{right.platforms?.platform_type || "—"}</TableCell>
+                <TableCell className="text-(--text-faint)">{right.category || "—"}</TableCell>
                 <TableCell>
                   {right.nature ? (
                     <Badge variant="outline" className={cn("text-[10px] font-semibold px-2 py-0.5",
@@ -434,8 +434,8 @@ export default function MovieDetailPage() {
                     </Badge>
                   ) : <span className="text-(--text-faint) text-xs">—</span>}
                 </TableCell>
-                <TableCell className="text-xs tabular-nums text-(--text-faint)">{formatDate(right.start_date)}</TableCell>
-                <TableCell className="text-xs tabular-nums text-(--text-faint)">
+                <TableCell className="tabular-nums text-(--text-faint)">{formatDate(right.start_date)}</TableCell>
+                <TableCell className="tabular-nums text-(--text-faint)">
                   {right.end_date === "3099-12-31" ? <span className="text-emerald-400/70 text-xs">Perpetual</span> : formatDate(right.end_date)}
                 </TableCell>
                 <TableCell>
@@ -443,7 +443,7 @@ export default function MovieDetailPage() {
                     <Globe className="h-3 w-3 text-(--text-faint)" />{right.territory || "World"}
                   </div>
                 </TableCell>
-                <TableCell className="text-xs text-amber-400 max-w-50 truncate" title={right.holdbacks || undefined}>
+                <TableCell className="text-amber-400 max-w-50 truncate" title={right.holdbacks || undefined}>
                   {right.holdbacks || <span className="text-(--text-faint)">—</span>}
                 </TableCell>
                 {!expired && (

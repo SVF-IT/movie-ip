@@ -432,7 +432,7 @@ function PendingChangeCard({
               {expanded ? "Hide" : "Show"} {changedFields.length} changed field{changedFields.length !== 1 ? "s" : ""}
             </button>
             {expanded && (
-              <div className="rounded-lg border border-(--svf-border) overflow-hidden">
+              <div className="rounded-[16px] border border-(--tbl-border) overflow-hidden">
                 <div className="grid grid-cols-3 gap-0 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) px-3 py-1.5 bg-(--bg-raise) border-b border-(--svf-border)">
                   <span>Field</span><span className="text-red-400">Before</span><span className="text-emerald-400">After</span>
                 </div>

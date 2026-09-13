@@ -366,7 +366,7 @@ export default function AdminUsersPage() {
                     className="hidden lg:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9" />
                   <SortableHeader column="is_active" label="Status" currentSort={sortConfig} onSort={requestSort}
                     className="hidden sm:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9" />
-                  <TableHead className="text-right text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Actions</TableHead>
+                  <TableHead className="text-right text-(--text-faint)">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

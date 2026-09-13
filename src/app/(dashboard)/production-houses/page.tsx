@@ -181,7 +181,7 @@ export default function ProductionHousesPage() {
                   <TableRow className="border-(--svf-border) hover:bg-transparent">
                     <SortableHeader column="name" label="Name" currentSort={sortConfig} onSort={requestSort}
                       className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9" />
-                    <TableHead className="text-right text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Actions</TableHead>
+                    <TableHead className="text-right text-(--text-faint)">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

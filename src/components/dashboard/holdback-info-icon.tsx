@@ -1,39 +1,36 @@
 'use client'
 
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { TokenPreview } from '@/components/dashboard/token-preview'
 import type { HoldbackInfo } from '@/lib/utils/holdbacks'
-import { Info } from 'lucide-react'
 
+/** Dedupe tokens across sources so "AVOD" listed twice shows once. */
+function uniqueTokens(info: HoldbackInfo): string[] {
+  const seen = new Map<string, string>()
+  for (const entry of info.entries) {
+    for (const t of entry.tokens) {
+      const key = t.toLowerCase()
+      if (!seen.has(key)) seen.set(key, t.toUpperCase())
+    }
+  }
+  return Array.from(seen.values())
+}
+
+/**
+ * Compact holdback cell: first token + "+N" on one line, full per-source
+ * breakdown on hover. Uses the same preview as the "Open for" column so both
+ * behave identically and never change row height.
+ */
 export function HoldbackInfoIcon({ info }: { info: HoldbackInfo }) {
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          disabled={!info.hasAny}
-          className="inline-flex items-center justify-center rounded-full p-1 transition-colors disabled:cursor-default"
-          style={{
-            color: info.hasAny ? 'var(--st-expiring)' : 'var(--text-faint)',
-            opacity: info.hasAny ? 1 : 0.4,
-          }}
-          aria-label={info.hasAny ? 'View holdback details' : 'No holdbacks'}
-        >
-          <Info className="h-4 w-4" />
-        </button>
-      </PopoverTrigger>
-      {info.hasAny && (
-        <PopoverContent className="w-72 text-sm" align="start">
-          <div className="font-semibold mb-2 text-(--text)">Holdbacks</div>
-          <div className="space-y-2">
-            {info.entries.map((entry, i) => (
-              <div key={i}>
-                <div className="text-xs font-medium text-(--text-faint)">{entry.source}</div>
-                <div className="text-(--text)">{entry.tokens.join(', ')}</div>
-              </div>
-            ))}
+    <TokenPreview title="Holdbacks" tone="amber" tokens={uniqueTokens(info)}>
+      <div className="space-y-2">
+        {info.entries.map((entry, i) => (
+          <div key={i}>
+            <div className="text-xs font-medium text-(--text-faint)">{entry.source}</div>
+            <div className="text-(--text) break-words">{entry.tokens.join(', ')}</div>
           </div>
-        </PopoverContent>
-      )}
-    </Popover>
+        ))}
+      </div>
+    </TokenPreview>
   )
 }

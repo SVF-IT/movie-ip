@@ -1,5 +1,7 @@
 'use client'
 
+import { ActiveFilterChips, type ActiveFilterChip } from '@/components/dashboard/active-filter-chips'
+import { TokenPreview } from '@/components/dashboard/token-preview'
 import { HoldbackInfoIcon } from '@/components/dashboard/holdback-info-icon'
 import { DataExportDialog, type ExportFieldDef } from '@/components/import-export/data-export-dialog'
 import { Badge } from '@/components/ui/badge'
@@ -23,20 +25,7 @@ import {
 import type { MovieWithDetails } from '@/lib/types/database'
 import { cn } from '@/lib/utils'
 import { EXPLOITATION_TYPE_LABELS, INTERNET_EXPLOITATION_TYPES, type ExploitationType } from '@/lib/utils/holdbacks'
-import {
-  Calendar,
-  CalendarIcon,
-  CalendarRange,
-  ChevronDown,
-  ChevronRight,
-  ChevronUp,
-  Download,
-  Globe,
-  Loader2,
-  Monitor,
-  Search,
-  X,
-} from 'lucide-react'
+import { Calendar, CalendarIcon, CalendarRange, ChevronDown, ChevronRight, ChevronUp, Download, Globe, Loader2, Monitor, Search, X } from 'lucide-react'
 import Link from 'next/link'
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 
@@ -93,6 +82,12 @@ type SourceFilter = 'all' | 'home' | 'acquired' | 'bangladeshi'
 interface InternetDashboardTableProps {
   activeCard: ActiveCard
   language: string[]
+  /**
+   * Language options + setter, so the selector can live in this filter bar rather
+   * than in the page header. Optional — omit and no selector renders.
+   */
+  languageOptions?: string[]
+  onLanguageChange?: (next: string[]) => void
   totalLanguageCount: number
   expiryYear: string
   onExpiryYearChange: (year: string) => void
@@ -121,7 +116,7 @@ const cardLabels: Record<ActiveCard, string> = {
 }
 
 const cardDescriptions: Record<ActiveCard, string> = {
-  open_titles: 'Movies without active internet/SVOD rights — available to license',
+  open_titles: 'Movies without active internet rights — available to license',
   expiring: 'Movies whose internet rights are expiring in the selected period',
   active: 'Movies with currently active internet/SVOD rights',
 }
@@ -174,6 +169,8 @@ const EXPORT_FIELDS_ACTIVE: ExportFieldDef[] = [
 export function InternetDashboardTable({
   activeCard,
   language,
+  languageOptions,
+  onLanguageChange,
   totalLanguageCount,
   expiryYear,
   onExpiryYearChange,
@@ -490,93 +487,201 @@ export function InternetDashboardTable({
     : activeCard === 'expiring' ? EXPORT_FIELDS_EXPIRING
       : EXPORT_FIELDS_ACTIVE
 
-  const cellCls = fullPage ? 'py-1 px-3 text-xs' : ''
-  const headCls = fullPage ? 'py-1.5 px-3 text-xs font-medium' : 'text-xs font-medium'
+  const cellCls = ''
+  const headCls = ''
 
-  const inputCls = "h-9 bg-(--bg-raise) border-(--svf-border) text-(--text) hover:border-(--svf-border-strong) focus-visible:border-(--svf-accent-line) focus-visible:ring-0 transition-colors"
-  const selectTriggerCls = "h-9 bg-(--bg-raise) border-(--svf-border) text-(--text) hover:border-(--svf-border-strong) hover:bg-(--hover) transition-colors text-xs"
+  const inputCls = "h-9 rounded-[8px] bg-(--filter-panel-bg) border-(--filter-border) text-(--text) hover:border-(--filter-border-hover) focus-visible:border-(--filter-border-hover) focus-visible:ring-0 transition-colors"
+  const labelCls = "text-[11px] font-medium uppercase tracking-[.06em] text-(--filter-label)"
+  const selectTriggerCls = "h-9 rounded-[8px] bg-(--filter-panel-bg) border-(--filter-border) text-(--text) hover:border-(--filter-border-hover) focus-visible:border-(--filter-border-hover) focus-visible:ring-0 transition-colors text-sm"
+
+  // Chips describe only genuine narrowing: a filter with every option selected is
+  // the same as no filter, so it must not appear as "active".
+  const activeChips: ActiveFilterChip[] = []
+  if (debouncedSearch) activeChips.push({ key: 'search', label: 'Search', value: debouncedSearch, onClear: () => setSearch('') })
+  if (sourceFilter !== 'all') activeChips.push({
+    key: 'source', label: 'Source',
+    value: sourceFilter === 'home' ? 'Home Production' : sourceFilter === 'acquired' ? 'Acquired' : 'Bangladesh',
+    onClear: () => setSourceFilter('all'),
+  })
+  if (licensorFilter.length > 0 && licensorFilter.length < licensorOptions.length) activeChips.push({
+    key: 'licensor', label: 'Licensor',
+    value: licensorFilter.length === 1 ? licensorFilter[0] : `${licensorFilter.length} selected`,
+    onClear: () => setLicensorFilter(licensorOptions),
+  })
+  if (certFilter.length > 0 && certFilter.length < CERT_OPTIONS.length) activeChips.push({
+    key: 'cert', label: 'Certification',
+    value: certFilter.length === 1 ? certFilter[0] : `${certFilter.length} selected`,
+    onClear: () => setCertFilter(CERT_OPTIONS),
+  })
+  if (languageOptions && onLanguageChange && language.length > 0 && language.length < totalLanguageCount) activeChips.push({
+    key: 'language', label: 'Language',
+    value: language.length === 1 ? language[0] : `${language.length} selected`,
+    onClear: () => onLanguageChange(languageOptions),
+  })
+  if (wtpFilter.length > 0 && wtpFilter.length < WTP_OPTIONS.length) activeChips.push({
+    key: 'wtp', label: 'WTP library',
+    value: wtpFilter.map((w) => WTP_OPTIONS.find((o) => o.value === w)?.label ?? w).join(', '),
+    onClear: () => setWtpFilter(WTP_OPTIONS.map((o) => o.value)),
+  })
+  if (openToTypes.length > 0) activeChips.push({
+    key: 'opento', label: 'Open to',
+    value: openToTypes.map((t) => EXPLOITATION_TYPE_LABELS[t]).join(', '),
+    onClear: () => setOpenToTypes([]),
+  })
+  if (holdbackFilter !== 'all') activeChips.push({
+    key: 'holdback', label: 'Holdback',
+    value: holdbackFilter === 'with' ? 'With holdback' : 'Without holdback',
+    onClear: () => setHoldbackFilter('all'),
+  })
+  if (openFrom || openTo) activeChips.push({
+    key: 'window', label: 'Rights window',
+    value: `${openFrom || '…'} → ${openTo || '…'}`,
+    onClear: () => { onOpenFromChange(''); onOpenToChange('') },
+  })
+  if (expiryFrom || expiryTo) activeChips.push({
+    key: 'expiry', label: 'Expiry window',
+    value: `${expiryFrom || '…'} → ${expiryTo || '…'}`,
+    onClear: () => { onExpiryFromChange(''); onExpiryToChange(''); onExpiryYearChange('all') },
+  })
+  if (agreementEndBy) activeChips.push({
+    key: 'agmt', label: 'Agreement ends by', value: agreementEndBy,
+    onClear: () => setAgreementEndBy(''),
+  })
+  if (bangladeshiOnly) activeChips.push({
+    key: 'bd', label: 'Bangladesh', value: 'Only',
+    onClear: () => setBangladeshiOnly(false),
+  })
+
+  const clearAllFilters = () => {
+    setSearch('')
+    setSourceFilter('all')
+    setLicensorFilter(licensorOptions)
+    setCertFilter(CERT_OPTIONS)
+    if (languageOptions && onLanguageChange) onLanguageChange(languageOptions)
+    setWtpFilter(WTP_OPTIONS.map((o) => o.value))
+    setOpenToTypes([])
+    setHoldbackFilter('all')
+    onOpenFromChange(''); onOpenToChange('')
+    onExpiryFromChange(''); onExpiryToChange(''); onExpiryYearChange('all')
+    setAgreementEndBy('')
+    setBangladeshiOnly(false)
+  }
 
   const filtersBar = (
-    <div className={fullPage ? 'px-4 py-3 border-b border-(--svf-border)/40 bg-(--panel-solid)/30' : 'rounded-lg border border-(--svf-border)/40 bg-(--panel-solid)/30 p-3'}>
-      <div className="flex flex-wrap gap-2 items-center">
+    <div className={fullPage
+      ? 'px-4 py-3 bg-(--filter-panel-bg) border-b border-(--filter-border)'
+      : 'rounded-[14px] border border-(--filter-border) bg-(--filter-panel-bg) p-3.5'}>
+      {/* One labelled grid — search is the first cell rather than its own full-width
+          row, so the block is a row shorter and the table sits higher. */}
+      <div className="grid gap-x-3 gap-y-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
         {/* Search */}
-        <div className="relative flex-1 min-w-45 max-w-65">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-(--text-faint)" />
-          <Input placeholder="Search by title or production no…" value={search} onChange={(e) => setSearch(e.target.value)}
-            className={`pl-9 text-xs placeholder:text-(--text-faint) ${inputCls}`} />
+        <div className="flex flex-col gap-1 min-w-0 sm:col-span-2">
+          <span className={labelCls}>Search</span>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-(--filter-label)" />
+            <Input placeholder="Title or production number…" value={search} onChange={(e) => setSearch(e.target.value)}
+              className={`h-9 rounded-[8px] pl-9 text-sm placeholder:text-(--filter-label) bg-(--filter-panel-bg) border-(--filter-border) text-(--text) hover:border-(--filter-border-hover) focus-visible:border-(--filter-border-hover) focus-visible:ring-0 transition-colors`} />
+          </div>
+        </div>
+        {/* Source */}
+        <div className="flex flex-col gap-1 min-w-0">
+          <span className={labelCls}>Source</span>
+          <Select value={sourceFilter} onValueChange={(v) => { setSourceFilter(v as SourceFilter) }}>
+            <SelectTrigger className={`w-full ${selectTriggerCls}`}>
+              <SelectValue placeholder="Source" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Sources</SelectItem>
+              <SelectItem value="home">Home Production</SelectItem>
+              <SelectItem value="acquired">Acquired</SelectItem>
+              <SelectItem value="bangladeshi">Bangladesh</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
-        {/* Source filter */}
-        <Select value={sourceFilter} onValueChange={(v) => { setSourceFilter(v as SourceFilter) }}>
-          <SelectTrigger className={`w-[140px] ${selectTriggerCls}`}>
-            <SelectValue placeholder="Source" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Sources</SelectItem>
-            <SelectItem value="home">Home Production</SelectItem>
-            <SelectItem value="acquired">Acquired</SelectItem>
-            <SelectItem value="bangladeshi">Bangladesh</SelectItem>
-          </SelectContent>
-        </Select>
+        {/* Licensor */}
+        <div className="flex flex-col gap-1 min-w-0">
+          <span className={labelCls}>Licensor</span>
+          <MultiSelectFilter
+            label="Licensor"
+            options={licensorOptions}
+            value={licensorFilter}
+            onChange={setLicensorFilter}
+            searchable
+            accent="blue"
+            triggerWidth="w-full"
+          />
+        </div>
 
-        {/* Licensor multi-select */}
-        <MultiSelectFilter
-          label="Licensor"
-          options={licensorOptions}
-          value={licensorFilter}
-          onChange={setLicensorFilter}
-          searchable
-          accent="blue"
-        />
+        {/* Certification */}
+        <div className="flex flex-col gap-1 min-w-0">
+          <span className={labelCls}>Certification</span>
+          <MultiSelectFilter
+            label="Certification"
+            options={CERT_OPTIONS}
+            value={certFilter}
+            onChange={setCertFilter}
+            accent="blue"
+            triggerWidth="w-full"
+            extraPresetRows={[{
+              key: 'except-a',
+              label: 'Except A',
+              isActive: (v) => v.length > 0 && !v.includes('A') && CERT_OPTIONS.filter(c => c !== 'A').every(c => v.includes(c)),
+              onSelect: () => setCertFilter(CERT_OPTIONS.filter(c => c !== 'A')),
+            }]}
+          />
+        </div>
 
-        {/* Certification multi-select */}
-        <MultiSelectFilter
-          label="Certification"
-          options={CERT_OPTIONS}
-          value={certFilter}
-          onChange={setCertFilter}
-          accent="blue"
-          triggerWidth="w-36"
-          extraPresetRows={[{
-            key: 'except-a',
-            label: 'Except A',
-            isActive: (v) => v.length > 0 && !v.includes('A') && CERT_OPTIONS.filter(c => c !== 'A').every(c => v.includes(c)),
-            onSelect: () => setCertFilter(CERT_OPTIONS.filter(c => c !== 'A')),
-          }]}
-        />
+        {/* Language */}
+        {languageOptions && onLanguageChange && (
+          <div className="flex flex-col gap-1 min-w-0">
+            <span className={labelCls}>Language</span>
+            <MultiSelectFilter
+              label="Language"
+              options={languageOptions}
+              value={language}
+              onChange={onLanguageChange}
+              triggerWidth="w-full"
+            />
+          </div>
+        )}
 
 
         {/* Expiry year + date range */}
         {activeCard === 'expiring' && (
           <>
-            <Select value={expiryYear} onValueChange={onExpiryYearChange}>
-              <SelectTrigger className={`w-[140px] ${selectTriggerCls}`}>
-                <CalendarRange className="h-3 w-3 mr-1 text-(--text-faint) shrink-0" />
-                <SelectValue placeholder="Expiry Year" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Years</SelectItem>
-                {yearOptions.map((y) => (
-                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                ))}
-                <SelectItem value="custom">Custom Range</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex flex-col gap-1 min-w-0">
+              <span className={labelCls}>Expiry year</span>
+              <Select value={expiryYear} onValueChange={onExpiryYearChange}>
+                <SelectTrigger className={`w-full ${selectTriggerCls}`}>
+                  <CalendarRange className="h-3 w-3 mr-1 text-(--text-faint) shrink-0" />
+                  <SelectValue placeholder="Expiry Year" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Years</SelectItem>
+                  {yearOptions.map((y) => (
+                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                  ))}
+                  <SelectItem value="custom">Custom Range</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-            <div className="flex items-center gap-1 bg-(--bg-raise) border border-(--svf-border) rounded-md px-2 h-9 hover:border-(--svf-border-strong) transition-colors">
-              <span className="text-[10px] font-medium text-(--text-faint) uppercase px-1">From</span>
-              <DateInput value={expiryFrom} onChange={onExpiryFromChange} />
-              <span className="text-(--svf-border-strong) px-1">|</span>
-              <span className="text-[10px] font-medium text-(--text-faint) uppercase px-1">To</span>
-              <DateInput value={expiryTo} onChange={onExpiryToChange} />
-              {(expiryFrom || expiryTo) && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); onExpiryFromChange(''); onExpiryToChange(''); onExpiryYearChange('all') }}
-                  className="ml-1 p-0.5 text-(--text-faint) hover:text-red-400 transition-colors"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              )}
+            <div className="flex flex-col gap-1 min-w-0 sm:col-span-2">
+              <span className={labelCls}>Expiry window</span>
+              <div className="flex items-center gap-1 min-w-0 bg-(--filter-panel-bg) border border-(--filter-border) rounded-[8px] px-3 h-9 hover:border-(--filter-border-hover) transition-colors [&_input]:min-w-0 [&_input]:flex-1">
+                  <DateInput value={expiryFrom} onChange={onExpiryFromChange} />
+                <span className="text-(--filter-label) text-[10px] font-medium uppercase px-0.5">to</span>
+                  <DateInput value={expiryTo} onChange={onExpiryToChange} />
+                {(expiryFrom || expiryTo) && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onExpiryFromChange(''); onExpiryToChange(''); onExpiryYearChange('all') }}
+                    className="ml-1 p-0.5 text-(--text-faint) hover:text-red-400 transition-colors"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
             </div>
           </>
         )}
@@ -584,69 +689,80 @@ export function InternetDashboardTable({
         {/* Open titles filters: WTP + date range */}
         {activeCard === 'open_titles' && (
           <>
-            <MultiSelectFilter
-              label="WTP"
-              options={WTP_OPTIONS}
-              value={wtpFilter}
-              onChange={(v) => setWtpFilter(v as ('wtp' | 'wtp_bd' | 'library')[])}
-              accent="blue"
-              triggerWidth="w-32.5"
-            />
+            <div className="flex flex-col gap-1 min-w-0">
+              <span className={labelCls}>WTP library</span>
+              <MultiSelectFilter
+                label="WTP"
+                options={WTP_OPTIONS}
+                value={wtpFilter}
+                onChange={(v) => setWtpFilter(v as ('wtp' | 'wtp_bd' | 'library')[])}
+                accent="blue"
+                triggerWidth="w-full"
+              />
+            </div>
 
-            <div className="flex items-center gap-1 bg-(--bg-raise) border border-(--svf-border) rounded-md px-2 h-9 hover:border-(--svf-border-strong) transition-colors">
-              <span className="text-[10px] font-medium text-(--text-faint) uppercase px-1">From</span>
-              <DateInput value={openFrom} onChange={onOpenFromChange} />
-              <span className="text-(--svf-border-strong) px-1">|</span>
-              <span className="text-[10px] font-medium text-(--text-faint) uppercase px-1">To</span>
-              <DateInput value={openTo} onChange={onOpenToChange} />
-              {(openFrom || openTo) && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); onOpenFromChange(''); onOpenToChange('') }}
-                  className="ml-1 p-0.5 text-(--text-faint) hover:text-red-400 transition-colors"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              )}
+            <div className="flex flex-col gap-1 min-w-0 sm:col-span-2">
+              <span className={labelCls}>Rights window</span>
+              <div className="flex items-center gap-1 min-w-0 bg-(--filter-panel-bg) border border-(--filter-border) rounded-[8px] px-3 h-9 hover:border-(--filter-border-hover) transition-colors [&_input]:min-w-0 [&_input]:flex-1">
+                  <DateInput value={openFrom} onChange={onOpenFromChange} />
+                <span className="text-(--filter-label) text-[10px] font-medium uppercase px-0.5">to</span>
+                  <DateInput value={openTo} onChange={onOpenToChange} />
+                {(openFrom || openTo) && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onOpenFromChange(''); onOpenToChange('') }}
+                    className="ml-1 p-0.5 text-(--text-faint) hover:text-red-400 transition-colors"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Agreement end-by date — separate from "open until": lets you spot acquired titles whose acquisition agreement itself is expiring by a given date, not just current-right expiry */}
-            <div className={`flex items-center gap-1 bg-(--bg-raise) border rounded-md px-2 h-9 transition-colors ${agreementEndBy ? 'border-amber-500/60' : 'border-(--svf-border) hover:border-(--svf-border-strong)'}`}>
-              <span className="text-[10px] font-medium text-(--text-faint) uppercase px-1">Agmt End By</span>
-              <DateInput value={agreementEndBy} onChange={setAgreementEndBy} />
-              {agreementEndBy && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); setAgreementEndBy('') }}
-                  className="ml-1 p-0.5 text-(--text-faint) hover:text-red-400 transition-colors"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              )}
+            <div className="flex flex-col gap-1 min-w-0">
+              <span className={labelCls}>Agreement ends by</span>
+              <div className={`flex items-center gap-1 bg-(--bg-raise) border rounded-[8px] px-3 h-9 transition-colors ${agreementEndBy ? 'border-amber-500/60' : 'border-(--svf-border-strong) hover:border-(--svf-border-strong)'}`}>
+                <DateInput value={agreementEndBy} onChange={setAgreementEndBy} />
+                {agreementEndBy && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setAgreementEndBy('') }}
+                    className="ml-1 p-0.5 text-(--text-faint) hover:text-red-400 transition-colors"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
             </div>
 
-            {activeCard === 'open_titles' && (
+            <div className="flex flex-col gap-1 min-w-0">
+              <span className={labelCls}>Open to</span>
               <MultiSelectFilter
                 label="Open to"
                 options={INTERNET_EXPLOITATION_TYPES.map((t) => ({ value: t, label: EXPLOITATION_TYPE_LABELS[t] }))}
                 value={openToTypes}
                 onChange={(next) => setOpenToTypes(next as ExploitationType[])}
                 accent="emerald"
-                triggerWidth="w-[170px]"
+                triggerWidth="w-full"
               />
-            )}
+            </div>
 
-            <Select value={holdbackFilter} onValueChange={(v) => setHoldbackFilter(v as 'all' | 'with' | 'without')}>
-              <SelectTrigger className={cn('h-9 w-[160px] text-xs', holdbackFilter !== 'all' && 'border-amber-500/60 bg-amber-500/5 text-amber-400')}>
-                <SelectValue placeholder="Holdbacks" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Holdbacks</SelectItem>
-                <SelectItem value="with">With holdback</SelectItem>
-                <SelectItem value="without">Without holdback</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex flex-col gap-1 min-w-0">
+              <span className={labelCls}>Holdback</span>
+              <Select value={holdbackFilter} onValueChange={(v) => setHoldbackFilter(v as 'all' | 'with' | 'without')}>
+                <SelectTrigger className={cn('h-9 w-full rounded-[8px] text-sm', holdbackFilter !== 'all' ? 'border-amber-500/60 bg-amber-500/5 text-amber-400' : 'bg-(--bg-raise) border-(--svf-border-strong) text-(--text)')}>
+                  <SelectValue placeholder="Holdbacks" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Holdbacks</SelectItem>
+                  <SelectItem value="with">With holdback</SelectItem>
+                  <SelectItem value="without">Without holdback</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
             <label className={cn(
-              'flex items-center gap-1.5 h-9 px-2.5 rounded-md border transition-colors cursor-pointer',
+              'self-end',
+              'flex items-center gap-1.5 h-9 px-3 rounded-[8px] border transition-colors cursor-pointer',
               bangladeshiOnly ? 'border-emerald-500/60 bg-emerald-500/5' : 'border-(--svf-border) bg-(--bg-raise) hover:border-(--svf-border-strong)'
             )}>
               <Checkbox checked={bangladeshiOnly} onCheckedChange={(v) => setBangladeshiOnly(v === true)} className="h-3.5 w-3.5" />
@@ -655,18 +771,12 @@ export function InternetDashboardTable({
           </>
         )}
 
-        {/* Sort */}
-        <Select value={sortBy} onValueChange={(v) => { setSortBy(v as SortOption) }}>
-          <SelectTrigger className={`w-[180px] ${selectTriggerCls}`}>
-            <SelectValue placeholder="Sort" />
-          </SelectTrigger>
-          <SelectContent>
-            {sortOptions.map((o) => (
-              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      </div>
 
+      <ActiveFilterChips chips={activeChips} onClearAll={clearAllFilters} />
+
+      {/* Actions row — selection count + export */}
+      <div className="mt-2.5 flex flex-wrap items-center gap-2.5">
         <div className="ml-auto flex items-center gap-2">
           {selectedIds.size > 0 && (
             <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/25 text-red-500">
@@ -674,7 +784,7 @@ export function InternetDashboardTable({
             </span>
           )}
           {fullPage && (
-            <Button variant="outline" size="sm" className="gap-1.5 h-9 px-3 text-xs bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover) shadow-sm shadow-red-500/20 transition-colors" onClick={handleExportClick} disabled={exportLoading}>
+            <Button variant="outline" size="sm" className="gap-1.5 h-9 rounded-[8px] px-3 text-xs bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover) shadow-sm shadow-red-500/20 transition-colors" onClick={handleExportClick} disabled={exportLoading}>
               {exportLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
               Export
             </Button>
@@ -713,7 +823,7 @@ export function InternetDashboardTable({
   }
 
   const tableEl = (
-    <div className={fullPage ? 'flex-1 overflow-auto' : 'rounded-lg border border-(--svf-border) overflow-hidden'}>
+    <div className={fullPage ? 'flex-1 overflow-auto' : 'rounded-[16px] border border-(--tbl-border) overflow-hidden'}>
       <Table className={fullPage ? 'border-collapse' : ''}>
         <TableHeader className={fullPage ? 'sticky top-0 z-10' : ''}>
           <TableRow className={`border-(--svf-border)/40 ${fullPage ? 'bg-(--bg-deep) backdrop-blur-sm' : 'bg-(--bg-deep)/60'}`}>
@@ -753,8 +863,8 @@ export function InternetDashboardTable({
                 {showLicensorCol && <TableHead className={headCls}>Licensor</TableHead>}
                 {activeCard === 'open_titles' && <TableHead className={headCls}>Sunset Date</TableHead>}
                 {activeCard === 'active' && <TableHead className={headCls}>Rights Count</TableHead>}
-                {activeCard === 'open_titles' && <TableHead className={headCls}>Open For</TableHead>}
-                {showHoldbackCol && <TableHead className={cn('w-10', headCls)}>Holdback</TableHead>}
+                {activeCard === 'open_titles' && <TableHead className={cn('w-[92px]', headCls)}>Open For</TableHead>}
+                {showHoldbackCol && <TableHead className={cn('w-[92px]', headCls)}>Holdback</TableHead>}
               </>
             )}
           </TableRow>
@@ -916,19 +1026,12 @@ export function InternetDashboardTable({
                       </TableCell>
                     )}
                     {activeCard === 'open_titles' && (
-                      <TableCell className={cellCls}>
-                        <div className="flex flex-wrap gap-1">
-                          {((movie as any).open_types || []).length === 0 ? (
-                            <span style={{ color: 'var(--text-faint)' }}>—</span>
-                          ) : (
-                            ((movie as any).open_types as ExploitationType[]).map((t) => (
-                              <Badge key={t} variant="outline"
-                                className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px] font-medium px-1.5 py-0">
-                                {EXPLOITATION_TYPE_LABELS[t]}
-                              </Badge>
-                            ))
-                          )}
-                        </div>
+                      <TableCell className={cellCls} onClick={(e) => e.stopPropagation()}>
+                        <TokenPreview
+                          title="Open for"
+                          tone="emerald"
+                          tokens={(((movie as any).open_types || []) as ExploitationType[]).map((t) => EXPLOITATION_TYPE_LABELS[t])}
+                        />
                       </TableCell>
                     )}
                     {showHoldbackCol && (
@@ -1002,12 +1105,12 @@ export function InternetDashboardTable({
 
   return (
     <Card className="glass-card">
-      <div className="p-6 space-y-4">
+      <div className="p-3.5 space-y-2.5">
         {/* Header */}
-        <div className="px-1 flex flex-wrap items-center justify-between gap-4">
+        <div className="px-1 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-xl font-bold tracking-tight text-(--text)">{cardLabels[activeCard]}</h2>
-            <p className="text-sm text-(--text-faint) mt-0.5">{cardDescriptions[activeCard]}</p>
+            <h2 className="dsp text-[17px] font-bold tracking-tight text-(--text)">{cardLabels[activeCard]}</h2>
+            <p className="text-[12px] text-(--text-faint) mt-0.5">{cardDescriptions[activeCard]}</p>
           </div>
           <div className="flex items-center gap-2">
             {selectedIds.size > 0 && (

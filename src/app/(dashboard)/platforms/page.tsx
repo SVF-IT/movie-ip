@@ -236,7 +236,7 @@ export default function PlatformsPage() {
                     <SortableHeader column="platform_type" label="Type" currentSort={sortConfig} onSort={requestSort} className="hidden md:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint)" />
                     <SortableHeader column="active_rights" label="Active Rights" currentSort={sortConfig} onSort={requestSort} className="hidden sm:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint)" />
                     <SortableHeader column="total_rights" label="Total Rights" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)" />
-                    <TableHead className="text-right text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Actions</TableHead>
+                    <TableHead className="text-right text-(--text-faint)">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

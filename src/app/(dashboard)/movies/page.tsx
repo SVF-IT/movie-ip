@@ -473,6 +473,87 @@ export default function MoviesPage() {
 
       <SpecialEventsBanner preferenceEnabled={anniversaryEnabled} />
 
+      {/* Count + actions + view toggle — all in one row */}
+      <div className="flex flex-wrap items-center gap-2">
+        <RoleGate
+          action="import"
+          resource="movie"
+          fallback={
+            <>
+              <DisabledActionButton variant="outline" className="gap-2 h-9 px-4" reason="You don't have permission to import movies.">
+                <Upload className="h-4 w-4" /><span>Upload CSV</span>
+              </DisabledActionButton>
+              <DisabledActionButton variant="outline" className="gap-2 h-9 px-4" reason="You don't have permission to bulk-upload posters.">
+                <ImageIcon className="h-4 w-4" /><span>Bulk Posters</span>
+              </DisabledActionButton>
+            </>
+          }
+        >
+          <Button variant="outline" size="sm" className="gap-2 h-9 px-4 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover)" onClick={() => setShowImportDialog(true)}>
+            <Upload className="h-4 w-4" /><span>Upload CSV</span>
+          </Button>
+          <Button variant="outline" size="sm" className="gap-2 h-9 px-4 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover)" onClick={() => setShowBulkPostersDialog(true)}>
+            <ImageIcon className="h-4 w-4" /><span>Bulk Posters</span>
+          </Button>
+        </RoleGate>
+        {canBulkUploadCertificates ? (
+          <Button variant="outline" size="sm" className="gap-2 h-9 px-4 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover)" onClick={() => setShowBulkCertificatesDialog(true)}>
+            <ShieldCheck className="h-4 w-4" /><span>Bulk Certificates</span>
+          </Button>
+        ) : (
+          <DisabledActionButton variant="outline" className="gap-2 h-9 px-4" reason="Only editors and admins can bulk-upload certificates.">
+            <ShieldCheck className="h-4 w-4" /><span>Bulk Certificates</span>
+          </DisabledActionButton>
+        )}
+        {!loading && (
+          <p className="text-xs" style={{ color: "var(--text-faint)" }}>
+            <strong style={{ color: "var(--text)" }}>{totalCount}</strong> films
+          </p>
+        )}
+        <div className="flex-1" />
+        <RoleGate action="export" resource="movie">
+          {selectedIds.size > 0 && (
+            <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/25 text-red-500">
+              {selectedIds.size} selected
+            </span>
+          )}
+          <Button variant="outline" size="sm" className="gap-2 h-9 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover) shadow-sm shadow-red-500/20" onClick={() => setShowExportDialog(true)}>
+            <Download className="h-4 w-4" /><span>Export</span>
+          </Button>
+        </RoleGate>
+        <RoleGate
+          action="create"
+          resource="movie"
+          fallback={
+            <DisabledActionButton className="gap-2 h-9 px-4" reason="You don't have permission to add movies.">
+              <Plus className="h-4 w-4" /><span>New Movie</span>
+            </DisabledActionButton>
+          }
+        >
+          <Button asChild size="sm" className="h-9 gap-2 px-4 bg-red-600 hover:bg-red-500 text-white border-0 shadow-lg shadow-red-900/30">
+            <Link href="/movies/new"><Plus className="h-4 w-4" /><span>New Movie</span></Link>
+          </Button>
+        </RoleGate>
+        {/* Grid / List toggle */}
+        <div style={{
+          display: "inline-flex", gap: 3, padding: 4, borderRadius: 11,
+          background: "var(--bg-deep)", border: "1px solid var(--svf-border)",
+        }}>
+          {([{ v: "grid" as const, icon: LayoutGrid }, { v: "list" as const, icon: List }]).map(({ v, icon: Icon }) => (
+            <button key={v} onClick={() => setView(v)} style={{
+              display: "inline-flex", alignItems: "center", justifyContent: "center",
+              width: 34, height: 30, borderRadius: 8, cursor: "pointer",
+              border: view === v ? "1px solid var(--svf-border-strong)" : "1px solid transparent",
+              background: view === v ? "var(--bg-raise)" : "transparent",
+              color: view === v ? "var(--text)" : "var(--text-faint)",
+              transition: "all .15s ease",
+            }}>
+              <Icon style={{ width: 15, height: 15 }} />
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Filters — all original filters restored */}
       <Card className="glass-card overflow-hidden">
         <CardContent className="px-4 py-3">
@@ -604,87 +685,6 @@ export default function MoviesPage() {
         </CardContent>
       </Card>
 
-      {/* Count + actions + view toggle — all in one row */}
-      <div className="flex flex-wrap items-center gap-2">
-        <RoleGate
-          action="import"
-          resource="movie"
-          fallback={
-            <>
-              <DisabledActionButton variant="outline" className="gap-2 h-9 px-4" reason="You don't have permission to import movies.">
-                <Upload className="h-4 w-4" /><span>Upload CSV</span>
-              </DisabledActionButton>
-              <DisabledActionButton variant="outline" className="gap-2 h-9 px-4" reason="You don't have permission to bulk-upload posters.">
-                <ImageIcon className="h-4 w-4" /><span>Bulk Posters</span>
-              </DisabledActionButton>
-            </>
-          }
-        >
-          <Button variant="outline" size="sm" className="gap-2 h-9 px-4 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover)" onClick={() => setShowImportDialog(true)}>
-            <Upload className="h-4 w-4" /><span>Upload CSV</span>
-          </Button>
-          <Button variant="outline" size="sm" className="gap-2 h-9 px-4 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover)" onClick={() => setShowBulkPostersDialog(true)}>
-            <ImageIcon className="h-4 w-4" /><span>Bulk Posters</span>
-          </Button>
-        </RoleGate>
-        {canBulkUploadCertificates ? (
-          <Button variant="outline" size="sm" className="gap-2 h-9 px-4 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover)" onClick={() => setShowBulkCertificatesDialog(true)}>
-            <ShieldCheck className="h-4 w-4" /><span>Bulk Certificates</span>
-          </Button>
-        ) : (
-          <DisabledActionButton variant="outline" className="gap-2 h-9 px-4" reason="Only editors and admins can bulk-upload certificates.">
-            <ShieldCheck className="h-4 w-4" /><span>Bulk Certificates</span>
-          </DisabledActionButton>
-        )}
-        {!loading && (
-          <p className="text-xs" style={{ color: "var(--text-faint)" }}>
-            <strong style={{ color: "var(--text)" }}>{totalCount}</strong> films
-          </p>
-        )}
-        <div className="flex-1" />
-        <RoleGate action="export" resource="movie">
-          {selectedIds.size > 0 && (
-            <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/25 text-red-500">
-              {selectedIds.size} selected
-            </span>
-          )}
-          <Button variant="outline" size="sm" className="gap-2 h-9 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover) shadow-sm shadow-red-500/20" onClick={() => setShowExportDialog(true)}>
-            <Download className="h-4 w-4" /><span>Export</span>
-          </Button>
-        </RoleGate>
-        <RoleGate
-          action="create"
-          resource="movie"
-          fallback={
-            <DisabledActionButton className="gap-2 h-9 px-4" reason="You don't have permission to add movies.">
-              <Plus className="h-4 w-4" /><span>New Movie</span>
-            </DisabledActionButton>
-          }
-        >
-          <Button asChild size="sm" className="h-9 gap-2 px-4 bg-red-600 hover:bg-red-500 text-white border-0 shadow-lg shadow-red-900/30">
-            <Link href="/movies/new"><Plus className="h-4 w-4" /><span>New Movie</span></Link>
-          </Button>
-        </RoleGate>
-        {/* Grid / List toggle */}
-        <div style={{
-          display: "inline-flex", gap: 3, padding: 4, borderRadius: 11,
-          background: "var(--bg-deep)", border: "1px solid var(--svf-border)",
-        }}>
-          {([{ v: "grid" as const, icon: LayoutGrid }, { v: "list" as const, icon: List }]).map(({ v, icon: Icon }) => (
-            <button key={v} onClick={() => setView(v)} style={{
-              display: "inline-flex", alignItems: "center", justifyContent: "center",
-              width: 34, height: 30, borderRadius: 8, cursor: "pointer",
-              border: view === v ? "1px solid var(--svf-border-strong)" : "1px solid transparent",
-              background: view === v ? "var(--bg-raise)" : "transparent",
-              color: view === v ? "var(--text)" : "var(--text-faint)",
-              transition: "all .15s ease",
-            }}>
-              <Icon style={{ width: 15, height: 15 }} />
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* ── Grid view ── */}
       {view === "grid" && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))", gap: 22 }}>
@@ -783,23 +783,23 @@ export default function MoviesPage() {
                           aria-label="Select all"
                         />
                       </TableHead>
-                      <TableHead className="pl-2 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Title</TableHead>
-                      <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Source</TableHead>
-                      <TableHead className="hidden sm:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Release</TableHead>
-                      <TableHead className="hidden md:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Cert</TableHead>
-                      {showMultiVersionCol && <TableHead className="hidden lg:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Languages</TableHead>}
+                      <TableHead className="pl-2 text-(--text-faint)">Title</TableHead>
+                      <TableHead className="text-(--text-faint)">Source</TableHead>
+                      <TableHead className="hidden sm:table-cell text-(--text-faint)">Release</TableHead>
+                      <TableHead className="hidden md:table-cell text-(--text-faint)">Cert</TableHead>
+                      {showMultiVersionCol && <TableHead className="hidden lg:table-cell text-(--text-faint)">Languages</TableHead>}
                       {showJointProdCols && (
                         <>
-                          <TableHead className="hidden lg:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Rev Share</TableHead>
-                          <TableHead className="hidden lg:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Prod House</TableHead>
+                          <TableHead className="hidden lg:table-cell text-(--text-faint)">Rev Share</TableHead>
+                          <TableHead className="hidden lg:table-cell text-(--text-faint)">Prod House</TableHead>
                         </>
                       )}
-                      <TableHead className="hidden lg:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Rights</TableHead>
-                      {showLicensorCol && <TableHead className="hidden lg:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Licensor</TableHead>}
-                      {showAgreementEndCol && <TableHead className="hidden xl:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Agreement End</TableHead>}
-                      {showBuyBackCol && <TableHead className="hidden xl:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Buy Back</TableHead>}
-                      <TableHead className="hidden xl:table-cell text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">WTP</TableHead>
-                      <TableHead className="text-right pr-6 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Actions</TableHead>
+                      <TableHead className="hidden lg:table-cell text-(--text-faint)">Rights</TableHead>
+                      {showLicensorCol && <TableHead className="hidden lg:table-cell text-(--text-faint)">Licensor</TableHead>}
+                      {showAgreementEndCol && <TableHead className="hidden xl:table-cell text-(--text-faint)">Agreement End</TableHead>}
+                      {showBuyBackCol && <TableHead className="hidden xl:table-cell text-(--text-faint)">Buy Back</TableHead>}
+                      <TableHead className="hidden xl:table-cell text-(--text-faint)">WTP</TableHead>
+                      <TableHead className="text-right pr-6 text-(--text-faint)">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -817,14 +817,14 @@ export default function MoviesPage() {
 
                       return (
                         <TableRow key={movie.production_no} style={{ borderColor: "var(--svf-border)" }} className={cn("transition-colors group", selectedIds.has(movie.production_no) && "bg-red-500/5")}>
-                          <TableCell className="pl-4 py-3 w-10">
+                          <TableCell className="pl-4 w-10">
                             <Checkbox
                               checked={selectedIds.has(movie.production_no)}
                               onCheckedChange={() => toggleSelect(movie.production_no)}
                               aria-label={`Select ${movie.title}`}
                             />
                           </TableCell>
-                          <TableCell className="pl-2 max-w-xs py-3">
+                          <TableCell className="pl-2 max-w-xs">
                             <div className="flex items-center gap-3 min-w-0">
                               {/* Mini poster */}
                               <div style={{
@@ -852,7 +852,7 @@ export default function MoviesPage() {
                             </div>
                           </TableCell>
 
-                          <TableCell className="py-3">
+                          <TableCell>
                             <div className="flex flex-col gap-1">
                               <Badge variant="outline" className={cn("text-[10px] w-fit font-semibold px-2 py-0.5",
                                 movie.source === "acquired" ? "bg-violet-500/10 text-violet-400 border-violet-500/25"
@@ -865,18 +865,18 @@ export default function MoviesPage() {
                             </div>
                           </TableCell>
 
-                          <TableCell className="hidden sm:table-cell text-xs tabular-nums py-3" style={{ color: "var(--text-faint)" }}>
+                          <TableCell className="hidden sm:table-cell tabular-nums" style={{ color: "var(--text-faint)" }}>
                             {pv?.release_date ? new Date(pv.release_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : (movie.release_year || "—")}
                           </TableCell>
 
-                          <TableCell className="hidden md:table-cell py-3">
+                          <TableCell className="hidden md:table-cell">
                             {movie.certification ? (
                               <Badge variant="secondary" className="text-[10px] font-bold">{movie.certification}</Badge>
                             ) : <span className="text-xs" style={{ color: "var(--text-faint)" }}>—</span>}
                           </TableCell>
 
                           {showMultiVersionCol && (
-                            <TableCell className="hidden lg:table-cell py-3">
+                            <TableCell className="hidden lg:table-cell">
                               <div className="flex items-center gap-1.5">
                                 <span className="text-xs" style={{ color: "var(--text-faint)" }}>{movie.total_versions}</span>
                                 <div className="flex -space-x-1">
@@ -897,12 +897,12 @@ export default function MoviesPage() {
 
                           {showJointProdCols && (
                             <>
-                              <TableCell className="hidden lg:table-cell text-xs py-3" style={{ color: "var(--text-faint)" }}>{pv?.revenue_share || "—"}</TableCell>
-                              <TableCell className="hidden lg:table-cell text-xs py-3" style={{ color: "var(--text-faint)" }}>{movie.production_house_name || "—"}</TableCell>
+                              <TableCell className="hidden lg:table-cell" style={{ color: "var(--text-faint)" }}>{pv?.revenue_share || "—"}</TableCell>
+                              <TableCell className="hidden lg:table-cell" style={{ color: "var(--text-faint)" }}>{movie.production_house_name || "—"}</TableCell>
                             </>
                           )}
 
-                          <TableCell className="hidden lg:table-cell py-3">
+                          <TableCell className="hidden lg:table-cell">
                             <div className="flex items-center gap-1.5 text-xs">
                               <Activity className="h-3 w-3" style={{ color: "var(--text-faint)" }} />
                               <span className="font-semibold" style={{ color: "var(--st-active)" }}>{movie.total_rights - movie.expired_rights}</span>
@@ -911,24 +911,24 @@ export default function MoviesPage() {
                           </TableCell>
 
                           {showLicensorCol && (
-                            <TableCell className="hidden lg:table-cell text-xs py-3 max-w-[140px]" style={{ color: "var(--text-faint)" }}>
+                            <TableCell className="hidden lg:table-cell max-w-[140px]" style={{ color: "var(--text-faint)" }}>
                               <span title={pv?.assignor_licensor || undefined} className="line-clamp-1">{pv?.assignor_licensor || "—"}</span>
                             </TableCell>
                           )}
 
                           {showAgreementEndCol && (
-                            <TableCell className="hidden xl:table-cell py-3">
+                            <TableCell className="hidden xl:table-cell">
                               {isAcquired ? getAgreementEndBadge(pv?.agreement_end_date) : <span className="text-xs" style={{ color: "var(--text-faint)" }}>—</span>}
                             </TableCell>
                           )}
 
                           {showBuyBackCol && (
-                            <TableCell className="hidden xl:table-cell text-xs tabular-nums py-3" style={{ color: "var(--text-faint)" }}>
+                            <TableCell className="hidden xl:table-cell tabular-nums" style={{ color: "var(--text-faint)" }}>
                               {formatDate(pv?.joint_prod_buy_back_date)}
                             </TableCell>
                           )}
 
-                          <TableCell className="hidden xl:table-cell py-3">
+                          <TableCell className="hidden xl:table-cell">
                             {pv?.wtp_library ? (
                               <Badge variant="outline" className="text-[10px] font-semibold" style={{ color: "var(--st-wtp)", background: "color-mix(in oklch, var(--st-wtp) 12%, transparent)", borderColor: "color-mix(in oklch, var(--st-wtp) 28%, transparent)" }}>
                                 {pv.wtp_library}
@@ -936,7 +936,7 @@ export default function MoviesPage() {
                             ) : <span className="text-xs" style={{ color: "var(--text-faint)" }}>—</span>}
                           </TableCell>
 
-                          <TableCell className="text-right pr-6 py-3">
+                          <TableCell className="text-right pr-6">
                             <div className="flex items-center justify-end gap-1">
                               <RoleGate
                                 action="edit"

@@ -85,7 +85,7 @@ export function MultiSelectFilter({
           variant="outline"
           size="sm"
           disabled={disabled}
-          className={`h-9 ${triggerWidth} justify-start gap-1.5 text-xs font-normal bg-(--bg-raise) border-(--svf-border) hover:bg-(--hover) hover:border-(--svf-border-strong) transition-colors ${isPartial || isNoneSelected ? ACCENT_CLASSES[accent] : 'text-(--text)'}`}
+          className={`h-9 rounded-[8px] ${triggerWidth} justify-start gap-1.5 text-sm font-normal bg-(--filter-panel-bg) hover:border-(--filter-border-hover) transition-colors ${isPartial || isNoneSelected ? 'border-(--coral-border) bg-(--coral-bg) text-(--coral-text)' : 'border-(--filter-border) text-(--text)'}`}
         >
           {icon}
           <span className="truncate flex-1 text-left">{triggerLabel}</span>

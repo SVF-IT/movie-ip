@@ -25,6 +25,13 @@ function useAnimatedCounter(target: number, duration: number = 1200): number {
       return;
     }
 
+    // Honour "reduce motion": CSS can't stop a JS-driven count-up, so jump
+    // straight to the final value instead of tweening to it.
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      setDisplayValue(target);
+      return;
+    }
+
     startValueRef.current = displayValue;
     startTimeRef.current = performance.now();
 

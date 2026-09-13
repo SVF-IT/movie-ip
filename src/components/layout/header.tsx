@@ -16,7 +16,8 @@ import {
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/auth-context";
-import { LogOut, Settings, Shield, User } from "lucide-react";
+import { useSidebarCounts } from "@/hooks/use-sidebar-counts";
+import { Clock, LogOut, Settings, Shield, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -28,6 +29,8 @@ interface HeaderProps {
 export function Header({ title = "Bengali IP Management Dashboard", subtitle }: HeaderProps) {
   const router = useRouter();
   const { profile, loading, signOut, isAdmin } = useAuth();
+  const sidebarCounts = useSidebarCounts();
+  const expiringCount = sidebarCounts.expiringRights;
 
   const handleSignOut = async () => {
     try {
@@ -47,12 +50,12 @@ export function Header({ title = "Bengali IP Management Dashboard", subtitle }: 
 
   return (
     <header
-      className="flex h-[66px] shrink-0 items-center gap-4 px-6 sticky top-0 z-30"
+      className="flex h-[74px] shrink-0 items-center gap-4 px-6 sticky top-0 z-30"
       style={{
         borderBottom: "1px solid var(--svf-border)",
-        background: "color-mix(in oklch, var(--bg) 75%, transparent)",
-        backdropFilter: "blur(16px)",
-        WebkitBackdropFilter: "blur(16px)",
+        background: "var(--glass)",
+        backdropFilter: "blur(14px) saturate(1.4)",
+        WebkitBackdropFilter: "blur(14px) saturate(1.4)",
       }}
     >
       <SidebarTrigger
@@ -63,20 +66,36 @@ export function Header({ title = "Bengali IP Management Dashboard", subtitle }: 
       <div className="flex flex-1 items-center justify-between min-w-0 gap-4">
         {/* Title block */}
         <div className="min-w-0">
-          <h1
-            className="text-[19px] font-bold truncate"
-            style={{ color: "var(--text)", letterSpacing: "-0.01em", lineHeight: 1.2 }}
-          >
-            {title}
-          </h1>
           {subtitle && (
-            <p className="text-[12.5px] truncate mt-0.5" style={{ color: "var(--text-faint)" }}>
+            <p className="text-[11px] truncate" style={{ color: "var(--text-faint)" }}>
               {subtitle}
             </p>
           )}
+          <h1
+            className="dsp text-[23px] font-bold truncate"
+            style={{ color: "var(--text)", lineHeight: 1.15 }}
+          >
+            {title}
+          </h1>
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Expiring rights — moved here from the sidebar. Only shown when there
+              is something to act on, so the header stays quiet otherwise. */}
+          {expiringCount > 0 && (
+            <Link
+              href="/expiring"
+              title={`${expiringCount} rights expiring in the next 90 days`}
+              className="hidden sm:inline-flex items-center gap-2 h-9 rounded-[9px] pl-2.5 pr-3 border border-(--st-expiring)/35 bg-(--st-expiring)/10 hover:bg-(--st-expiring)/15 transition-colors"
+            >
+              <Clock className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--st-expiring)" }} />
+              <span className="text-[12.5px] font-semibold num" style={{ color: "var(--st-expiring)" }}>
+                {expiringCount}
+              </span>
+              <span className="text-[12.5px] text-(--text-dim)">Expiring rights</span>
+            </Link>
+          )}
+
           {/* Theme toggle */}
           <ThemeToggle />
 

@@ -309,13 +309,13 @@ export default function RightsPage() {
                       <SortableHeader column="movies" label="Movie" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)" />
                       <SortableHeader column="platforms" label="Platform" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden md:table-cell" />
                       <SortableHeader column="license_type" label="Type" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden lg:table-cell" />
-                      <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden lg:table-cell">Category</TableHead>
-                      <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden lg:table-cell">Nature</TableHead>
+                      <TableHead className="text-(--text-faint) hidden lg:table-cell">Category</TableHead>
+                      <TableHead className="text-(--text-faint) hidden lg:table-cell">Nature</TableHead>
                       <SortableHeader column="start_date" label="Start Date" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden lg:table-cell" />
                       <SortableHeader column="end_date" label="End Date" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)" />
-                      <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden lg:table-cell">Holdbacks</TableHead>
-                      <TableHead className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Status</TableHead>
-                      <TableHead className="text-right text-[10px] font-bold uppercase tracking-widest text-(--text-faint) pr-6">Actions</TableHead>
+                      <TableHead className="text-(--text-faint) hidden lg:table-cell">Holdbacks</TableHead>
+                      <TableHead className="text-(--text-faint)">Status</TableHead>
+                      <TableHead className="text-right text-(--text-faint) pr-6">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -323,7 +323,7 @@ export default function RightsPage() {
                       const status = getExpiryStatus(right.end_date);
                       return (
                         <TableRow key={right.id} className="border-(--svf-border)/40 hover:bg-(--hover)/30 transition-colors group">
-                          <TableCell className="pl-5 py-3.5">
+                          <TableCell className="pl-5">
                             <div className="min-w-0">
                               {right.movies ? (
                                 <Link href={`/movies/${right.movies.id}`} className="font-semibold text-sm text-(--text) hover:text-red-400 transition-colors truncate block max-w-[200px]">
@@ -333,37 +333,37 @@ export default function RightsPage() {
                               <span className="text-[10px] text-(--text-faint) font-mono md:hidden">{right.platforms?.name}</span>
                             </div>
                           </TableCell>
-                          <TableCell className="hidden md:table-cell text-sm text-(--text-faint) max-w-[130px] truncate py-3.5">
+                          <TableCell className="hidden md:table-cell text-sm text-(--text-faint) max-w-[130px] truncate">
                             {right.platforms?.name || "—"}
                           </TableCell>
-                          <TableCell className="hidden lg:table-cell text-sm text-(--text-faint) py-3.5">
+                          <TableCell className="hidden lg:table-cell text-sm text-(--text-faint)">
                             {right.platforms?.platform_type || "—"}
                           </TableCell>
-                          <TableCell className="hidden lg:table-cell text-xs text-(--text-faint) py-3.5">
+                          <TableCell className="hidden lg:table-cell text-(--text-faint)">
                             {right.category || "—"}
                           </TableCell>
-                          <TableCell className="hidden lg:table-cell text-xs text-(--text-faint) py-3.5">
+                          <TableCell className="hidden lg:table-cell text-(--text-faint)">
                             {right.nature || "—"}
                           </TableCell>
-                          <TableCell className="hidden lg:table-cell tabular-nums text-xs text-emerald-400 font-medium py-3.5">
+                          <TableCell className="hidden lg:table-cell tabular-nums text-emerald-400 font-medium">
                             {right.start_date ? format(new Date(right.start_date), "dd MMM yy") : "—"}
                           </TableCell>
-                          <TableCell className="tabular-nums text-xs text-(--text) font-medium py-3.5">
+                          <TableCell className="tabular-nums text-(--text) font-medium">
                             {right.end_date
                               ? (right.end_date.startsWith("3099") || right.end_date.startsWith("9999"))
                                 ? <span className="text-(--st-active) font-semibold">Perpetual</span>
                                 : format(new Date(right.end_date), "dd MMM yy")
                               : "—"}
                           </TableCell>
-                          <TableCell className="hidden lg:table-cell text-xs text-amber-400 max-w-50 truncate py-3.5" title={right.holdbacks || undefined}>
+                          <TableCell className="hidden lg:table-cell text-amber-400 max-w-50 truncate" title={right.holdbacks || undefined}>
                             {right.holdbacks || <span className="text-(--text-faint)">—</span>}
                           </TableCell>
-                          <TableCell className="py-3.5">
+                          <TableCell>
                             <Badge variant="outline" className={cn("text-[10px] font-semibold px-2 py-0.5 whitespace-nowrap", status.color)}>
                               {status.label}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-right pr-6 py-3.5">
+                          <TableCell className="text-right pr-6">
                             <div className="flex justify-end gap-0.5">
                               <RoleGate
                                 action="edit"

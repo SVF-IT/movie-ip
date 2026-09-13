@@ -2,6 +2,7 @@
 
 import { DisabledActionButton } from "@/components/disabled-action-button";
 import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
@@ -266,30 +267,31 @@ export default function RecensorPage() {
               )}
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="border-b border-(--svf-border)">
-                    <th className="text-left px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) w-[35%]">Movie</th>
-                    <th className="text-left px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden md:table-cell">Language</th>
-                    <th className="text-left px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden lg:table-cell">Production House</th>
-                    <th className="text-left px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden sm:table-cell">Source</th>
-                    <th className="text-center px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Status</th>
-                    <th className="text-center px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Censor Flag</th>
-                    <th className="text-right px-6 py-3 text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-(--svf-border)">
+            <div className="rounded-[16px] border border-(--tbl-border) overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[35%]">Movie</TableHead>
+                    <TableHead className="hidden md:table-cell">Language</TableHead>
+                    <TableHead className="hidden lg:table-cell">Production House</TableHead>
+                    <TableHead className="hidden sm:table-cell">Source</TableHead>
+                    <TableHead className="text-center">Status</TableHead>
+                    <TableHead className="text-center">Censor Flag</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {movies.map((movie) => (
-                    <tr
+                    <TableRow
                       key={movie.id}
                       className={cn(
-                        "group transition-colors",
-                        movie.recensor_flag ? "bg-rose-500/[0.03]" : "hover:bg-(--hover)"
+                        "group",
+                        // Flagged rows keep their rose tint; others use the shared hover.
+                        movie.recensor_flag && "bg-rose-500/[0.03]"
                       )}
                     >
                       {/* Title */}
-                      <td className="px-6 py-3.5">
+                      <TableCell>
                         <div className="flex items-center gap-2.5 min-w-0">
                           <Badge variant="outline" className="shrink-0 bg-rose-500/10 text-rose-400 border-rose-500/30 text-[10px] font-bold px-1.5 py-0.5">
                             A
@@ -306,20 +308,20 @@ export default function RecensorPage() {
                             )}
                           </div>
                         </div>
-                      </td>
+                      </TableCell>
 
                       {/* Language */}
-                      <td className="px-4 py-3.5 hidden md:table-cell text-sm text-(--text-faint)">
+                      <TableCell className="hidden md:table-cell text-(--text-faint)">
                         {movie.language_name || <span className="text-(--text-faint)">—</span>}
-                      </td>
+                      </TableCell>
 
                       {/* Production House */}
-                      <td className="px-4 py-3.5 hidden lg:table-cell text-sm text-(--text-faint) max-w-40 truncate">
+                      <TableCell className="hidden lg:table-cell text-(--text-faint) max-w-40 truncate">
                         {movie.production_house_name || <span className="text-(--text-faint)">—</span>}
-                      </td>
+                      </TableCell>
 
                       {/* Source */}
-                      <td className="px-4 py-3.5 hidden sm:table-cell">
+                      <TableCell className="hidden sm:table-cell">
                         <Badge variant="outline" className={cn(
                           "text-[10px] font-semibold px-2 py-0.5",
                           movie.source === "home_production"
@@ -328,10 +330,10 @@ export default function RecensorPage() {
                         )}>
                           {movie.source === "home_production" ? "Home" : "Acquired"}
                         </Badge>
-                      </td>
+                      </TableCell>
 
                       {/* Status badge */}
-                      <td className="px-4 py-3.5 text-center">
+                      <TableCell className="text-center">
                         {movie.recensor_flag ? (
                           <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-400 bg-rose-500/10 border border-rose-500/25 px-2.5 py-1 rounded-full">
                             <Clock className="h-3 w-3" />Pending
@@ -341,10 +343,10 @@ export default function RecensorPage() {
                             <CheckCircle2 className="h-3 w-3" />Done
                           </span>
                         )}
-                      </td>
+                      </TableCell>
 
                       {/* Toggle */}
-                      <td className="px-4 py-3.5 text-center">
+                      <TableCell className="text-center">
                         {togglingId === movie.id ? (
                           <Loader2 className="h-4 w-4 animate-spin text-(--text-faint) mx-auto" />
                         ) : canEditMovie ? (
@@ -369,10 +371,10 @@ export default function RecensorPage() {
                             <TooltipContent>You don&apos;t have permission to change censor status.</TooltipContent>
                           </Tooltip>
                         )}
-                      </td>
+                      </TableCell>
 
                       {/* Edit */}
-                      <td className="px-6 py-3.5 text-right">
+                      <TableCell className="text-right">
                         {canEditMovie ? (
                           <Button
                             variant="ghost"
@@ -391,11 +393,11 @@ export default function RecensorPage() {
                             <span className="text-xs">Edit</span>
                           </DisabledActionButton>
                         )}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           )}
       </div>

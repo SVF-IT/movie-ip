@@ -306,10 +306,10 @@ export default function DubbedPage() {
           <Table className="min-w-max">
             <TableHeader style={{ background: "var(--bg-deep)" }}>
               <TableRow className="border-(--svf-border) hover:bg-transparent">
-                <TableHead className="w-65 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Title</TableHead>
-                <TableHead className="w-20 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Source</TableHead>
-                <TableHead className="w-16 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Year</TableHead>
-                <TableHead className="w-36 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">Status</TableHead>
+                <TableHead className="w-65 text-(--text-faint)">Title</TableHead>
+                <TableHead className="w-20 text-(--text-faint)">Source</TableHead>
+                <TableHead className="w-16 text-(--text-faint)">Year</TableHead>
+                <TableHead className="w-36 text-(--text-faint)">Status</TableHead>
                 {langColumns.map((lc) => (
                   <TableHead key={lc} className="text-center w-24 text-[10px] font-bold uppercase tracking-widest text-(--text-faint) h-9">{lc}</TableHead>
                 ))}

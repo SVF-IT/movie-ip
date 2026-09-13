@@ -18,7 +18,6 @@ import {
   BarChart3,
   Bell,
   Building2,
-  Clock,
   Compass,
   Drama,
   Factory,
@@ -51,7 +50,6 @@ const NAV_BASE = [
       { title: "Movies", icon: Film, href: "/movies" },
       { title: "Censor Tracker", icon: ShieldAlert, href: "/recensor" },
       { title: "Rights Management", icon: Scale, href: "/rights" },
-      { title: "Expiring Rights", icon: Clock, href: "/expiring", badgeKey: "expiringRights" as const },
       { title: "BARC", icon: BarChart3, href: "/barc" },
       { title: "Dubbed", icon: Languages, href: "/dubbed" },
     ],
@@ -134,26 +132,42 @@ export function AppSidebar() {
   return (
     <Sidebar
       collapsible="icon"
-      style={{ background: "var(--bg-deep)", borderRight: "1px solid var(--svf-border)" }}
-      className="backdrop-blur-xl"
+      style={{
+        // v5: wine base + red glow top-left, gold glow bottom-right. Dark in both themes.
+        background: `
+          radial-gradient(38% 16% at 18% 7%, rgba(245,35,46,.42), transparent 70%),
+          radial-gradient(90% 45% at 15% 0%, rgba(245,35,46,.35), transparent 55%),
+          radial-gradient(70% 40% at 110% 100%, rgba(224,160,32,.18), transparent 60%),
+          linear-gradient(180deg, var(--wine), var(--wine-2))`,
+        borderRight: "1px solid rgba(255,255,255,.07)",
+      }}
+      className="backdrop-blur-xl [&_*]:border-white/10"
     >
       {/* ── Logo header ── */}
-      {/* h-[66px] matches the main Header, so both bottom borders line up. */}
+      {/* h-[74px] matches the main Header, so both bottom borders line up. */}
       <SidebarHeader
-        style={{ borderBottom: "1px solid var(--svf-border)" }}
-        className="h-[66px] shrink-0 justify-center bg-transparent px-[18px] py-0 group-data-[collapsible=icon]:px-2"
+        style={{ borderBottom: "1px solid rgba(255,255,255,.08)" }}
+        className="h-[74px] shrink-0 justify-center bg-transparent px-[18px] py-0 group-data-[collapsible=icon]:px-2"
       >
         <Link href="/" className="flex items-center gap-2.5 hover:opacity-90 transition-opacity">
-          <div style={{ filter: "drop-shadow(0 0 14px color-mix(in oklch, var(--svf-accent) 35%, transparent))" }}>
+          {/* Bare SVF logo — no tile. The reddish glow comes from a drop-shadow on
+              the mark itself, so the artwork sits directly on the wine background. */}
+          <div
+            style={{
+              flexShrink: 0,
+              filter: "drop-shadow(0 6px 20px rgba(245,35,46,.55)) drop-shadow(0 0 10px rgba(245,35,46,.35))",
+            }}
+          >
             <Image src="/svf-logo.png" alt="SVF Entertainment" width={44} height={44}
               className="object-contain group-data-[collapsible=icon]:hidden" />
             <Image src="/svf-logo.png" alt="SVF" width={28} height={28}
               className="object-contain hidden group-data-[collapsible=icon]:block" />
           </div>
           <div className="leading-tight group-data-[collapsible=icon]:hidden">
-            <div style={{ fontSize: 13.5, fontWeight: 700, letterSpacing: "0.02em", color: "var(--text)" }}>
+            <div className="dsp" style={{ fontSize: 15, fontWeight: 700, letterSpacing: "-0.01em", color: "#fff" }}>
               Bengali Movie IP
             </div>
+            <div style={{ fontSize: 11, color: "#C79398", marginTop: 1 }}>SVF Entertainment</div>
           </div>
         </Link>
       </SidebarHeader>
@@ -170,8 +184,7 @@ export function AppSidebar() {
             <SidebarGroup key={section.group} className="p-0 mb-5">
               {/* Group label */}
               <div className="flex items-center gap-2 px-3 mb-2">
-                <span style={{ width: 5, height: 5, borderRadius: 9, background: section.accent, flexShrink: 0 }} />
-                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--text-faint)" }}>
+                <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.2em", textTransform: "uppercase", color: "#9A6167" }}>
                   {section.group}
                 </span>
               </div>
@@ -194,34 +207,34 @@ export function AppSidebar() {
                               position: "relative",
                               display: "flex",
                               alignItems: "center",
-                              gap: 11,
+                              gap: 13,
                               width: "100%",
                               padding: "0 12px",
                               height: 40,
-                              borderRadius: 9,
+                              borderRadius: 12,
                               cursor: "pointer",
                               fontSize: 13.5,
                               fontWeight: active ? 600 : 500,
                               textDecoration: "none",
                               background: active
-                                ? section.accent
+                                ? "linear-gradient(100deg, rgba(245,35,46,.92), rgba(212,14,25,.78))"
                                 : "transparent",
-                              color: active ? "#fff" : "var(--text-dim)",
+                              color: active ? "#fff" : "#D9BCBF",
                               boxShadow: active
-                                ? `0 2px 10px color-mix(in oklch, ${section.accent} 40%, transparent)`
+                                ? "0 10px 24px -10px rgba(245,35,46,.8), inset 0 1px 0 rgba(255,255,255,.25)"
                                 : "none",
                               transition: "all .18s ease",
                             }}
                             onMouseEnter={(e) => {
                               if (!active) {
-                                (e.currentTarget as HTMLElement).style.background = "var(--hover)";
-                                (e.currentTarget as HTMLElement).style.color = "var(--text)";
+                                (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,.06)";
+                                (e.currentTarget as HTMLElement).style.color = "#fff";
                               }
                             }}
                             onMouseLeave={(e) => {
                               if (!active) {
                                 (e.currentTarget as HTMLElement).style.background = "transparent";
-                                (e.currentTarget as HTMLElement).style.color = "var(--text-dim)";
+                                (e.currentTarget as HTMLElement).style.color = "#D9BCBF";
                               }
                             }}
                           >
@@ -234,8 +247,8 @@ export function AppSidebar() {
                                 bottom: 9,
                                 width: 3,
                                 borderRadius: 3,
-                                background: section.accent,
-                                boxShadow: `0 0 8px ${section.accent}`,
+                                background: "var(--red)",
+                                boxShadow: "0 0 8px var(--red)",
                               }} />
                             )}
                             <item.icon style={{ width: 17, height: 17, flexShrink: 0 }} />
@@ -253,11 +266,11 @@ export function AppSidebar() {
                                 alignItems: "center",
                                 justifyContent: "center",
                                 borderRadius: 999,
-                                color: active ? section.accent : "var(--text-faint)",
+                                color: active ? "#fff" : "#D9BCBF",
                                 background: active
                                   ? "rgba(255,255,255,0.25)"
-                                  : "var(--bg-deep)",
-                                border: `1px solid ${active ? "rgba(255,255,255,0.3)" : "var(--svf-border)"}`,
+                                  : "rgba(0,0,0,0.28)",
+                                border: `1px solid ${active ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.10)"}`,
                               }}>
                                 {item.badge}
                               </span>
@@ -276,7 +289,7 @@ export function AppSidebar() {
 
       {/* ── Footer / User ── */}
       <SidebarFooter
-        style={{ borderTop: "1px solid var(--svf-border)" }}
+        style={{ borderTop: "1px solid rgba(255,255,255,.08)" }}
         className="bg-transparent p-3.5"
       >
         <div style={{
@@ -285,8 +298,8 @@ export function AppSidebar() {
           gap: 10,
           padding: "8px 10px",
           borderRadius: 10,
-          background: "var(--panel)",
-          border: "1px solid var(--svf-border)",
+          background: "rgba(0,0,0,.25)",
+          border: "1px solid rgba(255,255,255,.08)",
         }}>
           {/* Avatar initials */}
           <div style={{
@@ -301,10 +314,10 @@ export function AppSidebar() {
           </div>
 
           <div style={{ flex: 1, minWidth: 0, lineHeight: 1.25 }} className="group-data-[collapsible=icon]:hidden">
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {profile?.full_name || "User"}
             </div>
-            <div style={{ fontSize: 10.5, color: "var(--text-faint)", textTransform: "capitalize" }}>
+            <div style={{ fontSize: 10.5, color: "#C79398", textTransform: "capitalize" }}>
               {profile?.role || "Member"}
             </div>
           </div>
@@ -314,7 +327,7 @@ export function AppSidebar() {
             title="Sign out"
             style={{
               background: "none", border: "none",
-              color: "var(--text-faint)", cursor: "pointer",
+              color: "#C79398", cursor: "pointer",
               padding: 5, display: "flex", borderRadius: 7,
               transition: "color .18s, background .18s",
             }}
@@ -323,7 +336,7 @@ export function AppSidebar() {
               (e.currentTarget as HTMLElement).style.background = "var(--hover)";
             }}
             onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.color = "var(--text-faint)";
+              (e.currentTarget as HTMLElement).style.color = "#C79398";
               (e.currentTarget as HTMLElement).style.background = "none";
             }}
           >

@@ -26,8 +26,8 @@ export function SortableHeader({
   return (
     <TableHead
       className={cn(
-        "cursor-pointer select-none hover:bg-muted/50 transition-colors",
-        isActive && "text-foreground",
+        "cursor-pointer select-none hover:bg-(--tbl-row-hover) transition-colors",
+        isActive && "text-(--text)",
         className
       )}
       onClick={() => onSort(column)}
