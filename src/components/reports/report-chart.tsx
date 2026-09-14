@@ -275,12 +275,18 @@ export function ReportChart({ templateId, data }: ReportChartProps) {
                   <tr key={idx} className="border-b last:border-0 hover:bg-muted/30">
                     <td className="py-2 px-3">
                       <div className="flex items-center gap-2">
-                        <img
-                          src={`https://fileapi.mni.agency/api/FileFolderManager/PreviewFile?path=%2Fmnt%2Fmni%2FMoviePoster%2F${encodeURIComponent(movie.title as string)}.jpg&userId=1&platform=WebMicrosoft%20Windows%20NT%2010.0.20348.0`}
-                          alt={movie.title as string}
-                          className="h-8 w-6 rounded object-cover flex-shrink-0 hidden sm:block"
-                          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                        />
+                        {movie.poster_url ? (
+                          <img
+                            src={movie.poster_url as string}
+                            alt={movie.title as string}
+                            className="h-8 w-6 rounded object-cover flex-shrink-0 hidden sm:block"
+                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                          />
+                        ) : (
+                          <div className="h-8 w-6 rounded flex-shrink-0 hidden sm:flex items-center justify-center bg-muted/50">
+                            <Film className="h-3 w-3 text-muted-foreground" />
+                          </div>
+                        )}
                         <span className="font-medium truncate max-w-[200px]">{movie.title as string}</span>
                       </div>
                     </td>

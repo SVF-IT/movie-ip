@@ -1,0 +1,36 @@
+import { createClient as createServerClient } from "@/lib/supabase/server";
+
+/**
+ * Poster backfill is restricted to the `editor` role.
+ *
+ * Hiding the button is not enough — these routes write to storage and to
+ * movies.poster_url, so the role is re-checked server-side against the
+ * caller's session on every request.
+ *
+ * Returns null when the caller is allowed, or the response to send back.
+ */
+export async function requireEditor(): Promise<Response | null> {
+  const serverClient = await createServerClient();
+  const {
+    data: { user },
+  } = await serverClient.auth.getUser();
+
+  if (!user) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { data: profile } = await serverClient
+    .from("user_profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || profile.role !== "editor") {
+    return Response.json(
+      { error: "Only editors can fetch posters." },
+      { status: 403 }
+    );
+  }
+
+  return null;
+}

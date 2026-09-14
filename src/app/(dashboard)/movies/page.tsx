@@ -5,6 +5,7 @@ import { ComprehensiveCSVImportDialog } from "@/components/import-export/compreh
 import type { ExportFieldDef } from "@/components/import-export/data-export-dialog";
 import { BulkCertificatesUploadDialog } from "@/components/movies/bulk-certificates-upload-dialog";
 import { BulkPostersUploadDialog } from "@/components/movies/bulk-posters-upload-dialog";
+import { FetchPostersDialog } from "@/components/movies/fetch-posters-dialog";
 import { SpecialEventsBanner } from "@/components/movies/special-events-banner";
 import { RoleGate } from "@/components/role-gate";
 import { Badge } from "@/components/ui/badge";
@@ -50,6 +51,8 @@ import * as XLSX from "xlsx";
 
 export default function MoviesPage() {
   const { profile } = useAuth();
+  // "Fetch Missing" posters is an editor-only tool — not admin, not legal.
+  const isEditor = profile?.role === "editor";
   const canBulkUploadCertificates = profile?.role === "admin" || profile?.role === "editor";
 
   const [movies, setMovies] = useState<GroupedMovie[]>([]);
@@ -76,6 +79,7 @@ export default function MoviesPage() {
   const [exportWithPlatformRights, setExportWithPlatformRights] = useState(false);
   const [exportingXlsx, setExportingXlsx] = useState(false);
   const [showBulkPostersDialog, setShowBulkPostersDialog] = useState(false);
+  const [showFetchPostersDialog, setShowFetchPostersDialog] = useState(false);
   const [showBulkCertificatesDialog, setShowBulkCertificatesDialog] = useState(false);
   const [view, setView] = useState<"list" | "grid">("list");
   const [anniversaryEnabled, setAnniversaryEnabled] = useState(false);
@@ -496,6 +500,12 @@ export default function MoviesPage() {
             <ImageIcon className="h-4 w-4" /><span>Bulk Posters</span>
           </Button>
         </RoleGate>
+        {/* Poster backfill is restricted to the editor role (enforced again server-side). */}
+        {isEditor && (
+          <Button variant="outline" size="sm" className="gap-2 h-9 px-4 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover)" onClick={() => setShowFetchPostersDialog(true)}>
+            <ImageIcon className="h-4 w-4" /><span>Fetch Missing</span>
+          </Button>
+        )}
         {canBulkUploadCertificates ? (
           <Button variant="outline" size="sm" className="gap-2 h-9 px-4 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover)" onClick={() => setShowBulkCertificatesDialog(true)}>
             <ShieldCheck className="h-4 w-4" /><span>Bulk Certificates</span>
@@ -713,12 +723,14 @@ export default function MoviesPage() {
                   onMouseEnter={e => (e.currentTarget as HTMLElement).style.transform = "translateY(-4px)"}
                   onMouseLeave={e => (e.currentTarget as HTMLElement).style.transform = "none"}
                 >
-                  <img
-                    src={pv?.poster_url || `https://fileapi.mni.agency/api/FileFolderManager/PreviewFile?path=%2Fmnt%2Fmni%2FMoviePoster%2F${encodeURIComponent(movie.title)}.jpg&userId=1&platform=WebMicrosoft%20Windows%20NT%2010.0.20348.0`}
-                    alt={movie.title}
-                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
-                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                  />
+                  {pv?.poster_url && (
+                    <img
+                      src={pv.poster_url}
+                      alt={movie.title}
+                      style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                    />
+                  )}
                   {movie.production_no && !movie.production_no.startsWith("single_") && (
                     <span className="absolute top-2 left-2" style={{ fontFamily: "var(--font-mono)", fontSize: 9, letterSpacing: "0.07em", color: "rgba(255,255,255,0.55)" }}>
                       {movie.production_no}
@@ -832,12 +844,14 @@ export default function MoviesPage() {
                                 background: `linear-gradient(150deg, oklch(0.42 0.13 ${hue}) 0%, oklch(0.26 0.10 ${hue}) 42%, oklch(0.17 0.06 ${hue2}) 100%)`,
                                 border: "1px solid var(--svf-border)", position: "relative", overflow: "hidden",
                               }}>
-                                <img
-                                  src={pv?.poster_url || `https://fileapi.mni.agency/api/FileFolderManager/PreviewFile?path=%2Fmnt%2Fmni%2FMoviePoster%2F${encodeURIComponent(movie.title)}.jpg&userId=1&platform=WebMicrosoft%20Windows%20NT%2010.0.20348.0`}
-                                  alt={movie.title}
-                                  style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
-                                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                                />
+                                {pv?.poster_url && (
+                                  <img
+                                    src={pv.poster_url}
+                                    alt={movie.title}
+                                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+                                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                                  />
+                                )}
                                 <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "45%", background: "linear-gradient(to top, rgba(0,0,0,0.65), transparent)" }} />
                               </div>
                               <div className="min-w-0">
@@ -970,6 +984,7 @@ export default function MoviesPage() {
 
 
       <BulkPostersUploadDialog open={showBulkPostersDialog} onOpenChange={setShowBulkPostersDialog} onSuccess={() => fetchMovies()} />
+      {isEditor && <FetchPostersDialog open={showFetchPostersDialog} onOpenChange={setShowFetchPostersDialog} onSuccess={() => fetchMovies()} />}
       {canBulkUploadCertificates && (
         <BulkCertificatesUploadDialog open={showBulkCertificatesDialog} onOpenChange={setShowBulkCertificatesDialog} onSuccess={() => fetchMovies()} />
       )}

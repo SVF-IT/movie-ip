@@ -70,9 +70,11 @@ import { useEffect, useRef, useState } from "react";
 function PosterImage({ title, posterUrl }: { title: string; posterUrl?: string }) {
   const [failed, setFailed] = useState(false);
   const initials = title.split(" ").slice(0, 2).map(w => w[0]?.toUpperCase() ?? "").join("");
-  const src = posterUrl || `https://fileapi.mni.agency/api/FileFolderManager/PreviewFile?path=%2Fmnt%2Fmni%2FMoviePoster%2F${encodeURIComponent(title)}.jpg&userId=1&platform=WebMicrosoft%20Windows%20NT%2010.0.20348.0`;
+  const src = posterUrl;
+  const hasPoster = Boolean(src) && !failed;
 
   const handleDownload = async () => {
+    if (!src) return;
     try {
       const res = await fetch(src);
       const blob = await res.blob();
@@ -92,7 +94,7 @@ function PosterImage({ title, posterUrl }: { title: string; posterUrl?: string }
 
   return (
     <div className="relative w-28 aspect-2/3 rounded-[12px] overflow-hidden shadow-2xl ring-1 ring-(--svf-border) group">
-      {!failed ? (
+      {hasPoster ? (
         <img
           src={src}
           alt={title}
@@ -105,8 +107,8 @@ function PosterImage({ title, posterUrl }: { title: string; posterUrl?: string }
           <span className="text-lg font-bold" style={{ color: "var(--text-faint)" }}>{initials}</span>
         </div>
       )}
-      {!failed && <div className="absolute inset-0 bg-linear-to-t from-black/40 to-transparent pointer-events-none" />}
-      {!failed && (
+      {hasPoster && <div className="absolute inset-0 bg-linear-to-t from-black/40 to-transparent pointer-events-none" />}
+      {hasPoster && (
         <button
           type="button"
           onClick={handleDownload}
