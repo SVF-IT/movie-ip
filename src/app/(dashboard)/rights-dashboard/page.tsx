@@ -32,6 +32,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
+import { canBypassApproval } from "@/lib/types/database";
 
 type DashboardMode = 'satellite' | 'internet' | 'other' | 'clip'
 
@@ -44,7 +45,7 @@ type OtherActiveCard = 'open_titles' | 'expiring' | 'active'
 
 export default function RightsDashboardPage() {
   const { profile } = useAuth()
-  const isLegalOrAdmin = profile?.role === 'legal' || profile?.role === 'admin'
+  const isLegalOrAdmin = canBypassApproval(profile?.role)
 
   const [mode, setMode] = useState<DashboardMode>('satellite')
   const [fullPageView, setFullPageView] = useState(false)

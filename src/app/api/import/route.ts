@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { isEditorRole } from "@/lib/types/database";
 import Papa from "papaparse";
 
 export async function POST(request: Request) {
@@ -19,7 +20,7 @@ export async function POST(request: Request) {
       .eq("id", user.id)
       .single();
 
-    if (!profile || !["admin", "editor"].includes(profile.role)) {
+    if (!profile || !isEditorRole(profile.role)) {
       return NextResponse.json(
         { message: "Only admins and editors can import data" },
         { status: 403 }

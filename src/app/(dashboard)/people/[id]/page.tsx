@@ -42,6 +42,7 @@ import {
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { isAdminRole, isEditorRole } from "@/lib/types/database";
 
 interface MovieEntry {
   id: string;
@@ -70,7 +71,7 @@ export default function PersonDetailPage() {
   const router = useRouter();
   const personId = params.id as string;
   const { profile } = useAuth();
-  const canEdit = profile?.role === "admin" || profile?.role === "legal" || profile?.role === "editor";
+  const canEdit = isAdminRole(profile?.role) || isEditorRole(profile?.role) || profile?.role === "legal";
 
   const [person, setPerson] = useState<PersonWithStats | null>(null);
   const [movies, setMovies] = useState<MovieEntry[]>([]);

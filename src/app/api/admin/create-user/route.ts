@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { isAdminRole } from "@/lib/types/database";
 import { createUserSchema } from "@/lib/validations/schemas";
 import { adminLimiter } from "@/lib/utils/rate-limiter";
 import { notifyUserCreated } from "@/lib/email/notification-service";
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
       .eq("id", currentUser.id)
       .single();
 
-    if (!adminProfile || adminProfile.role !== "admin") {
+    if (!adminProfile || !isAdminRole(adminProfile.role)) {
       return NextResponse.json(
         { message: "Only administrators can create users" },
         { status: 403 }

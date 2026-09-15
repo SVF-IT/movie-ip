@@ -29,6 +29,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ALL_ROLES, isAdminRole } from "@/lib/types/database";
 
 const categoryOrder = ["alerts", "activity", "account", "special_events"];
 
@@ -416,7 +417,7 @@ export default function NotificationPreferencesPage() {
   const [saving, setSaving] = useState<string | null>(null);
   const toast = useAppToast();
 
-  const isAdmin = profile?.role === "admin";
+  const isAdmin = isAdminRole(profile?.role);
 
   useEffect(() => {
     const loadData = async () => {
@@ -774,8 +775,8 @@ export default function NotificationPreferencesPage() {
 
                               {/* Admin role filter — aligned grid, full names in bold */}
                               {isAdminView && !isAlwaysOn && (
-                                <div className="grid grid-cols-5 gap-1.5 mt-3 max-w-xs">
-                                  {["admin", "legal", "it", "editor", "viewer"].map(role => {
+                                <div className="grid grid-cols-3 gap-1.5 mt-3 max-w-xs">
+                                  {ALL_ROLES.map(role => {
                                     const isActive = item.role_filters?.includes(role);
                                     const isChanging = saving === `${notificationType}-${role}`;
                                     return (
@@ -791,7 +792,7 @@ export default function NotificationPreferencesPage() {
                                           ${(!item.is_enabled || isChanging) ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}
                                         `}
                                       >
-                                        {isChanging ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : role}
+                                        {isChanging ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : role.replace(/_/g, " ")}
                                       </button>
                                     );
                                   })}

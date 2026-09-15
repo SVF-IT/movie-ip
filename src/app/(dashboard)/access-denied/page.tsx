@@ -19,6 +19,10 @@ const REASON_COPY: Record<string, { label: string; description: string }> = {
     label: "Editor access required",
     description: "This section is restricted to editors.",
   },
+  barc: {
+    label: "BARC access required",
+    description: "BARC ratings data is restricted to administrators and data analysts.",
+  },
 };
 
 function AccessDeniedContent() {

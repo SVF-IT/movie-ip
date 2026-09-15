@@ -44,6 +44,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { isAdminRole, isEditorRole } from "@/lib/types/database";
 
 const PEOPLE_EXPORT_FIELDS: ExportFieldDef[] = [
   { key: "name", label: "Name" },
@@ -61,7 +62,7 @@ const selectTriggerCls = "bg-(--bg-raise)/40 border-(--svf-border) text-(--text)
 
 export default function PeoplePage() {
   const { profile } = useAuth();
-  const canEdit = profile?.role === "admin" || profile?.role === "legal" || profile?.role === "editor";
+  const canEdit = isAdminRole(profile?.role) || isEditorRole(profile?.role) || profile?.role === "legal";
 
   const [people, setPeople] = useState<PersonWithStats[]>([]);
   const [totalCount, setTotalCount] = useState(0);

@@ -1,5 +1,6 @@
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
+import { ALL_ROLES } from '@/lib/types/database'
 import Papa from 'papaparse'
 
 // ── Column definitions ────────────────────────────────────────────────────────
@@ -67,7 +68,8 @@ export async function GET(request: Request) {
 
     const { data: profile } = await serverClient.from('user_profiles').select('role').eq('id', user.id).single()
 
-    if (!profile || !['admin', 'editor', 'legal', 'viewer'].includes(profile.role)) {
+    // Every assignable role may export; the check exists to reject unknown/stale roles.
+    if (!profile || !ALL_ROLES.includes(profile.role)) {
       return NextResponse.json({ message: 'You do not have permission to export data' }, { status: 403 })
     }
 

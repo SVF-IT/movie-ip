@@ -34,7 +34,7 @@ import { useMultiSelectFilterState } from "@/hooks/use-multi-select-filter-state
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { getDistinctCertifications, getPlatforms } from "@/lib/api/dashboard";
 import { getBulkMoviePlatformRights, getGroupedMovies, getLanguages } from "@/lib/api/movies";
-import type { GroupedMovie, MovieLanguageVersion, Platform, PlatformRight } from "@/lib/types/database";
+import { isAdminRole, isEditorRole, type GroupedMovie, type MovieLanguageVersion, type Platform, type PlatformRight } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
 import {
   Activity,
@@ -52,8 +52,8 @@ import * as XLSX from "xlsx";
 export default function MoviesPage() {
   const { profile } = useAuth();
   // "Fetch Missing" posters is an editor-only tool — not admin, not legal.
-  const isEditor = profile?.role === "editor";
-  const canBulkUploadCertificates = profile?.role === "admin" || profile?.role === "editor";
+  const isEditor = isEditorRole(profile?.role);
+  const canBulkUploadCertificates = isAdminRole(profile?.role) || isEditorRole(profile?.role);
 
   const [movies, setMovies] = useState<GroupedMovie[]>([]);
   const [allFilteredMovies, setAllFilteredMovies] = useState<GroupedMovie[]>([]);

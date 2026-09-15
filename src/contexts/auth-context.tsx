@@ -2,7 +2,7 @@
 
 import { getUserProfile } from "@/lib/api/auth";
 import { createClient } from "@/lib/supabase/client";
-import { UserProfile, UserRole } from "@/lib/types/database";
+import { isAdminRole, UserProfile, UserRole } from "@/lib/types/database";
 import { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
 import {
   createContext,
@@ -196,7 +196,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setMustChangePassword(false);
   };
 
-  const isAdmin = profile?.role === "admin";
+  // super_admin carries admin-level reach everywhere admin does.
+  const isAdmin = isAdminRole(profile?.role);
 
   return (
     <AuthContext.Provider

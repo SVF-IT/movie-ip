@@ -35,7 +35,7 @@ import { useSortableTable } from "@/hooks/use-sortable-table";
 import { submitRightChange } from "@/lib/api/pending-changes";
 import { getAllRights } from "@/lib/api/rights";
 import { createClient } from "@/lib/supabase/client";
-import type { PlatformRight } from "@/lib/types/database";
+import { isAdminRole, isEditorRole, type PlatformRight } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
 import { differenceInDays, format } from "date-fns";
 import {
@@ -97,7 +97,7 @@ export default function RightsPage() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const { profile } = useAuth();
-  const canRequestDelete = profile?.role === "admin" || profile?.role === "editor";
+  const canRequestDelete = isAdminRole(profile?.role) || isEditorRole(profile?.role);
 
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [exportData, setExportData] = useState<RightWithDetails[]>([]);

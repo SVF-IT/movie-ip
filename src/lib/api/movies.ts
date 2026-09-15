@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { canBypassApproval } from "@/lib/types/database";
 import type {
   MovieWithDetails,
   PlatformRight,
@@ -315,7 +316,9 @@ export async function createMovie(
   let approvalStatus: "pending" | "approved" = "pending";
   if (user?.id) {
     const { data: profile } = await supabase.from("user_profiles").select("role").eq("id", user.id).single();
-    if (profile?.role === "legal" || profile?.role === "admin") approvalStatus = "approved";
+    // admin tier and legal apply changes directly. data_analyst is editor-shaped and
+    // deliberately still goes through approval.
+    if (canBypassApproval(profile?.role)) approvalStatus = "approved";
   }
 
   const { data, error } = await supabase

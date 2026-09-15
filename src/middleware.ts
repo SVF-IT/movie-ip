@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isAdminRole, isEditorRole } from "@/lib/types/database";
 
 // Routes that don't require authentication
 const publicRoutes = ["/login"];
@@ -104,23 +105,36 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
+    // super_admin carries admin-level reach everywhere admin does.
+    const isAdminTier = isAdminRole(role);
+
     // ── Admin-only routes ──────────────────────────────────────────────────
     if (adminRoutes.some((route) => pathname.startsWith(route))) {
-      if (role !== "admin") {
+      if (!isAdminTier) {
         return redirectToAccessDenied(request, "admin", pathname);
+      }
+    }
+
+    // ── BARC routes (admin tier + data_analyst) ───────────────────────────
+    // BARC data is licensed, so editor, legal and viewer are blocked outright.
+    if (pathname.startsWith("/barc")) {
+      if (!isAdminTier && role !== "data_analyst") {
+        return redirectToAccessDenied(request, "barc", pathname);
       }
     }
 
     // ── Legal-only routes (legal + admin) ─────────────────────────────────
     if (pathname.startsWith("/legal-approvals")) {
-      if (role !== "legal" && role !== "admin") {
+      if (role !== "legal" && !isAdminTier) {
         return redirectToAccessDenied(request, "legal", pathname);
       }
     }
 
-    // ── Editor-only routes ────────────────────────────────────────────────
+    // ── Editor-tier routes ────────────────────────────────────────────────
+    // data_analyst is editor-shaped: its changes queue for approval, so it has a
+    // submissions list of its own and the sidebar shows that group.
     if (pathname.startsWith("/my-submissions")) {
-      if (role !== "editor") {
+      if (!isEditorRole(role)) {
         return redirectToAccessDenied(request, "editor", pathname);
       }
     }

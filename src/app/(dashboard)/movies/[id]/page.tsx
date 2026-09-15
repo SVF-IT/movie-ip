@@ -35,7 +35,7 @@ import { getMovieRightsOwned } from "@/lib/api/movie-rights";
 import { deleteMovie, getMovieById, getMovieExpiredRights, getMovieRights, getMovieVersions } from "@/lib/api/movies";
 import { submitRightChange } from "@/lib/api/pending-changes";
 import { deleteRight } from "@/lib/api/rights";
-import type { MovieLanguageVersion, MovieRight, MovieWithDetails, PlatformRight } from "@/lib/types/database";
+import { isAdminRole, isEditorRole, type MovieLanguageVersion, type MovieRight, type MovieWithDetails, type PlatformRight } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import {
@@ -247,8 +247,11 @@ export default function MovieDetailPage() {
     window.setTimeout(() => { isClickScrolling.current = false; }, 600);
   };
 
-  const canDelete = profile?.role === "admin" || profile?.role === "legal" || (profile?.role === "editor" && movie?.approval_status !== "approved");
-  const canRequestDelete = profile?.role === "admin" || profile?.role === "legal" || profile?.role === "editor";
+  // super_admin mirrors admin; data_analyst is editor-shaped, so it requests rather than deletes.
+  const isAdminTier = isAdminRole(profile?.role);
+  const isEditorTier = isEditorRole(profile?.role);
+  const canDelete = isAdminTier || profile?.role === "legal" || (isEditorTier && movie?.approval_status !== "approved");
+  const canRequestDelete = isAdminTier || profile?.role === "legal" || isEditorTier;
 
   const handleDelete = async () => {
     if (!movie) return;
@@ -268,7 +271,7 @@ export default function MovieDetailPage() {
     if (!requestDeletingRight || !profile || !movie) return;
     setIsSubmittingDelete(true);
     try {
-      if (profile.role === "admin" || profile.role === "legal") {
+      if (isAdminTier || profile.role === "legal") {
         await deleteRight(requestDeletingRight.id);
         setRights(prev => prev.filter(r => r.id !== requestDeletingRight.id));
         toast.success("Right deleted successfully");
@@ -1023,11 +1026,11 @@ export default function MovieDetailPage() {
         open={!!requestDeletingRight}
         onOpenChange={(open) => !open && setRequestDeletingRight(null)}
         onConfirm={handleDeleteRightRequest}
-        title={profile?.role === "admin" || profile?.role === "legal" ? "Delete Right" : "Request Deletion"}
-        description={profile?.role === "admin" || profile?.role === "legal"
+        title={isAdminTier || profile?.role === "legal" ? "Delete Right" : "Request Deletion"}
+        description={isAdminTier || profile?.role === "legal"
           ? `Are you sure you want to delete the right on "${requestDeletingRight?.platforms?.name}"? This cannot be undone.`
           : `Are you sure you want to request deletion of this right on "${requestDeletingRight?.platforms?.name}"? This will go through the approval process.`}
-        confirmText={profile?.role === "admin" || profile?.role === "legal" ? "Delete" : "Request Delete"}
+        confirmText={isAdminTier || profile?.role === "legal" ? "Delete" : "Request Delete"}
         isLoading={isSubmittingDelete}
       />
     </div>

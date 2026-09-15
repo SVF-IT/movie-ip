@@ -19,7 +19,7 @@ import { useSortableTable } from "@/hooks/use-sortable-table";
 import { getExpiringRights } from "@/lib/api/movies";
 import { getPlatforms } from "@/lib/api/dashboard";
 import { submitRightChange } from "@/lib/api/pending-changes";
-import type { ExpiringRight, Platform } from "@/lib/types/database";
+import { isAdminRole, isEditorRole, type ExpiringRight, type Platform } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
 import { addDays as addDaysFns, format } from "date-fns";
 import {
@@ -61,7 +61,7 @@ export default function ExpiringRightsPage() {
   const [deletingRight, setDeletingRight] = useState<ExpiringRight | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const canDelete = profile?.role === "admin" || profile?.role === "editor";
+  const canDelete = isAdminRole(profile?.role) || isEditorRole(profile?.role);
 
   const handleDeleteRequest = async () => {
     if (!deletingRight || !profile) return;

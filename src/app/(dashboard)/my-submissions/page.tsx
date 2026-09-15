@@ -31,6 +31,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { isEditorRole } from "@/lib/types/database";
 
 // ── Shared status badge ────────────────────────────────────────────────────────
 
@@ -337,7 +338,7 @@ export default function MySubmissionsPage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (!authLoading && profile && profile.role !== "editor") {
+    if (!authLoading && profile && !isEditorRole(profile.role)) {
       router.replace("/");
     }
   }, [authLoading, profile, router]);

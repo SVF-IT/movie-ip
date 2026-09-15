@@ -44,7 +44,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { useAppToast } from "@/hooks/use-app-toast";
 import { useSortableTable } from "@/hooks/use-sortable-table";
 import { SortableHeader } from "@/components/ui/sortable-header";
-import { UserProfile, UserRole } from "@/lib/types/database";
+import { isAdminRole, UserProfile, UserRole } from "@/lib/types/database";
 import {
   getAllUsers,
   createUser,
@@ -58,6 +58,8 @@ const labelCls = "text-xs font-semibold text-(--text-faint) uppercase tracking-w
 
 const roleCfg: Record<UserRole, { label: string; cls: string }> = {
   admin:  { label: "Admin",  cls: "bg-red-500/15 text-red-500 border-red-500/30 dark:text-red-300" },
+  super_admin: { label: "Super Admin", cls: "bg-amber-500/15 text-amber-600 border-amber-500/30 dark:text-amber-300" },
+  data_analyst: { label: "Data Analyst", cls: "bg-teal-500/15 text-teal-600 border-teal-500/30 dark:text-teal-300" },
   legal:  { label: "Legal",  cls: "bg-violet-500/15 text-violet-600 border-violet-500/30 dark:text-violet-300" },
   editor: { label: "Editor", cls: "bg-blue-500/15 text-blue-600 border-blue-500/30 dark:text-blue-300" },
   viewer: { label: "Viewer", cls: "bg-(--bg-deep) text-(--text-faint) border-(--svf-border-strong)" },
@@ -65,6 +67,8 @@ const roleCfg: Record<UserRole, { label: string; cls: string }> = {
 
 const roleDescriptions: Record<UserRole, string> = {
   admin:  "Full system access, can manage users",
+  super_admin: "Full system access including users and BARC",
+  data_analyst: "Editor permissions plus full BARC access",
   legal:  "Can manage rights and legal documents",
   editor: "Can edit movies and metadata",
   viewer: "Read-only access to all data",
@@ -199,7 +203,7 @@ export default function AdminUsersPage() {
   const { sortedData: sortedUsers, sortConfig, requestSort } = useSortableTable(users);
 
   const activeCount = users.filter(u => u.is_active).length;
-  const adminCount  = users.filter(u => u.role === "admin").length;
+  const adminCount  = users.filter(u => isAdminRole(u.role)).length;
 
   if (authLoading || !isAdmin) {
     return (
@@ -291,6 +295,8 @@ export default function AdminUsersPage() {
                       <SelectTrigger className={selectCls}><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="admin">Admin</SelectItem>
+                        <SelectItem value="super_admin">Super Admin</SelectItem>
+                        <SelectItem value="data_analyst">Data Analyst</SelectItem>
                         <SelectItem value="legal">Legal</SelectItem>
                         <SelectItem value="editor">Editor</SelectItem>
                         <SelectItem value="viewer">Viewer</SelectItem>
@@ -387,6 +393,8 @@ export default function AdminUsersPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="admin">Admin</SelectItem>
+                          <SelectItem value="super_admin">Super Admin</SelectItem>
+                          <SelectItem value="data_analyst">Data Analyst</SelectItem>
                           <SelectItem value="legal">Legal</SelectItem>
                           <SelectItem value="editor">Editor</SelectItem>
                           <SelectItem value="viewer">Viewer</SelectItem>

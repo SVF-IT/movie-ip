@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/contexts/auth-context";
 import { useSidebarCounts } from "@/hooks/use-sidebar-counts";
+import { isBarcRole, isEditorRole } from "@/lib/types/database";
 import {
   BarChart3,
   Bell,
@@ -50,7 +51,7 @@ const NAV_BASE = [
       { title: "Movies", icon: Film, href: "/movies" },
       { title: "Censor Tracker", icon: ShieldAlert, href: "/recensor" },
       { title: "Rights Management", icon: Scale, href: "/rights" },
-      { title: "BARC", icon: BarChart3, href: "/barc" },
+      { title: "BARC", icon: BarChart3, href: "/barc", roleCheck: "barc" as const },
       { title: "Dubbed", icon: Languages, href: "/dubbed" },
     ],
   },
@@ -102,7 +103,9 @@ export function AppSidebar() {
   const { isAdmin, profile, signOut } = useAuth();
   const isViewer = profile?.role === "viewer";
   const isLegal = profile?.role === "legal" || isAdmin || isViewer;
-  const isEditor = profile?.role === "editor" && !isAdmin;
+  const isEditor = isEditorRole(profile?.role) && !isAdmin;
+  // BARC data is licensed — only admin, super_admin and data_analyst may see it.
+  const canSeeBarc = isBarcRole(profile?.role);
 
   const sidebarCounts = useSidebarCounts();
 
@@ -191,7 +194,9 @@ export function AppSidebar() {
 
               <SidebarGroupContent>
                 <SidebarMenu className="gap-0.5">
-                  {section.items.map((item) => {
+                  {section.items.filter((item) =>
+                    "roleCheck" in item && item.roleCheck === "barc" ? canSeeBarc : true
+                  ).map((item) => {
                     const active = isActive(item.href);
                     return (
                       <SidebarMenuItem key={item.href}>

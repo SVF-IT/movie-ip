@@ -1,5 +1,6 @@
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { isAdminRole } from "@/lib/types/database";
 import { adminLimiter } from "@/lib/utils/rate-limiter";
 import { z } from "zod";
 
@@ -39,7 +40,7 @@ export async function POST(request: Request) {
       .eq("id", currentUser.id)
       .single();
 
-    if (!adminProfile || adminProfile.role !== "admin") {
+    if (!adminProfile || !isAdminRole(adminProfile.role)) {
       return NextResponse.json(
         { message: "Only administrators can change user status" },
         { status: 403 }

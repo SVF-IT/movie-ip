@@ -1,7 +1,44 @@
 export type MovieSource = 'home_production' | 'acquired'
 export type RightNature = string
 export type CertificationType = string
-export type UserRole = 'admin' | 'legal' | 'viewer' | 'editor'
+export type UserRole = 'admin' | 'super_admin' | 'data_analyst' | 'legal' | 'viewer' | 'editor'
+
+/** Every assignable role, in the order they should be offered in pickers. */
+export const ALL_ROLES: readonly UserRole[] = [
+  'admin', 'super_admin', 'data_analyst', 'legal', 'editor', 'viewer',
+]
+
+/** Roles with administrator-level reach. super_admin mirrors admin for now; its
+ *  distinct view and limitations are still to be defined. */
+export const ADMIN_ROLES: readonly UserRole[] = ['admin', 'super_admin']
+
+/** Roles with editor-level write access. data_analyst is editor-shaped, so it goes
+ *  through the same approval workflow rather than bypassing it. */
+export const EDITOR_ROLES: readonly UserRole[] = ['editor', 'data_analyst']
+
+/** Roles allowed to see the BARC section at all. Everyone else is blocked from the
+ *  page and the nav entry — BARC data is licensed and deliberately narrow. */
+export const BARC_ROLES: readonly UserRole[] = ['admin', 'super_admin', 'data_analyst']
+
+/** Admin-tier: full reach, bypasses approval queues. */
+export function isAdminRole(role?: string | null): boolean {
+  return ADMIN_ROLES.includes(role as UserRole)
+}
+
+/** Editor-tier: can create and edit, but changes go through approval. */
+export function isEditorRole(role?: string | null): boolean {
+  return EDITOR_ROLES.includes(role as UserRole)
+}
+
+/** May see BARC at all. Mirrors the is_barc_role() SQL helper. */
+export function isBarcRole(role?: string | null): boolean {
+  return BARC_ROLES.includes(role as UserRole)
+}
+
+/** Applies changes directly rather than queueing them for approval. */
+export function canBypassApproval(role?: string | null): boolean {
+  return isAdminRole(role) || role === 'legal'
+}
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected'
 
 export interface Movie {

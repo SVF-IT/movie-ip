@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { isAdminRole } from "@/lib/types/database";
 import {
   getGlobalNotificationSettings,
   updateGlobalNotificationSetting,
@@ -29,7 +30,9 @@ export async function GET() {
     // Use get_user_role helper to check if admin
     const { data: role } = await supabase.rpc("get_user_role", { user_id: user.id });
 
-    if (role !== "admin") {
+    // super_admin mirrors admin, so it must pass this gate too — it can reach the
+    // notification settings page and would otherwise 403 on every save.
+    if (!isAdminRole(role)) {
       return NextResponse.json({ error: "Forbidden: Admins only" }, { status: 403 });
     }
 
@@ -64,7 +67,9 @@ export async function PUT(request: Request) {
 
     const { data: role } = await supabase.rpc("get_user_role", { user_id: user.id });
 
-    if (role !== "admin") {
+    // super_admin mirrors admin, so it must pass this gate too — it can reach the
+    // notification settings page and would otherwise 403 on every save.
+    if (!isAdminRole(role)) {
       return NextResponse.json({ error: "Forbidden: Admins only" }, { status: 403 });
     }
 

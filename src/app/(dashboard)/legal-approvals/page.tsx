@@ -32,7 +32,7 @@ import {
   rejectPendingChange,
   type PendingChange,
 } from "@/lib/api/pending-changes";
-import type { ApprovalStatus, MovieApproval } from "@/lib/types/database";
+import { canBypassApproval, type ApprovalStatus, type MovieApproval } from "@/lib/types/database";
 import {
   Check,
   CheckCircle,
@@ -589,7 +589,7 @@ function PendingChangeCard({
 
 export default function LegalApprovalsPage() {
   const { profile } = useAuth();
-  const isLegalOrAdmin = profile?.role === "legal" || profile?.role === "admin";
+  const isLegalOrAdmin = canBypassApproval(profile?.role);
 
   // ── New-movie approval state ──
   const [movies, setMovies] = useState<PendingMovieForApproval[]>([]);

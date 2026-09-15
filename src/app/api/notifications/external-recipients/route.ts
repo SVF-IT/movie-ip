@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { isAdminRole } from "@/lib/types/database";
 import {
   getExternalRecipients,
   createExternalRecipient,
@@ -31,7 +32,7 @@ async function requireAdmin() {
   }
 
   const { data: role } = await supabase.rpc("get_user_role", { user_id: user.id });
-  if (role !== "admin") {
+  if (!isAdminRole(role)) {
     return { ok: false as const, response: NextResponse.json({ error: "Forbidden: Admins only" }, { status: 403 }) };
   }
 

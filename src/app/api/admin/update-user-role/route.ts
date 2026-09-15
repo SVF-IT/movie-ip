@@ -1,11 +1,13 @@
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { isAdminRole } from "@/lib/types/database";
 import { adminLimiter } from "@/lib/utils/rate-limiter";
+import { roleSchema } from "@/lib/validations/schemas";
 import { z } from "zod";
 
 const updateRoleSchema = z.object({
   userId: z.string().uuid("Invalid user ID"),
-  role: z.enum(["admin", "editor", "legal", "viewer"]),
+  role: roleSchema,
 });
 
 export async function POST(request: Request) {
@@ -39,7 +41,7 @@ export async function POST(request: Request) {
       .eq("id", currentUser.id)
       .single();
 
-    if (!adminProfile || adminProfile.role !== "admin") {
+    if (!adminProfile || !isAdminRole(adminProfile.role)) {
       return NextResponse.json(
         { message: "Only administrators can change user roles" },
         { status: 403 }

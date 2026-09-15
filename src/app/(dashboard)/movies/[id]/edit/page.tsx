@@ -57,6 +57,7 @@ import { AlertTriangle, ArrowLeft, CheckCircle, Clock, Film, GitPullRequest, Loa
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isEditorRole } from "@/lib/types/database";
 
 const CERTIFICATIONS = ["U", "UA", "U/A", "UA 7+", "UA 13+", "UA 16+", "A", "S", "V/U", "V/UA", "UNCENSORED", "TBD"];
 
@@ -462,7 +463,7 @@ export default function EditMoviePage() {
   }, []);
 
   const isApproved = approvalStatus === "approved";
-  const isEditor = profile?.role === "editor";
+  const isEditor = isEditorRole(profile?.role);
   const submitterName = profile?.full_name || profile?.email || "Editor";
   // editor always stages changes; legal/admin always apply directly
   const shouldStage = isEditor;

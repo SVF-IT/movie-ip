@@ -1,4 +1,10 @@
 import { z } from "zod";
+import { ALL_ROLES } from "@/lib/types/database";
+
+/** Role enum derived from ALL_ROLES so validation can never drift from UserRole. */
+export const roleSchema = z.enum(
+  ALL_ROLES as unknown as [string, ...string[]]
+);
 
 // --- Reusable primitives ---
 
@@ -27,7 +33,7 @@ export const createUserSchema = z.object({
   profile: z.object({
     full_name: z.string().min(1, "Full name is required").max(200),
     employee_id: z.string().min(1, "Employee ID is required").max(50),
-    role: z.enum(["admin", "editor", "legal", "viewer"]),
+    role: roleSchema,
     department: z.string().max(200).optional(),
   }),
 });
