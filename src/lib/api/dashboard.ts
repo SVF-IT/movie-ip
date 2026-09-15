@@ -118,9 +118,28 @@ async function fetchMovieRightsHoldbacks(movieIds: string[], rightTypes: string[
 }
 
 /**
- * A movie should never appear on the rights dashboard if it's sold (home_sold=true) or its
- * agreement has expired (acquired movies whose agreement_end_date has passed). Applied
- * consistently across every rights-dashboard query so cards and stat numbers stay in sync.
+ * On a jointly-owned home production, jointly_exploitation_rights names the production house
+ * that currently holds the right to exploit the title. Unless that house is SVF, the title
+ * isn't ours to sell and must never count as open.
+ *
+ * The column is free text (a house name typed by the form, or raw sheet text on imported
+ * rows), so matching tolerates casing, surrounding whitespace and the "SVF Entertainment"
+ * long form. A blank value is deliberately permissive — it means "unrecorded", not
+ * "someone else's", and blanking the field shouldn't silently drop titles off the dashboard.
+ */
+function heldByOtherHouse(m: any): boolean {
+  if (m.source !== 'home_production') return false
+  if (m.jointly_owned !== true) return false
+  const holder = (m.jointly_exploitation_rights || '').trim()
+  if (!holder) return false
+  return !/^svf\b/i.test(holder)
+}
+
+/**
+ * A movie should never appear on the rights dashboard if it's sold (home_sold=true), its
+ * agreement has expired (acquired movies whose agreement_end_date has passed), or a joint
+ * partner rather than SVF holds the exploitation rights. Applied consistently across every
+ * rights-dashboard query so cards and stat numbers stay in sync.
  */
 function isSoldOrExpired(m: any, referenceDate: string): boolean {
   if (m.source === 'home_production') {
@@ -128,7 +147,9 @@ function isSoldOrExpired(m: any, referenceDate: string): boolean {
     // legacy marker still present in imported rows. movies.ts treats both as sold, so the
     // dashboard must too or a legacy-sold title reappears here after leaving the catalogue.
     if (m.home_sold === true) return true
-    return /sold/i.test(m.jointly_exploitation_rights || '')
+    if (/sold/i.test(m.jointly_exploitation_rights || '')) return true
+    // Jointly owned, but the exploitation rights sit with the partner house.
+    return heldByOtherHouse(m)
   }
   // Acquired: an agreement that ended before the reference date is expired.
   if (m.agreement_end_date && m.agreement_end_date < referenceDate) return true
@@ -232,18 +253,13 @@ export async function getRightsFocusedStats(): Promise<RightsFocusedStats> {
     // Get all movies that are NOT expired and NOT "Sold to Grassroot"
     // A movie is expired if its agreement_end_date is in the past
     // Movies sold to grassroot (remapped to Sold/Expired) should not be part of any open titles or WTP count
-    const moviesQuery = supabase.from('movies').select('id, source, agreement_end_date, jointly_exploitation_rights').eq('approval_status', 'approved')
+    const moviesQuery = supabase.from('movies').select('id, source, home_sold, jointly_owned, agreement_end_date, jointly_exploitation_rights').eq('approval_status', 'approved')
     const { data: allMovies } = await moviesQuery
+    // Route through the shared helper so this count applies the same sold / expired /
+    // held-by-partner rules as every other open-titles query.
     const allMovieIds = new Set(
       (allMovies || [])
-        .filter((m: { id: string; source?: string; agreement_end_date?: string | null; jointly_exploitation_rights?: string | null }) => {
-          if (m.source === 'home_production') {
-            const jer = (m.jointly_exploitation_rights || '').toLowerCase()
-            return !jer.startsWith('sold')
-          }
-          if (!m.agreement_end_date) return true
-          return m.agreement_end_date >= today
-        })
+        .filter((m: any) => !isSoldOrExpired(m, today))
         .map((m: { id: string }) => m.id),
     )
 
@@ -315,7 +331,7 @@ export async function getRightsModeStats(mode: RightsMode, language?: string[], 
     // Fetch all approved movies (language-filtered) — no flat rights columns needed
     let moviesQuery = supabase
       .from('movies')
-      .select('id, source, certification, home_sold, jointly_exploitation_rights, agreement_end_date, wtp_library, syndication_holdback')
+      .select('id, source, certification, home_sold, jointly_owned, jointly_exploitation_rights, agreement_end_date, wtp_library, syndication_holdback')
       .eq('approval_status', 'approved')
     if (language && language.length > 0) moviesQuery = moviesQuery.in('language', language)
     const { data: allMovies } = await moviesQuery
@@ -1091,7 +1107,7 @@ export async function getOtherRightsModeStats(language?: string[], openTo?: stri
 
     let moviesQuery = supabase
       .from('movies')
-      .select('id, source, home_sold, jointly_exploitation_rights, agreement_end_date')
+      .select('id, source, home_sold, jointly_owned, jointly_exploitation_rights, agreement_end_date')
       .eq('approval_status', 'approved')
     if (language && language.length > 0) moviesQuery = moviesQuery.in('language', language)
     const { data: allMovies } = await moviesQuery
@@ -1738,7 +1754,7 @@ export async function getActiveInternetTitlesCount(language?: string[]): Promise
     // Fetch all approved movies (language-filtered) — no flat rights columns needed
     let moviesQuery = supabase
       .from('movies')
-      .select('id, source, home_sold, jointly_exploitation_rights, agreement_end_date')
+      .select('id, source, home_sold, jointly_owned, jointly_exploitation_rights, agreement_end_date')
       .eq('approval_status', 'approved')
     if (language && language.length > 0) moviesQuery = moviesQuery.in('language', language)
     const { data: allMovies } = await moviesQuery

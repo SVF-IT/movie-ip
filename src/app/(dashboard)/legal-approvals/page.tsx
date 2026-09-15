@@ -330,6 +330,39 @@ const CHANGE_TYPE_LABELS: Record<string, string> = {
   person_remove: "Cast/Crew Remove",
 };
 
+/** Fields whose value is an image URL, so the diff shows the picture, not the link. */
+const IMAGE_FIELDS = new Set(["poster_url", "backdrop_url", "thumbnail_url", "image_url"]);
+
+/**
+ * One side of a field diff. Image fields render as a thumbnail — a truncated storage URL
+ * tells a reviewer nothing about whether the poster is right, which is the whole point of
+ * the approval. Falls back to the URL text if the image can't load, so a broken link is
+ * still reviewable rather than silently blank.
+ */
+function DiffValue({ field, value, tone }: { field: string; value: unknown; tone: "before" | "after" }) {
+  const [failed, setFailed] = useState(false);
+  const text = String(value ?? "") || "";
+  const color = tone === "before" ? "text-red-400" : "text-emerald-400";
+
+  if (!text) return <span className={`${color} truncate`}>—</span>;
+
+  if (IMAGE_FIELDS.has(field) && /^https?:\/\//i.test(text) && !failed) {
+    return (
+      <a href={text} target="_blank" rel="noopener noreferrer" className="block w-fit" title={text}>
+        <img
+          src={text}
+          alt={`${field.replace(/_/g, " ")} ${tone}`}
+          loading="lazy"
+          onError={() => setFailed(true)}
+          className="w-16 aspect-2/3 object-cover rounded-xl ring-1 ring-(--svf-border) hover:ring-(--svf-accent-bright) transition-all"
+        />
+      </a>
+    );
+  }
+
+  return <span className={`${color} truncate`} title={text}>{text}</span>;
+}
+
 function PendingChangeCard({
   change,
   isLegalOrAdmin,
@@ -347,7 +380,9 @@ function PendingChangeCard({
   selected?: boolean;
   onToggleSelect?: (id: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  // Open by default: reviewers scan a long queue and shouldn't have to click each
+  // card open to see what actually changed. The toggle stays for collapsing noise.
+  const [expanded, setExpanded] = useState(true);
   const movieTitle = (change.movie as any)?.title || "Unknown Movie";
 
   const before = (change.payload.before || {}) as Record<string, unknown>;
@@ -437,10 +472,10 @@ function PendingChangeCard({
                   <span>Field</span><span className="text-red-400">Before</span><span className="text-emerald-400">After</span>
                 </div>
                 {changedFields.map(k => (
-                  <div key={k} className="grid grid-cols-3 gap-0 text-xs px-3 py-2 border-b border-(--svf-border) last:border-0 hover:bg-(--hover)">
+                  <div key={k} className="grid grid-cols-3 gap-0 items-center text-xs px-3 py-2 border-b border-(--svf-border) last:border-0 hover:bg-(--hover)">
                     <span className="text-(--text-faint) font-medium">{k.replace(/_/g, " ")}</span>
-                    <span className="text-red-400 truncate pr-2">{String(before[k] ?? "—") || "—"}</span>
-                    <span className="text-emerald-400 truncate">{String(after[k] ?? "—") || "—"}</span>
+                    <div className="min-w-0 pr-2"><DiffValue field={k} value={before[k]} tone="before" /></div>
+                    <div className="min-w-0"><DiffValue field={k} value={after[k]} tone="after" /></div>
                   </div>
                 ))}
               </div>
