@@ -252,10 +252,13 @@ export function InternetDashboardTable({
 
   // Keep the stat card in sync with what the table actually shows.
   useEffect(() => {
+    // Not while loading: the rows are empty until the fetch lands, and reporting
+    // that emptiness makes the stat card flash 0 before the real number arrives.
+    if (isLoading) return
     onFilteredCountChange?.({ total, home, acquired })
     // Depend on the numbers, not the array — a fresh array identity each render would
     // otherwise re-fire this effect on every pass.
-  }, [total, home, acquired, onFilteredCountChange])
+  }, [isLoading, total, home, acquired, onFilteredCountChange])
 
   // Debounce search
   useEffect(() => {

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/client'
 import type { MovieRight } from '@/lib/types/database'
 import { sanitizeError } from '@/lib/utils/sanitize-error'
+import { notifyRightsMutated } from '@/lib/api/cache'
 
 const supabase = createClient()
 
@@ -25,6 +26,7 @@ export async function getMovieRightsOwned(
 
   const { data, error } = await query
   if (error) throw sanitizeError(error)
+  notifyRightsMutated()
   return data || []
 }
 
@@ -54,12 +56,14 @@ export async function updateMovieRight(id: string, right: Partial<Omit<MovieRigh
     .single()
 
   if (error) throw sanitizeError(error)
+  notifyRightsMutated()
   return data
 }
 
 export async function deleteMovieRight(id: string): Promise<void> {
   const { error } = await supabase.from('movie_rights').delete().eq('id', id)
   if (error) throw sanitizeError(error)
+  notifyRightsMutated()
 }
 
 export async function syncMovieRights(

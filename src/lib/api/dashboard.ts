@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { MovieWithDetails, Platform, RightsNatureType } from '@/lib/types/database'
 import { buildHoldbackInfo, flattenHoldbackInfo, holdsBackType, anyHoldsBackType, anyClassificationAllowsType, INTERNET_EXPLOITATION_TYPES, type ExploitationType, type HoldbackInfo } from '@/lib/utils/holdbacks'
 import { orContains } from '@/lib/utils/search'
+import { onRightsMutated } from '@/lib/api/cache'
 
 const supabase = createClient()
 
@@ -13,30 +14,136 @@ async function fetchPlatformRightsChunked(
   extraFilters?: (q: ReturnType<typeof supabase.from>) => ReturnType<typeof supabase.from>
 ): Promise<any[]> {
   if (movieIds.length === 0) return []
-  const results: any[] = []
+  // Chunks are independent, so they run concurrently — awaiting each in turn
+  // was a large part of the dashboard's load time.
+  const chunks: string[][] = []
   for (let i = 0; i < movieIds.length; i += CHUNK_SIZE) {
-    const chunk = movieIds.slice(i, i + CHUNK_SIZE)
-    let q = supabase.from('platform_rights').select(select).in('movie_id', chunk)
-    if (extraFilters) q = extraFilters(q) as any
-    const { data } = await q
+    chunks.push(movieIds.slice(i, i + CHUNK_SIZE))
+  }
+  const settled = await Promise.all(
+    chunks.map((chunk) => {
+      let q = supabase.from('platform_rights').select(select).in('movie_id', chunk)
+      if (extraFilters) q = extraFilters(q) as any
+      return q
+    })
+  )
+  const results: any[] = []
+  for (const { data } of settled) {
     if (data) results.push(...data)
   }
   return results
 }
 
+/**
+ * One movie_rights fetch, shared by the four accessors below.
+ *
+ * Those accessors are called back-to-back with the SAME movie ids and right
+ * types, differing only in which column they read, so they used to issue four
+ * near-identical round trips (and a dashboard tab issued ~17 in series). This
+ * fetches the needed columns once per (ids, right types) combination and
+ * derives each shape from the cached rows.
+ *
+ * The cache is keyed on the exact id list + right types and lives for a short
+ * window, so a single dashboard load shares rows while a later load — or one
+ * with a different filter — refetches. Nothing here is written, so a slightly
+ * stale read cannot corrupt anything; the window is deliberately short enough
+ * that a user editing rights and returning sees fresh numbers.
+ */
+interface MovieRightsRow {
+  movie_id: string
+  right_type: string
+  end_date: string | null
+  holdbacks: string | null
+  classification: string | null
+}
+
+/**
+ * Stat-card cache, keyed on the filters that produce the numbers.
+ *
+ * The dashboard recomputes all four tabs' stat cards whenever the language or
+ * an open-until date changes, and switching tabs re-renders the same request.
+ * Without this, flipping Satellite -> Internet -> Satellite pays the full cost
+ * three times for two distinct results.
+ *
+ * Entries are keyed by every input that changes the answer, so a new filter is
+ * never served a stale number — a cache hit means the exact same question was
+ * asked recently. In-flight promises are cached too, so four tabs mounting at
+ * once share one request instead of racing.
+ */
+const STATS_TTL_MS = 60_000
+const statsCache = new Map<string, { at: number; value: Promise<unknown> }>()
+
+function cachedStat<T>(key: string, compute: () => Promise<T>): Promise<T> {
+  const hit = statsCache.get(key)
+  if (hit && Date.now() - hit.at < STATS_TTL_MS) return hit.value as Promise<T>
+
+  const value = compute().catch((err) => {
+    // Never cache a failure: the next call should retry rather than be handed
+    // a rejected promise for the rest of the TTL.
+    statsCache.delete(key)
+    throw err
+  })
+  statsCache.set(key, { at: Date.now(), value })
+  return value
+}
+
+/**
+ * Drop every cached stat and movie_rights row.
+ *
+ * Call after anything that edits rights so the dashboard recomputes instead of
+ * serving numbers from before the edit.
+ */
+export function invalidateDashboardCaches(): void {
+  statsCache.clear()
+  movieRightsCache.clear()
+}
+
+// Any rights write clears these caches, so an edit is reflected immediately
+// rather than after the TTL expires.
+onRightsMutated(invalidateDashboardCaches)
+
+const MOVIE_RIGHTS_TTL_MS = 15_000
+const movieRightsCache = new Map<string, { at: number; rows: Promise<MovieRightsRow[]> }>()
+
+function fetchMovieRightsRows(movieIds: string[], rightTypes: string[]): Promise<MovieRightsRow[]> {
+  if (movieIds.length === 0) return Promise.resolve([])
+
+  const key = `${rightTypes.join(',')}|${movieIds.join(',')}`
+  const cached = movieRightsCache.get(key)
+  if (cached && Date.now() - cached.at < MOVIE_RIGHTS_TTL_MS) return cached.rows
+
+  const rows = (async () => {
+    const out: MovieRightsRow[] = []
+    // Chunks still exist because `.in()` inlines the ids into the query string,
+    // but they now run concurrently rather than one after another.
+    const chunks: string[][] = []
+    for (let i = 0; i < movieIds.length; i += CHUNK_SIZE) {
+      chunks.push(movieIds.slice(i, i + CHUNK_SIZE))
+    }
+    const results = await Promise.all(
+      chunks.map((chunk) =>
+        supabase
+          .from('movie_rights')
+          .select('movie_id, right_type, end_date, holdbacks, classification')
+          .in('movie_id', chunk)
+          .in('right_type', rightTypes)
+      )
+    )
+    for (const { data } of results) {
+      for (const row of data || []) out.push(row as MovieRightsRow)
+    }
+    return out
+  })()
+
+  movieRightsCache.set(key, { at: Date.now(), rows })
+  return rows
+}
+
 /** Returns a Set of movie_ids that have at least one movie_rights row matching the given right_type(s). */
 async function fetchMovieRightsIdsByType(movieIds: string[], rightTypes: string[]): Promise<Set<string>> {
-  if (movieIds.length === 0) return new Set()
+  const rows = await fetchMovieRightsRows(movieIds, rightTypes)
   const result = new Set<string>()
-  for (let i = 0; i < movieIds.length; i += CHUNK_SIZE) {
-    const chunk = movieIds.slice(i, i + CHUNK_SIZE)
-    const { data } = await supabase
-      .from('movie_rights')
-      .select('movie_id, right_type, end_date')
-      .in('movie_id', chunk)
-      .in('right_type', rightTypes)
-    for (const row of data || []) result.add(row.movie_id)
-  }
+  for (const row of rows) result.add(row.movie_id)
   return result
 }
 
@@ -46,26 +153,18 @@ async function fetchMovieRightsIdsByType(movieIds: string[], rightTypes: string[
  * Only considers right_types matching the given list.
  */
 async function fetchMovieRightsEndDates(movieIds: string[], rightTypes: string[]): Promise<Map<string, string | null>> {
-  if (movieIds.length === 0) return new Map()
+  const rows = await fetchMovieRightsRows(movieIds, rightTypes)
   const map = new Map<string, string | null>()
-  for (let i = 0; i < movieIds.length; i += CHUNK_SIZE) {
-    const chunk = movieIds.slice(i, i + CHUNK_SIZE)
-    const { data } = await supabase
-      .from('movie_rights')
-      .select('movie_id, end_date')
-      .in('movie_id', chunk)
-      .in('right_type', rightTypes)
-    for (const row of data || []) {
-      const endDate: string | null = row.end_date ?? null
-      if (!map.has(row.movie_id)) {
-        map.set(row.movie_id, endDate)
-      } else {
-        const existing = map.get(row.movie_id)!
-        // null = perpetual (most generous) — once set, keep null
-        if (existing !== null) {
-          if (endDate === null) map.set(row.movie_id, null)
-          else if (endDate > existing) map.set(row.movie_id, endDate)
-        }
+  for (const row of rows) {
+    const endDate: string | null = row.end_date ?? null
+    if (!map.has(row.movie_id)) {
+      map.set(row.movie_id, endDate)
+    } else {
+      const existing = map.get(row.movie_id)!
+      // null = perpetual (most generous) — once set, keep null
+      if (existing !== null) {
+        if (endDate === null) map.set(row.movie_id, null)
+        else if (endDate > existing) map.set(row.movie_id, endDate)
       }
     }
   }
@@ -78,41 +177,25 @@ async function fetchMovieRightsEndDates(movieIds: string[], rightTypes: string[]
  * permissive (see anyClassificationAllowsType).
  */
 async function fetchMovieRightsClassifications(movieIds: string[], rightTypes: string[]): Promise<Map<string, string[]>> {
-  if (movieIds.length === 0) return new Map()
+  const rows = await fetchMovieRightsRows(movieIds, rightTypes)
   const map = new Map<string, string[]>()
-  for (let i = 0; i < movieIds.length; i += CHUNK_SIZE) {
-    const chunk = movieIds.slice(i, i + CHUNK_SIZE)
-    const { data } = await supabase
-      .from('movie_rights')
-      .select('movie_id, classification')
-      .in('movie_id', chunk)
-      .in('right_type', rightTypes)
-    for (const row of data || []) {
-      const existing = map.get(row.movie_id) || []
-      existing.push(row.classification || '')
-      map.set(row.movie_id, existing)
-    }
+  for (const row of rows) {
+    const existing = map.get(row.movie_id) || []
+    existing.push(row.classification || '')
+    map.set(row.movie_id, existing)
   }
   return map
 }
 
 /** Returns a Map<movie_id, raw holdback strings[]> — one entry per matching movie_rights row. */
 async function fetchMovieRightsHoldbacks(movieIds: string[], rightTypes: string[]): Promise<Map<string, string[]>> {
-  if (movieIds.length === 0) return new Map()
+  const rows = await fetchMovieRightsRows(movieIds, rightTypes)
   const map = new Map<string, string[]>()
-  for (let i = 0; i < movieIds.length; i += CHUNK_SIZE) {
-    const chunk = movieIds.slice(i, i + CHUNK_SIZE)
-    const { data } = await supabase
-      .from('movie_rights')
-      .select('movie_id, holdbacks')
-      .in('movie_id', chunk)
-      .in('right_type', rightTypes)
-    for (const row of data || []) {
-      if (!row.holdbacks) continue
-      const existing = map.get(row.movie_id) || []
-      existing.push(row.holdbacks)
-      map.set(row.movie_id, existing)
-    }
+  for (const row of rows) {
+    if (!row.holdbacks) continue
+    const existing = map.get(row.movie_id) || []
+    existing.push(row.holdbacks)
+    map.set(row.movie_id, existing)
   }
   return map
 }
@@ -307,7 +390,14 @@ export interface RightsModeStats {
   upcomingMoviesCount: number
 }
 
-export async function getRightsModeStats(mode: RightsMode, language?: string[], openTo?: string): Promise<RightsModeStats> {
+export function getRightsModeStats(mode: RightsMode, language?: string[], openTo?: string): Promise<RightsModeStats> {
+  return cachedStat(
+    `modeStats|${mode}|${(language ?? []).join(',')}|${openTo ?? ''}`,
+    () => computeRightsModeStats(mode, language, openTo)
+  )
+}
+
+async function computeRightsModeStats(mode: RightsMode, language?: string[], openTo?: string): Promise<RightsModeStats> {
   const emptyStats: RightsModeStats = {
     openTitlesCount: 0,
     openHomeTitlesCount: 0,
@@ -1094,7 +1184,14 @@ export interface OtherRightsModeStats {
   activeRightsCount: number
 }
 
-export async function getOtherRightsModeStats(language?: string[], openTo?: string): Promise<OtherRightsModeStats> {
+export function getOtherRightsModeStats(language?: string[], openTo?: string): Promise<OtherRightsModeStats> {
+  return cachedStat(
+    `otherStats|${(language ?? []).join(',')}|${openTo ?? ''}`,
+    () => computeOtherRightsModeStats(language, openTo)
+  )
+}
+
+async function computeOtherRightsModeStats(language?: string[], openTo?: string): Promise<OtherRightsModeStats> {
   if (language && language.length === 0) {
     return { openTitlesCount: 0, openHomeTitlesCount: 0, openAcquiredTitlesCount: 0, expiringRightsCount: 0, activeRightsCount: 0 }
   }
@@ -1746,7 +1843,14 @@ export async function getActiveInternetTitles(options?: {
 }
 
 // Count of movies with active internet rights (for stat card)
-export async function getActiveInternetTitlesCount(language?: string[]): Promise<{ total: number; home: number; acquired: number }> {
+export function getActiveInternetTitlesCount(language?: string[]): Promise<{ total: number; home: number; acquired: number }> {
+  return cachedStat(
+    `activeInternet|${(language ?? []).join(',')}`,
+    () => computeActiveInternetTitlesCount(language)
+  )
+}
+
+async function computeActiveInternetTitlesCount(language?: string[]): Promise<{ total: number; home: number; acquired: number }> {
   if (language && language.length === 0) return { total: 0, home: 0, acquired: 0 }
   try {
     const today = new Date().toISOString().split('T')[0]

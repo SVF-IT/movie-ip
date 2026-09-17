@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/client'
 import type { PlatformRight } from '@/lib/types/database'
 import { sanitizeError } from '@/lib/utils/sanitize-error'
+import { notifyRightsMutated } from '@/lib/api/cache'
 
 const supabase = createClient()
 const MAX_LIMIT = 10000
@@ -147,6 +148,7 @@ export async function createRight(right: Partial<PlatformRight>): Promise<Platfo
     .single()
 
   if (error) throw sanitizeError(error)
+  notifyRightsMutated()
   if (right.movie_id) await recalculateWtpLibrary(right.movie_id)
   return data
 }
@@ -156,6 +158,7 @@ export async function updateRight(id: string, right: Partial<PlatformRight>): Pr
   const { data, error } = await supabase.from('platform_rights').update(payload).eq('id', id).select().single()
 
   if (error) throw sanitizeError(error)
+  notifyRightsMutated()
   const movieId = right.movie_id || (data as PlatformRight)?.movie_id
   if (movieId) await recalculateWtpLibrary(movieId)
   return data
@@ -166,6 +169,7 @@ export async function deleteRight(id: string): Promise<void> {
 
   const { error } = await supabase.from('platform_rights').delete().eq('id', id)
   if (error) throw sanitizeError(error)
+  notifyRightsMutated()
   if (existing?.movie_id) await recalculateWtpLibrary(existing.movie_id)
 }
 

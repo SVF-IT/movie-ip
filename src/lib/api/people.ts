@@ -13,16 +13,8 @@ export interface PersonWithStats extends Person {
   // role is also stored on people.role in DB; PersonWithStats mirrors it
 }
 
-/**
- * Normalizes a movie title by removing content in parentheses (e.g., "(Hindi)", "(Dubbed)")
- * and trimming whitespace. This ensures versioned movies are counted once.
- */
-function normalizeMovieTitle(title: string): string {
-  if (!title) return "";
-  // Remove everything inside parentheses and the parentheses themselves
-  // Also handle nested or multiple parentheses if needed, but basic one is most common
-  return title.replace(/\s*\([^)]*\)/g, "").trim();
-}
+// Title normalization (stripping "(Hindi)", "(Dubbed)", … so language versions
+// count once) now happens in the people_with_stats view, alongside the counts.
 
 export async function getPeopleWithStats(options?: {
   search?: string;
@@ -34,8 +26,11 @@ export async function getPeopleWithStats(options?: {
     return { data: [], count: 0 };
   }
   try {
-    // Get all people with their counts
-    let query = supabase.from("people").select("*", { count: "exact" });
+    // One query against people_with_stats: the view computes the per-person
+    // counts in the database. This used to fan out into ~23 sequential round
+    // trips (people, then movie_people in chunks of 50, then movies in chunks
+    // of 200), which cost about six seconds before the page could paint.
+    let query = supabase.from("people_with_stats").select("*", { count: "exact" });
 
     if (options?.search) {
       query = query.ilike("name", `%${options.search}%`);
@@ -43,7 +38,6 @@ export async function getPeopleWithStats(options?: {
 
     query = query.order("name");
 
-    const limit = options?.limit || 1000;
     if (options?.limit) {
       query = query.limit(options.limit);
     }
@@ -52,89 +46,40 @@ export async function getPeopleWithStats(options?: {
       query = query.range(options.offset, options.offset + (options.limit || 1000) - 1);
     }
 
-    const { data: people, error, count } = await query;
+    const { data, error, count } = await query;
 
     if (error) throw sanitizeError(error);
 
-    const personIds = (people || []).map((p: { id: string }) => p.id);
+    // Postgres returns the COUNT columns as bigint, which supabase-js hands
+    // back as strings, so the counts are widened here and coerced below.
+    type StatsRow = Person & {
+      movies_count?: number | string | null;
+      movies_as_actor?: number | string | null;
+      movies_as_director?: number | string | null;
+      movies_list?: string[] | null;
+    };
 
-    // Step 1: fetch all movie_people rows (no movie join — avoids inner-join row drops)
-    let allMoviePeopleData: any[] = [];
-    if (personIds.length > 0) {
-      const CHUNK_SIZE = 50;
-      for (let i = 0; i < personIds.length; i += CHUNK_SIZE) {
-        const chunkIds = personIds.slice(i, i + CHUNK_SIZE);
-        const { data: mpData, error: mpError } = await supabase
-          .from("movie_people")
-          .select("person_id, role, movie_id")
-          .in("person_id", chunkIds)
-          .limit(10000);
-        if (mpError) throw sanitizeError(mpError);
-        if (mpData) allMoviePeopleData = [...allMoviePeopleData, ...mpData];
+    const peopleWithStats: PersonWithStats[] = (data || []).map((person: StatsRow) => {
+      const moviesAsActor = Number(person.movies_as_actor) || 0;
+      const moviesAsDirector = Number(person.movies_as_director) || 0;
+
+      // Prefer DB role tag; fall back to deriving it from counts
+      let role: "actor" | "director" | "both" = "actor";
+      if (person.role === "both" || (moviesAsActor > 0 && moviesAsDirector > 0)) {
+        role = "both";
+      } else if (person.role === "director" || moviesAsDirector > 0) {
+        role = "director";
       }
-    }
 
-    // Step 2: collect all unique movie_ids then fetch their titles in one query
-    const allMovieIds = [...new Set(allMoviePeopleData.map((r: any) => r.movie_id).filter(Boolean))];
-    const movieTitleMap = new Map<string, string>();
-    if (allMovieIds.length > 0) {
-      const CHUNK_SIZE = 200;
-      for (let i = 0; i < allMovieIds.length; i += CHUNK_SIZE) {
-        const chunk = allMovieIds.slice(i, i + CHUNK_SIZE);
-        const { data: moviesData } = await supabase
-          .from("movies")
-          .select("id, title")
-          .in("id", chunk);
-        (moviesData || []).forEach((m: any) => { if (m.title) movieTitleMap.set(m.id, m.title); });
-      }
-    }
-
-    // Step 3: count unique normalized titles per person per role
-    const actorUniqueTitles = new Map<string, Set<string>>();
-    const directorUniqueTitles = new Map<string, Set<string>>();
-
-    allMoviePeopleData.forEach((r: any) => {
-      const title = movieTitleMap.get(r.movie_id);
-      if (!title) return;
-      const normalized = normalizeMovieTitle(title);
-      if (r.role === "Actor") {
-        if (!actorUniqueTitles.has(r.person_id)) actorUniqueTitles.set(r.person_id, new Set());
-        actorUniqueTitles.get(r.person_id)!.add(normalized);
-      } else if (r.role === "Director") {
-        if (!directorUniqueTitles.has(r.person_id)) directorUniqueTitles.set(r.person_id, new Set());
-        directorUniqueTitles.get(r.person_id)!.add(normalized);
-      }
+      return {
+        ...person,
+        role,
+        movies_count: Number(person.movies_count) || 0,
+        movies_as_actor: moviesAsActor,
+        movies_as_director: moviesAsDirector,
+        movies_list: person.movies_list ?? [],
+      };
     });
-
-    const peopleWithStats: PersonWithStats[] = (people || []).map(
-      (person: { id: string; name: string; role?: string; created_at?: string; updated_at?: string }) => {
-        const actorTitles = actorUniqueTitles.get(person.id) || new Set();
-        const directorTitles = directorUniqueTitles.get(person.id) || new Set();
-
-        const moviesAsActor = actorTitles.size;
-        const moviesAsDirector = directorTitles.size;
-
-        const allUniqueTitles = new Set([...actorTitles, ...directorTitles]);
-        const totalMovies = allUniqueTitles.size;
-
-        // Prefer DB role tag; fall back to deriving it from counts
-        let role: "actor" | "director" | "both" = "actor";
-        if (person.role === "both" || (moviesAsActor > 0 && moviesAsDirector > 0)) {
-          role = "both";
-        } else if (person.role === "director" || moviesAsDirector > 0) {
-          role = "director";
-        }
-
-        return {
-          ...person,
-          role,
-          movies_count: totalMovies,
-          movies_as_actor: moviesAsActor,
-          movies_as_director: moviesAsDirector,
-          movies_list: Array.from(allUniqueTitles),
-        };
-      }
-    );
 
     // Filter by role if specified — only a genuine narrowing (partial or empty selection) is
     // applied; when both actor/director are selected, that's equivalent to no filter.
@@ -156,8 +101,10 @@ export async function getPeopleWithStats(options?: {
 
 export async function getPersonById(id: string): Promise<PersonWithStats | null> {
   try {
+    // Single query against the view — it already carries the counts and the
+    // deduplicated title list, so no follow-up movie_people/movies fetches.
     const { data: person, error } = await supabase
-      .from("people")
+      .from("people_with_stats")
       .select("*")
       .eq("id", id)
       .single();
@@ -165,49 +112,23 @@ export async function getPersonById(id: string): Promise<PersonWithStats | null>
     if (error) throw sanitizeError(error);
     if (!person) return null;
 
-    const { data: moviePeopleData } = await supabase
-      .from("movie_people")
-      .select("role, movie_id")
-      .eq("person_id", id);
-
-    const mpMovieIds = [...new Set((moviePeopleData || []).map((r: any) => r.movie_id).filter(Boolean))];
-    const titleMap = new Map<string, string>();
-    if (mpMovieIds.length > 0) {
-      const { data: moviesData } = await supabase.from("movies").select("id, title").in("id", mpMovieIds);
-      (moviesData || []).forEach((m: any) => { if (m.title) titleMap.set(m.id, m.title); });
-    }
-
-    const actorTitles = new Set<string>();
-    const directorTitles = new Set<string>();
-
-    (moviePeopleData || []).forEach((r: any) => {
-      const title = titleMap.get(r.movie_id);
-      if (!title) return;
-      const normalized = normalizeMovieTitle(title);
-      if (r.role === "Actor") actorTitles.add(normalized);
-      else if (r.role === "Director") directorTitles.add(normalized);
-    });
-
-    const moviesAsActor = actorTitles.size;
-    const moviesAsDirector = directorTitles.size;
-
-    const allUniqueTitles = new Set([...actorTitles, ...directorTitles]);
-    const totalMovies = allUniqueTitles.size;
+    const moviesAsActor = Number(person.movies_as_actor) || 0;
+    const moviesAsDirector = Number(person.movies_as_director) || 0;
 
     let role: "actor" | "director" | "both" = "actor";
-    if (moviesAsActor > 0 && moviesAsDirector > 0) {
+    if (person.role === "both" || (moviesAsActor > 0 && moviesAsDirector > 0)) {
       role = "both";
-    } else if (moviesAsDirector > 0) {
+    } else if (person.role === "director" || moviesAsDirector > 0) {
       role = "director";
     }
 
     return {
       ...person,
       role,
-      movies_count: totalMovies,
+      movies_count: Number(person.movies_count) || 0,
       movies_as_actor: moviesAsActor,
       movies_as_director: moviesAsDirector,
-      movies_list: Array.from(allUniqueTitles),
+      movies_list: person.movies_list ?? [],
     };
   } catch (error) {
     console.error("Error fetching person:", error);
