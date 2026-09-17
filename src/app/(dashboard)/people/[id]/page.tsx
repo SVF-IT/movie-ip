@@ -50,6 +50,7 @@ interface MovieEntry {
   movie_title: string;
   release_year: string | null;
   source: string | null;
+  poster_url: string | null;
   role: "actor" | "director";
 }
 
@@ -96,16 +97,17 @@ export default function PersonDetailPage() {
       const supabase = createClient();
       const { data: peopleData } = await supabase
         .from("movie_people")
-        .select("id, movie_id, role, movies(id, title, release_year, source)")
+        .select("id, movie_id, role, movies(id, title, release_year, source, poster_url)")
         .eq("person_id", personId);
 
       const movieEntries: MovieEntry[] = [];
       for (const entry of peopleData || []) {
-        const movie = entry.movies as unknown as { id: string; title: string; release_year: string | null; source: string | null } | null;
+        const movie = entry.movies as unknown as { id: string; title: string; release_year: string | null; source: string | null; poster_url: string | null } | null;
         if (movie) {
           movieEntries.push({
             id: entry.id, movie_id: movie.id, movie_title: movie.title,
             release_year: movie.release_year, source: movie.source,
+            poster_url: movie.poster_url,
             role: (entry.role as string).toLowerCase() as "actor" | "director",
           });
         }
@@ -279,10 +281,20 @@ export default function PersonDetailPage() {
             background: avatarBg,
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: 32, fontWeight: 800, color: "white", letterSpacing: "-0.02em",
+            overflow: "hidden",
             boxShadow: `0 0 0 3px oklch(0.52 0.20 ${hue} / 0.3), 0 8px 28px ${glowColor}`,
           }}
         >
-          {initials}
+          {person.image_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={person.image_url}
+              alt=""
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
+          ) : (
+            initials
+          )}
         </div>
 
         {/* Name + role + badges */}
@@ -363,9 +375,9 @@ export default function PersonDetailPage() {
                     key={baseTitle}
                     href={`/movies/${primary.movie_id}`}
                     style={{
-                      display: "flex", flexDirection: "column", padding: "14px 16px", borderRadius: 12,
+                      display: "flex", alignItems: "stretch", padding: "12px 14px", borderRadius: 12,
                       border: "1px solid var(--svf-border)", background: "var(--panel)",
-                      backdropFilter: "blur(12px)", textDecoration: "none", gap: 10, transition: "all 0.18s ease",
+                      backdropFilter: "blur(12px)", textDecoration: "none", gap: 12, transition: "all 0.18s ease",
                     }}
                     onMouseEnter={(e) => {
                       const el = e.currentTarget as HTMLElement;
@@ -378,6 +390,26 @@ export default function PersonDetailPage() {
                       el.style.background = "var(--panel)";
                     }}
                   >
+                    {/* Poster thumbnail — falls back to a film glyph when we have no art */}
+                    <div style={{
+                      width: 52, height: 78, flexShrink: 0, borderRadius: 8, overflow: "hidden",
+                      background: "var(--bg-raise)", border: "1px solid var(--svf-border)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      {primary.poster_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={primary.poster_url}
+                          alt=""
+                          loading="lazy"
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        />
+                      ) : (
+                        <Film style={{ width: 18, height: 18, color: "var(--text-faint)" }} />
+                      )}
+                    </div>
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10, flex: 1, minWidth: 0 }}>
                     {/* Title + role badge */}
                     <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
                       <h3 style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", lineHeight: 1.3, flex: 1 }} className="line-clamp-2">
@@ -417,6 +449,7 @@ export default function PersonDetailPage() {
                         {uniqueGroup.length} versions
                       </p>
                     )}
+                    </div>
                   </Link>
                 );
               });

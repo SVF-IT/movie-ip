@@ -103,10 +103,21 @@ export function PersonCard({ person }: PersonCardProps) {
             fontWeight: 700,
             color: "white",
             letterSpacing: "-0.01em",
+            overflow: "hidden",
             boxShadow: `0 0 0 2px oklch(0.52 0.20 ${hue} / 0.3), 0 4px 14px ${glowColor}`,
           }}
         >
-          {initials}
+          {person.image_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={person.image_url}
+              alt=""
+              loading="lazy"
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
+          ) : (
+            initials
+          )}
         </div>
 
         <div style={{ minWidth: 0, flex: 1 }}>

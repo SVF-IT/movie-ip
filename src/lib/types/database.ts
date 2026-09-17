@@ -130,6 +130,8 @@ export interface Person {
   id: string
   name: string
   role?: 'actor' | 'director' | 'both'
+  /** Public URL of the headshot in the images bucket; null until one is found. */
+  image_url?: string | null
   created_at?: string
   updated_at?: string
 }

@@ -414,7 +414,12 @@ function PendingChangeCard({
           )}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-bold text-(--text) line-clamp-1">{movieTitle}</span>
+              <Link
+                href={`/movies/${change.movie_id}`}
+                className="font-bold text-(--text) hover:text-(--svf-accent-bright) transition-colors line-clamp-1"
+              >
+                {movieTitle}
+              </Link>
               <Badge className="bg-yellow-500/10 text-yellow-400 border border-yellow-500/25 text-[11px] font-semibold">
                 <Clock className="h-3 w-3 mr-1" /> Pending
               </Badge>
@@ -599,8 +604,7 @@ export default function LegalApprovalsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<ApprovalStatus[]>(["pending"]);
 
-  // Approve dialog (new movies)
-  const [approveTarget, setApproveTarget] = useState<PendingMovieForApproval | null>(null);
+  // Approving (new movies)
   const [approving, setApproving] = useState(false);
 
   // Reject dialog (new movies)
@@ -622,8 +626,7 @@ export default function LegalApprovalsPage() {
   const [changesSearch, setChangesSearch] = useState("");
   const [changesStatusFilter, setChangesStatusFilter] = useState<("pending" | "approved" | "rejected")[]>(["pending"]);
 
-  // Approve dialog (changes)
-  const [changeApproveTarget, setChangeApproveTarget] = useState<PendingChange | null>(null);
+  // Approving (changes)
   const [changeApproving, setChangeApproving] = useState(false);
 
   // Reject dialog (changes)
@@ -680,12 +683,11 @@ export default function LegalApprovalsPage() {
   useEffect(() => { setSelectedChangeIds(new Set()); }, [changes]);
 
 
-  const handleApprove = async () => {
-    if (!approveTarget) return;
+  const handleApprove = async (movie: PendingMovieForApproval) => {
     setApproving(true);
     try {
-      await approveMovie(approveTarget.id, profile?.full_name || profile?.email || "Legal", profile?.id);
-      setApproveTarget(null);
+      await approveMovie(movie.id, profile?.full_name || profile?.email || "Legal", profile?.id);
+      toast.success(`${movie.title} approved`);
       fetchMovies();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to approve");
@@ -817,12 +819,11 @@ export default function LegalApprovalsPage() {
     fetchChanges();
   };
 
-  const handleChangeApprove = async () => {
-    if (!changeApproveTarget) return;
+  const handleChangeApprove = async (change: PendingChange) => {
     setChangeApproving(true);
     try {
-      await approvePendingChange(changeApproveTarget.id, profile?.full_name || profile?.email || "Legal", profile?.id);
-      setChangeApproveTarget(null);
+      await approvePendingChange(change.id, profile?.full_name || profile?.email || "Legal", profile?.id);
+      toast.success("Change approved");
       fetchChanges();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to approve change");
@@ -949,7 +950,7 @@ export default function LegalApprovalsPage() {
                 <MovieCard
                   key={movie.id}
                   movie={movie}
-                  onApprove={setApproveTarget}
+                  onApprove={handleApprove}
                   onReject={setRejectTarget}
                   isLegalOrAdmin={isLegalOrAdmin}
                   selectable={isLegalOrAdmin && movie.approval_status === "pending"}
@@ -1042,7 +1043,7 @@ export default function LegalApprovalsPage() {
                   key={change.id}
                   change={change}
                   isLegalOrAdmin={isLegalOrAdmin}
-                  onApprove={setChangeApproveTarget}
+                  onApprove={handleChangeApprove}
                   onReject={setChangeRejectTarget}
                   selectable={isLegalOrAdmin && change.status === "pending"}
                   selected={selectedChangeIds.has(change.id)}
@@ -1053,35 +1054,6 @@ export default function LegalApprovalsPage() {
           )}
         </TabsContent>
       </Tabs>
-
-      {/* Approve confirmation dialog */}
-      <Dialog open={!!approveTarget} onOpenChange={(o) => !o && setApproveTarget(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <CheckCircle className="h-5 w-5 text-green-400" />
-              Approve Movie
-            </DialogTitle>
-            <DialogDescription>
-              Approving <strong>{approveTarget?.title}</strong> will make it visible in the catalog
-              and included in all stats and exports.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setApproveTarget(null)} disabled={approving}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleApprove}
-              disabled={approving}
-              className="bg-green-600 hover:bg-green-700 text-white"
-            >
-              {approving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}
-              Approve
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Reject dialog */}
       <Dialog
@@ -1197,29 +1169,6 @@ export default function LegalApprovalsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Approve change dialog */}
-      <Dialog open={!!changeApproveTarget} onOpenChange={(o) => !o && setChangeApproveTarget(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <CheckCircle className="h-5 w-5 text-green-400" />
-              Approve Edit Request
-            </DialogTitle>
-            <DialogDescription>
-              Approving <strong>{changeApproveTarget?.change_summary}</strong> will apply this change immediately to the movie record.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setChangeApproveTarget(null)} disabled={changeApproving}>
-              Cancel
-            </Button>
-            <Button onClick={handleChangeApprove} disabled={changeApproving} className="bg-green-600 hover:bg-green-700 text-white">
-              {changeApproving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}
-              Approve & Apply
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Reject change dialog */}
       <Dialog open={!!changeRejectTarget} onOpenChange={(o) => { if (!o) { setChangeRejectTarget(null); setChangeRejectReason(""); } }}>
