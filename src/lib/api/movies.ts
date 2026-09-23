@@ -1,3 +1,4 @@
+import { cachedQuery, notifyDataMutated } from "@/lib/api/cache";
 import { createClient } from "@/lib/supabase/client";
 import { canBypassApproval } from "@/lib/types/database";
 import type {
@@ -334,6 +335,7 @@ export async function createMovie(
     .single();
 
   if (error) throw sanitizeError(error);
+  notifyDataMutated();
   return data;
 }
 
@@ -355,6 +357,7 @@ export async function updateMovie(
     .single();
 
   if (error) throw sanitizeError(error);
+  notifyDataMutated();
   return data;
 }
 
@@ -362,6 +365,7 @@ export async function deleteMovie(id: string): Promise<void> {
   const { error } = await supabase.from("movies").delete().eq("id", id);
 
   if (error) throw sanitizeError(error);
+  notifyDataMutated();
 }
 
 // Lookup functions for movie form
@@ -440,7 +444,7 @@ async function syncPersonRole(personId: string): Promise<void> {
  * Get movies grouped by production number
  * Each group contains all language versions of the same movie
  */
-export async function getGroupedMovies(options?: {
+type GroupedMovieOptions = {
   source?: "home_production" | "acquired" | "expired" | "bangladeshi" | "sold";
   search?: string;
   language?: string[];
@@ -452,7 +456,26 @@ export async function getGroupedMovies(options?: {
   limit?: number;
   offset?: number;
   approvalStatus?: "pending" | "approved" | "rejected" | "all";
-}): Promise<{ data: GroupedMovie[]; count: number }> {
+};
+
+/**
+ * Cached front door for the grouped-movie list.
+ *
+ * Returning to a list — pressing back out of a movie, or re-applying a filter
+ * just cleared — would otherwise re-run the identical query. The key names every
+ * option that changes the result, so a hit is always the same question.
+ */
+export async function getGroupedMovies(
+  options?: GroupedMovieOptions
+): Promise<{ data: GroupedMovie[]; count: number }> {
+  return cachedQuery(`groupedMovies:${JSON.stringify(options ?? {})}`, () =>
+    fetchGroupedMovies(options)
+  );
+}
+
+async function fetchGroupedMovies(
+  options?: GroupedMovieOptions
+): Promise<{ data: GroupedMovie[]; count: number }> {
   if (options?.language && options.language.length === 0) {
     return { data: [], count: 0 };
   }

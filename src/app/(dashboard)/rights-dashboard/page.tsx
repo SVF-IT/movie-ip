@@ -31,7 +31,8 @@ import {
   Star
 } from 'lucide-react'
 import Link from 'next/link'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { stringCodec, stringListCodec, useUrlFilterState } from '@/hooks/use-url-filter-state'
 import { canBypassApproval } from "@/lib/types/database";
 
 type DashboardMode = 'satellite' | 'internet' | 'other' | 'clip'
@@ -47,13 +48,27 @@ export default function RightsDashboardPage() {
   const { profile } = useAuth()
   const isLegalOrAdmin = canBypassApproval(profile?.role)
 
-  const [mode, setMode] = useState<DashboardMode>('satellite')
-  const [fullPageView, setFullPageView] = useState(false)
+  // Which tab is open, and whether it is expanded to the full page, are part of
+  // the view the user navigated away from, so both ride along in the URL.
+  const [mode, setMode] = useUrlFilterState<DashboardMode>('tab', 'satellite', {
+    encode: (v) => (v === 'satellite' ? null : v),
+    decode: (raw) =>
+      raw === 'internet' || raw === 'other' || raw === 'clip' ? raw : 'satellite',
+  })
+  const [fullPageView, setFullPageView] = useUrlFilterState<boolean>('full', false, {
+    encode: (v) => (v ? '1' : null),
+    decode: (raw) => raw === '1',
+  })
   const [pendingCount, setPendingCount] = useState(0)
 
   // ── shared ──
   const [languages, setLanguages] = useState<string[]>([])
-  const [language, setLanguage] = useState<string[]>([])
+  // Empty means "no language filter", which is also the pre-seeding state, so an
+  // empty selection carries no parameter.
+  const [language, setLanguage] = useUrlFilterState<string[]>(
+    'lang', [], stringListCodec, (v) => v.length === 0
+  )
+  const hadUrlLanguage = useRef(language.length > 0)
   const [loading, setLoading] = useState(true)
   const toast = useAppToast();
   const [statsLoading, setStatsLoading] = useState(false)
@@ -68,16 +83,34 @@ export default function RightsDashboardPage() {
 
   // ── satellite state ──
   const [satStats, setSatStats] = useState<RightsModeStats | null>(null)
-  const [satActiveCard, setSatActiveCard] = useState<SatActiveCard>('open_titles')
+  const [satActiveCard, setSatActiveCard] = useUrlFilterState<SatActiveCard>(
+    'sat_card', 'open_titles',
+    {
+      encode: (v) => (v === 'open_titles' ? null : v),
+      decode: (raw) => (raw === 'expiring' || raw === 'wtp' ? raw : 'open_titles'),
+    }
+  )
 
   // ── internet state ──
   const [intStats, setIntStats] = useState<RightsModeStats | null>(null)
   const [intActiveCount, setIntActiveCount] = useState<{ total: number; home: number; acquired: number }>({ total: 0, home: 0, acquired: 0 })
-  const [intActiveCard, setIntActiveCard] = useState<IntActiveCard>('open_titles')
+  const [intActiveCard, setIntActiveCard] = useUrlFilterState<IntActiveCard>(
+    'int_card', 'open_titles',
+    {
+      encode: (v) => (v === 'open_titles' ? null : v),
+      decode: (raw) => (raw === 'expiring' || raw === 'active' ? raw : 'open_titles'),
+    }
+  )
 
   // ── other rights state ──
   const [otherStats, setOtherStats] = useState<OtherRightsModeStats | null>(null)
-  const [otherActiveCard, setOtherActiveCard] = useState<OtherActiveCard>('open_titles')
+  const [otherActiveCard, setOtherActiveCard] = useUrlFilterState<OtherActiveCard>(
+    'oth_card', 'open_titles',
+    {
+      encode: (v) => (v === 'open_titles' ? null : v),
+      decode: (raw) => (raw === 'expiring' || raw === 'active' ? raw : 'open_titles'),
+    }
+  )
 
   // Drop the reported count when the card or language changes, so the card never shows a
   // stale number from the previous view while the table refetches.
@@ -85,31 +118,42 @@ export default function RightsDashboardPage() {
   useEffect(() => { setIntFilteredCount(null) }, [intActiveCard, language])
 
   // ── expiry filters (per-mode) ──
-  const [satExpiryYear, setSatExpiryYear] = useState<string>('all')
-  const [satExpiryFrom, setSatExpiryFrom] = useState<string>('')
-  const [satExpiryTo, setSatExpiryTo] = useState<string>('')
+  // 'all' is the no-filter default for the year pickers, so it is never written out.
+  const yearCodec = { encode: (v: string) => (v === 'all' ? null : v), decode: (raw: string) => raw || 'all' }
 
-  const [intExpiryYear, setIntExpiryYear] = useState<string>('all')
-  const [intExpiryFrom, setIntExpiryFrom] = useState<string>('')
-  const [intExpiryTo, setIntExpiryTo] = useState<string>('')
+  const [satExpiryYear, setSatExpiryYear] = useUrlFilterState<string>('sat_exp_year', 'all', yearCodec)
+  const [satExpiryFrom, setSatExpiryFrom] = useUrlFilterState<string>('sat_exp_from', '', stringCodec)
+  const [satExpiryTo, setSatExpiryTo] = useUrlFilterState<string>('sat_exp_to', '', stringCodec)
 
-  const [otherExpiryYear, setOtherExpiryYear] = useState<string>('all')
-  const [otherExpiryFrom, setOtherExpiryFrom] = useState<string>('')
-  const [otherExpiryTo, setOtherExpiryTo] = useState<string>('')
+  const [intExpiryYear, setIntExpiryYear] = useUrlFilterState<string>('int_exp_year', 'all', yearCodec)
+  const [intExpiryFrom, setIntExpiryFrom] = useUrlFilterState<string>('int_exp_from', '', stringCodec)
+  const [intExpiryTo, setIntExpiryTo] = useUrlFilterState<string>('int_exp_to', '', stringCodec)
+
+  const [otherExpiryYear, setOtherExpiryYear] = useUrlFilterState<string>('oth_exp_year', 'all', yearCodec)
+  const [otherExpiryFrom, setOtherExpiryFrom] = useUrlFilterState<string>('oth_exp_from', '', stringCodec)
+  const [otherExpiryTo, setOtherExpiryTo] = useUrlFilterState<string>('oth_exp_to', '', stringCodec)
 
   // ── open-titles date range filters (per-mode) ──
-  const [satOpenFrom, setSatOpenFrom] = useState<string>('')
-  const [satOpenTo, setSatOpenTo] = useState<string>('')
-  const [intOpenFrom, setIntOpenFrom] = useState<string>('')
-  const [intOpenTo, setIntOpenTo] = useState<string>('')
-  const [otherOpenFrom, setOtherOpenFrom] = useState<string>('')
-  const [otherOpenTo, setOtherOpenTo] = useState<string>('')
+  const [satOpenFrom, setSatOpenFrom] = useUrlFilterState<string>('sat_open_from', '', stringCodec)
+  const [satOpenTo, setSatOpenTo] = useUrlFilterState<string>('sat_open_to', '', stringCodec)
+  const [intOpenFrom, setIntOpenFrom] = useUrlFilterState<string>('int_open_from', '', stringCodec)
+  const [intOpenTo, setIntOpenTo] = useUrlFilterState<string>('int_open_to', '', stringCodec)
+  const [otherOpenFrom, setOtherOpenFrom] = useUrlFilterState<string>('oth_open_from', '', stringCodec)
+  const [otherOpenTo, setOtherOpenTo] = useUrlFilterState<string>('oth_open_to', '', stringCodec)
 
   // Load pending approvals count for legal/admin banner
   useEffect(() => {
     if (!isLegalOrAdmin) return
     getPendingMovies({ status: ['pending'], limit: 1 }).then(({ count }) => setPendingCount(count)).catch(() => { })
   }, [isLegalOrAdmin])
+
+  // The selection the page opens with, so "clear filters" in any table returns
+  // to that rather than to "all languages" — a state the user cannot otherwise
+  // reach, and which silently widens every stat card.
+  const defaultLanguage = useMemo(() => {
+    const bengali = languages.find((l) => l.toLowerCase() === 'bengali')
+    return bengali ? [bengali] : languages
+  }, [languages])
 
   // Initial load — fetch language options; default to Bengali
   useEffect(() => {
@@ -119,8 +163,12 @@ export default function RightsDashboardPage() {
         const langs = await getLanguages()
         setLanguages(langs)
 
-        const bengali = langs.find((l) => l.toLowerCase() === 'bengali')
-        if (bengali) setLanguage([bengali])
+        // A language restored from the URL wins over the Bengali default —
+        // otherwise coming back to a filtered view would reset it on load.
+        if (!hadUrlLanguage.current) {
+          const bengali = langs.find((l) => l.toLowerCase() === 'bengali')
+          if (bengali) setLanguage([bengali])
+        }
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Failed to load dashboard data')
       } finally {
@@ -141,11 +189,15 @@ export default function RightsDashboardPage() {
     async function refreshStats() {
       setStatsLoading(true)
       try {
+        // An empty selection means "all languages", not "no language": the stat
+        // helpers short-circuit to zero on an empty array, so it must be sent as
+        // undefined the same way the tables send their language param.
+        const langParam = language.length > 0 ? language : undefined
         const [satS, intS, ac, otherS] = await Promise.all([
-          getRightsModeStats('satellite', language, satOpenTo || undefined),
-          getRightsModeStats('internet', language, intOpenTo || undefined),
-          getActiveInternetTitlesCount(language),
-          getOtherRightsModeStats(language, otherOpenTo || undefined),
+          getRightsModeStats('satellite', langParam, satOpenTo || undefined),
+          getRightsModeStats('internet', langParam, intOpenTo || undefined),
+          getActiveInternetTitlesCount(langParam),
+          getOtherRightsModeStats(langParam, otherOpenTo || undefined),
         ])
         if (cancelled) return
         setSatStats(satS)
@@ -225,14 +277,6 @@ export default function RightsDashboardPage() {
       glow: 'glow-purple',
     },
   ] as const
-
-  // Open-title counts shown as pills on the rights-type tabs. Clip Rights has no
-  // open-title concept, so it gets no pill rather than a misleading zero.
-  const modeCounts: Partial<Record<DashboardMode, number>> = {
-    satellite: satStats?.openTitlesCount,
-    internet: intStats?.openTitlesCount,
-    other: otherStats?.openTitlesCount,
-  }
 
   // ─── Internet stat cards config ───────────────────────────────────────────
   const intStatsConfig = [
@@ -322,6 +366,14 @@ export default function RightsDashboardPage() {
   const isClip = mode === 'clip'
   const statsConfig = isSatellite ? satStatsConfig : mode === 'internet' ? intStatsConfig : isOther ? otherStatsConfig : []
   const activeCard = isSatellite ? satActiveCard : mode === 'internet' ? intActiveCard : otherActiveCard
+
+  // On Open Titles the headline comes from the table's post-filter count, which only
+  // arrives after the table's own fetch resolves. Until then the server stat is the
+  // unfiltered total, so showing it would flash an all-language number that silently
+  // corrects on the next interaction. Hold the skeleton instead.
+  const awaitingTableCount =
+    (isSatellite && satActiveCard === 'open_titles' && satFilteredCount === null) ||
+    (mode === 'internet' && intActiveCard === 'open_titles' && intFilteredCount === null)
   const setActiveCard = (id: string) => {
     if (isSatellite) {
       setSatActiveCard(id as SatActiveCard)
@@ -380,7 +432,10 @@ export default function RightsDashboardPage() {
               language={language}
               languageOptions={languages}
               onLanguageChange={setLanguage}
+            defaultLanguage={defaultLanguage}
+              
               totalLanguageCount={languages.length}
+            languagesReady={!loading}
               expiryYear={satExpiryYear}
               onExpiryYearChange={handleSatYearChange}
               expiryFrom={satExpiryFrom}
@@ -401,7 +456,10 @@ export default function RightsDashboardPage() {
               language={language}
               languageOptions={languages}
               onLanguageChange={setLanguage}
+            defaultLanguage={defaultLanguage}
+              
               totalLanguageCount={languages.length}
+            languagesReady={!loading}
               expiryYear={intExpiryYear}
               onExpiryYearChange={handleIntYearChange}
               expiryFrom={intExpiryFrom}
@@ -421,7 +479,10 @@ export default function RightsDashboardPage() {
               language={language}
               languageOptions={languages}
               onLanguageChange={setLanguage}
+            defaultLanguage={defaultLanguage}
+              
               totalLanguageCount={languages.length}
+            languagesReady={!loading}
               expiryYear={otherExpiryYear}
               onExpiryYearChange={handleOtherYearChange}
               expiryFrom={otherExpiryFrom}
@@ -436,7 +497,8 @@ export default function RightsDashboardPage() {
               fullPage
             />
           ) : (
-            <ClipRightsTable language={language} languageOptions={languages} onLanguageChange={setLanguage} totalLanguageCount={languages.length} fullPage />
+            <ClipRightsTable language={language} languageOptions={languages} onLanguageChange={setLanguage} defaultLanguage={defaultLanguage} totalLanguageCount={languages.length}
+            languagesReady={!loading} fullPage />
           )}
         </div>
       </div>
@@ -502,15 +564,6 @@ export default function RightsDashboardPage() {
               >
                 <Icon style={{ width: 15, height: 15, opacity: on ? 1 : 0.7 }} />
                 {label}
-                {modeCounts[v] !== undefined && (
-                  <span className="num" style={{
-                    fontSize: 11, padding: "0 7px", borderRadius: 20,
-                    background: on ? "var(--svf-accent-soft)" : "var(--chip-bg)",
-                    color: on ? "var(--svf-accent)" : "var(--text-faint)",
-                  }}>
-                    {modeCounts[v]}
-                  </span>
-                )}
               </button>
             )
           })}
@@ -521,7 +574,7 @@ export default function RightsDashboardPage() {
       </div>
 
       {/* ── Stat Cards — none for Clip Rights, which is a plain listing with no rights-lifecycle data ── */}
-      {isClip ? null : loading || statsLoading ? (
+      {isClip ? null : loading || statsLoading || awaitingTableCount ? (
         <div className="grid gap-3 md:grid-cols-3">
           {[...Array(3)].map((_, i) => (
             <div key={i} className="glass-card animate-pulse" style={{ padding: 20, height: 160 }}>
@@ -638,7 +691,9 @@ export default function RightsDashboardPage() {
             language={language}
             languageOptions={languages}
             onLanguageChange={setLanguage}
+            defaultLanguage={defaultLanguage}
             totalLanguageCount={languages.length}
+            languagesReady={!loading}
             expiryYear={satExpiryYear}
             onExpiryYearChange={handleSatYearChange}
             expiryFrom={satExpiryFrom}
@@ -658,7 +713,9 @@ export default function RightsDashboardPage() {
             language={language}
             languageOptions={languages}
             onLanguageChange={setLanguage}
+            defaultLanguage={defaultLanguage}
             totalLanguageCount={languages.length}
+            languagesReady={!loading}
             expiryYear={intExpiryYear}
             onExpiryYearChange={handleIntYearChange}
             expiryFrom={intExpiryFrom}
@@ -677,7 +734,9 @@ export default function RightsDashboardPage() {
             language={language}
             languageOptions={languages}
             onLanguageChange={setLanguage}
+            defaultLanguage={defaultLanguage}
             totalLanguageCount={languages.length}
+            languagesReady={!loading}
             expiryYear={otherExpiryYear}
             onExpiryYearChange={handleOtherYearChange}
             expiryFrom={otherExpiryFrom}
@@ -691,7 +750,8 @@ export default function RightsDashboardPage() {
             yearOptions={yearOptions}
           />
         ) : (
-          <ClipRightsTable language={language} languageOptions={languages} onLanguageChange={setLanguage} totalLanguageCount={languages.length} />
+          <ClipRightsTable language={language} languageOptions={languages} onLanguageChange={setLanguage} totalLanguageCount={languages.length}
+            languagesReady={!loading} />
         )}
       </div>
     </div>

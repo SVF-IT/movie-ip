@@ -6,7 +6,28 @@ import { Button } from "@/components/ui/button";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
-import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
+import { Badge } from "@/components/ui/badge";
+import {
+  ColumnFilter,
+  FilterableHead,
+  SortableFilterableHead,
+} from "@/components/ui/column-header-filter";
+import { SortableHeader } from "@/components/ui/sortable-header";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Tooltip,
@@ -14,12 +35,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useAuth } from "@/contexts/auth-context";
-import { useMultiSelectFilterState } from "@/hooks/use-multi-select-filter-state";
 import { useSortableTable } from "@/hooks/use-sortable-table";
 import { getExpiringRights } from "@/lib/api/movies";
-import { getPlatforms } from "@/lib/api/dashboard";
+import { getExpiredRightsCount } from "@/lib/api/rights";
 import { submitRightChange } from "@/lib/api/pending-changes";
-import { isAdminRole, isEditorRole, type ExpiringRight, type Platform } from "@/lib/types/database";
+import { isAdminRole, isEditorRole, type ExpiringRight } from "@/lib/types/database";
 import { cn } from "@/lib/utils";
 import { addDays as addDaysFns, format } from "date-fns";
 import {
@@ -36,28 +56,96 @@ import {
   Search,
   Shield,
   Trash2,
-  Tv,
   Wifi,
   X,
   Zap,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { stringCodec, stringListCodec, useUrlFilterState } from "@/hooks/use-url-filter-state";
+import { groupForType, natureKey, natureLabel, NONE_KEY } from "@/lib/utils/rights-types";
 import { useAppToast } from "@/hooks/use-app-toast";
 
 export default function ExpiringRightsPage() {
   const [expiringRights, setExpiringRights] = useState<ExpiringRight[]>([]);
-  const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [loading, setLoading] = useState(true);
   const toast = useAppToast();
   const { profile } = useAuth();
-  const [activeFilter, setActiveFilter] = useState<"7d" | "30d" | "60d" | "90d" | "1y" | "all" | "custom">("1y");
-  const [rightsTypeFilter, setRightsTypeFilter] = useState<"all" | "satellite" | "internet" | "other">("all");
-  const [customFromDate, setCustomFromDate] = useState<Date>();
-  const [customToDate, setCustomToDate] = useState<Date>();
-  const [platformFilter, setPlatformFilter] = useMultiSelectFilterState<string>([]);
-  const [subTypeFilter, setSubTypeFilter] = useMultiSelectFilterState<string>([]);
-  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [activeFilter, setActiveFilter] = useUrlFilterState<"7d" | "30d" | "60d" | "90d" | "1y" | "all" | "custom">(
+    "period",
+    "1y",
+    {
+      encode: (v) => (v === "1y" ? null : v),
+      decode: (raw) =>
+        raw === "7d" || raw === "30d" || raw === "60d" || raw === "90d" || raw === "all" || raw === "custom"
+          ? raw
+          : "1y",
+    }
+  );
+  const [rightsTypeFilter, setRightsTypeFilter] = useUrlFilterState<"all" | "satellite" | "internet" | "other">(
+    "type",
+    "all",
+    {
+      encode: (v) => (v === "all" ? null : v),
+      decode: (raw) => (raw === "satellite" || raw === "internet" || raw === "other" ? raw : "all"),
+    }
+  );
+  const [customFromDate, setCustomFromDate] = useUrlFilterState<Date | undefined>(
+    "from",
+    undefined,
+    {
+      encode: (v) => (v ? format(v, "yyyy-MM-dd") : null),
+      decode: (raw) => {
+        const d = new Date(raw);
+        return isNaN(d.getTime()) ? undefined : d;
+      },
+    },
+    (v) => !v
+  );
+  const [customToDate, setCustomToDate] = useUrlFilterState<Date | undefined>(
+    "to",
+    undefined,
+    {
+      encode: (v) => (v ? format(v, "yyyy-MM-dd") : null),
+      decode: (raw) => {
+        const d = new Date(raw);
+        return isNaN(d.getTime()) ? undefined : d;
+      },
+    },
+    (v) => !v
+  );
+  // Both are URL-backed so they survive navigating away and back. An empty
+  // array means "no narrowing", so the default never reaches the URL and the
+  // reseed effects below can still widen them without writing a param.
+  const [platformFilter, setPlatformFilter] = useUrlFilterState<string[]>(
+    "plat", [], stringListCodec, (v) => v.length === 0
+  );
+  const [subTypeFilter, setSubTypeFilter] = useUrlFilterState<string[]>(
+    "subtype", [], stringListCodec, (v) => v.length === 0
+  );
+  // The remaining header funnels follow the same "empty means no narrowing"
+  // convention, so their options can shrink as other filters narrow the rows
+  // without a stale selection reading as an active filter.
+  const [movieFilter, setMovieFilter] = useUrlFilterState<string[]>(
+    "movie", [], stringListCodec, (v) => v.length === 0
+  );
+  const [statusFilter, setStatusFilter] = useUrlFilterState<string[]>(
+    "status", [], stringListCodec, (v) => v.length === 0
+  );
+  const [natureFilter, setNatureFilter] = useUrlFilterState<string[]>(
+    "nature", [], stringListCodec, (v) => v.length === 0
+  );
+  // A selection restored from the URL must survive the first reseed, which runs
+  // as soon as the async option lists arrive.
+  // The effect below clears the column filters whenever the rights group
+  // changes. On mount that would wipe whatever the URL restored, so the first
+  // run is always skipped — regardless of which filters the URL carried.
+  const groupChangeSeen = useRef(false);
+  const [searchQuery, setSearchQuery] = useUrlFilterState("q", "", stringCodec);
+  // Lapsed rights are never fetched into this page — it lists upcoming expiries
+  // only — so the count comes from its own head-only query and the card links
+  // to Rights Management, where those rights can actually be acted on.
+  const [expiredCount, setExpiredCount] = useState(0);
   const [deletingRight, setDeletingRight] = useState<ExpiringRight | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -106,9 +194,21 @@ export default function ExpiringRightsPage() {
         toDate = addDaysFns(today, days).toISOString().split("T")[0];
       }
 
-      const [data, plats] = await Promise.all([getExpiringRights(fromDate, toDate), getPlatforms()]);
+      // Platform choices are derived from these rows, so the platforms table
+      // no longer needs a separate round trip.
+      const data = await getExpiringRights(fromDate, toDate);
       setExpiringRights(data);
-      setPlatforms(plats);
+
+      // The lapsed count mirrors the selected window: "90 days" counts rights
+      // that lapsed in the last 90 days, "All" counts every lapsed right.
+      let since: string | undefined;
+      if (activeFilter === "custom") {
+        since = customFromDate ? customFromDate.toISOString().split("T")[0] : undefined;
+      } else if (activeFilter !== "all") {
+        const days = activeFilter === "7d" ? 7 : activeFilter === "30d" ? 30 : activeFilter === "60d" ? 60 : activeFilter === "90d" ? 90 : 365;
+        since = addDaysFns(today, -days).toISOString().split("T")[0];
+      }
+      setExpiredCount(await getExpiredRightsCount(since));
     } catch (err) {
       console.error("Error fetching expiring rights:", err);
       toast.error(err instanceof Error ? err.message : "Failed to load expiring rights");
@@ -121,51 +221,166 @@ export default function ExpiringRightsPage() {
     fetchExpiringRights();
   }, [fetchExpiringRights]);
 
-  const platformOptions = useMemo(() => platforms.map((p) => p.id), [platforms]);
 
   useEffect(() => {
-    setPlatformFilter(platformOptions);
+    if (!groupChangeSeen.current) {
+      groupChangeSeen.current = true;
+      return;
+    }
+    // "No narrowing" is the empty array, so reseeding clears rather than
+    // listing every option — which would otherwise bloat the URL.
+    setPlatformFilter([]);
     setSubTypeFilter([]);
-  }, [rightsTypeFilter, platformOptions]);
+    setMovieFilter([]);
+    setNatureFilter([]);
+    // Only the rights type matters here: the choices are derived from the rows
+    // in view, and "no narrowing" is the empty array either way.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rightsTypeFilter]);
 
+  // Level 1 — rights group (Satellite / Internet / Other). Still a toolbar
+  // dropdown, and still the outermost narrowing: every header funnel below
+  // derives its choices from the rows this leaves.
   const typeFiltered = useMemo(() => expiringRights.filter((right) => {
     if (rightsTypeFilter === "all") return true;
-    const pt = (right.rights_type_name || "").toLowerCase();
-    const isSat = pt.includes("satellite") || pt.includes("dth") || pt.includes("terrestrial");
-    const isInternet = pt.includes("svod") || pt.includes("tvod") || pt.includes("avod") || pt.includes("fvod");
-    if (rightsTypeFilter === "satellite") return isSat;
-    if (rightsTypeFilter === "internet") return isInternet;
-    if (rightsTypeFilter === "other") return !isSat && !isInternet;
-    return true;
+    return groupForType(right.rights_type_name).toLowerCase() === rightsTypeFilter;
   }), [expiringRights, rightsTypeFilter]);
 
+  const statusOf = (r: ExpiringRight) =>
+    r.days_until_expiry < 0 ? "Expired"
+      : r.days_until_expiry <= 90 ? "Critical"
+        : r.days_until_expiry <= 270 ? "Approaching"
+          : "Active";
+
+  /**
+   * One predicate per header filter. Each is applied independently so a
+   * column's option list can be built from the rows the *other* filters leave
+   * visible — the Excel behaviour where a funnel never offers a choice that
+   * would yield zero rows, yet still shows its own unpicked siblings.
+   */
+  const matchSearch = useCallback((r: ExpiringRight) => {
+    if (!searchQuery) return true;
+    const q = searchQuery.trim().toLowerCase();
+    return (r.movie_title || "").toLowerCase().startsWith(q)
+      || (r.platform_name || "").toLowerCase().includes(q);
+  }, [searchQuery]);
+  const matchMovie = useCallback((r: ExpiringRight) =>
+    movieFilter.length === 0 || movieFilter.includes(r.movie_title || ""), [movieFilter]);
+  const matchSubType = useCallback((r: ExpiringRight) =>
+    subTypeFilter.length === 0 || subTypeFilter.includes(r.rights_type_name || NONE_KEY), [subTypeFilter]);
+  const matchPlatform = useCallback((r: ExpiringRight) =>
+    platformFilter.length === 0 || platformFilter.includes(r.platform_id || NONE_KEY), [platformFilter]);
+  const matchNature = useCallback((r: ExpiringRight) =>
+    natureFilter.length === 0
+    || natureFilter.includes(r.nature && r.nature.trim() ? natureKey(r.nature) : NONE_KEY),
+  [natureFilter]);
+  const matchStatus = useCallback((r: ExpiringRight) =>
+    statusFilter.length === 0 || statusFilter.includes(statusOf(r)), [statusFilter]);
+
+  /** Rows visible to a given column's funnel: everything except its own filter. */
+  const rowsExcept = useCallback((skip: "movie" | "subtype" | "platform" | "nature" | "status") =>
+    typeFiltered.filter((r) =>
+      matchSearch(r)
+      && (skip === "movie" || matchMovie(r))
+      && (skip === "subtype" || matchSubType(r))
+      && (skip === "platform" || matchPlatform(r))
+      && (skip === "nature" || matchNature(r))
+      && (skip === "status" || matchStatus(r))
+    ),
+  [typeFiltered, matchSearch, matchMovie, matchSubType, matchPlatform, matchNature, matchStatus]);
+
+  const movieOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of rowsExcept("movie")) if (r.movie_title) set.add(r.movie_title);
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [rowsExcept]);
+
+  // Level 2 — platform type ("Satellite TV", "SVOD", …) within that group.
   const subTypeOptions = useMemo(() => {
-    if (rightsTypeFilter === "all") return [];
-    const names = new Set<string>();
-    typeFiltered.forEach((r) => { if (r.rights_type_name) names.add(r.rights_type_name); });
-    return Array.from(names).sort();
-  }, [typeFiltered, rightsTypeFilter]);
-
-  // Seed sub-type filter to "all selected" once its option list is known for the active rights type.
-  const subTypeInitialized = useMemo(() => subTypeOptions.join('|'), [subTypeOptions]);
-  useEffect(() => {
-    setSubTypeFilter(subTypeOptions);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subTypeInitialized]);
-
-  const filteredRights = useMemo(() => typeFiltered.filter((right) => {
-    if (platformFilter.length < platformOptions.length && !platformFilter.includes(right.platform_id || "")) return false;
-    if (subTypeOptions.length > 0 && subTypeFilter.length < subTypeOptions.length && !subTypeFilter.includes(right.rights_type_name || "")) return false;
-    if (searchQuery) {
-      const q = searchQuery.trim().toLowerCase();
-      const inTitle = (right.movie_title || "").toLowerCase().startsWith(q);
-      const inPlatform = (right.platform_name || "").toLowerCase().includes(q);
-      if (!inTitle && !inPlatform) return false;
+    const set = new Set<string>();
+    let hasBlank = false;
+    for (const r of rowsExcept("subtype")) {
+      if (r.rights_type_name) set.add(r.rights_type_name);
+      else hasBlank = true;
     }
-    return true;
-  }), [typeFiltered, platformFilter, platformOptions.length, subTypeFilter, subTypeOptions, searchQuery]);
+    // A right with no platform join has no type; without an option for it those
+    // rows could not be found and vanished under any other pick.
+    const opts = Array.from(set).sort().map((value) => ({ value, label: value }));
+    return hasBlank ? [...opts, { value: NONE_KEY, label: "— Not set —" }] : opts;
+  }, [rowsExcept]);
 
-  const { sortedData: sortedFiltered } = useSortableTable(filteredRights);
+  /**
+   * Level 3 — platform, built from the rows still in view rather than the whole
+   * platforms table. That table holds one row per platform *per type*, so a
+   * brand carried on both satellite and internet appeared twice with nothing to
+   * tell the entries apart; scoping by group and type leaves one real choice.
+   */
+  const platformChoices = useMemo(() => {
+    const byId = new Map<string, string>();
+    const typeById = new Map<string, string>();
+    let hasBlank = false;
+    for (const r of rowsExcept("platform")) {
+      if (!r.platform_id) { hasBlank = true; continue; }
+      byId.set(r.platform_id, r.platform_name || "—");
+      if (r.rights_type_name) typeById.set(r.platform_id, r.rights_type_name);
+    }
+    // The platforms table holds one row per platform *per type*, so a brand
+    // carried on both satellite and internet is two records with one name.
+    // Every entry is qualified by its type, not just the repeated ones, so the
+    // list reads consistently rather than only explaining itself on collisions.
+    const opts = Array.from(byId.entries())
+      .map(([value, name]) => {
+        const type = typeById.get(value);
+        return { value, label: type ? `${name} — ${type}` : name };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label));
+    // Rights with no platform are reachable too, listed last.
+    return hasBlank ? [...opts, { value: NONE_KEY, label: "— Not set —" }] : opts;
+  }, [rowsExcept]);
+
+  const natureOptions = useMemo(() => {
+    // Keyed by the folded value, so "Non-exclusive" and "Non-Exclusive" become
+    // one option rather than two that each match half the rows.
+    const byKey = new Map<string, string>();
+    for (const r of rowsExcept("nature")) {
+      // A missing nature is a real, filterable state — skipping it left those
+      // rows unreachable and silently dropped by any other pick.
+      if (!r.nature || !r.nature.trim()) byKey.set(NONE_KEY, "— Not set —");
+      else byKey.set(natureKey(r.nature), natureLabel(r.nature));
+    }
+    return Array.from(byKey.entries())
+      .map(([value, label]) => ({ value, label }))
+      // "Not set" belongs at the end rather than sorted among real values.
+      .sort((a, b) =>
+        a.value === NONE_KEY ? 1
+        : b.value === NONE_KEY ? -1
+        : a.label.localeCompare(b.label));
+  }, [rowsExcept]);
+
+  const statusOptions = useMemo(() => {
+    const order = ["Expired", "Critical", "Approaching", "Active"];
+    const set = new Set<string>();
+    for (const r of rowsExcept("status")) set.add(statusOf(r));
+    return order.filter((s) => set.has(s));
+  }, [rowsExcept]);
+
+
+  // Note: the sub-type options now shrink whenever a *sibling* filter narrows
+  // the rows, so the old effect that reset the selection when that list changed
+  // would wipe the pick on every interaction. The rights-group effect above
+  // already clears it when the group changes — the only time the choices
+  // genuinely become invalid.
+
+  // Every filter applied — the rows the table actually lists.
+  const filteredRights = useMemo(() => typeFiltered.filter((r) =>
+    matchSearch(r) && matchMovie(r) && matchSubType(r)
+    && matchPlatform(r) && matchNature(r) && matchStatus(r)
+  ), [typeFiltered, matchSearch, matchMovie, matchSubType, matchPlatform, matchNature, matchStatus]);
+
+  // Sorted on the raw row fields: start_date/end_date are ISO strings, which
+  // useSortableTable parses as dates, and days_until_expiry is a number — so
+  // all three date-ish columns order chronologically rather than as text.
+  const { sortedData: sortedFiltered, sortConfig, requestSort } = useSortableTable(filteredRights);
 
   const criticalRights = sortedFiltered.filter((r) => r.days_until_expiry <= 7);
   const urgentRights = sortedFiltered.filter((r) => r.days_until_expiry > 7 && r.days_until_expiry <= 30);
@@ -196,7 +411,26 @@ export default function ExpiringRightsPage() {
     XLSX.writeFile(wb, `expiring-rights-${activeFilter}-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
   };
 
-  const hasSecondaryFilters = platformFilter.length < platformOptions.length || (subTypeOptions.length > 0 && subTypeFilter.length < subTypeOptions.length) || searchQuery;
+  // Empty means "no narrowing", so any non-empty pick is an active filter.
+  // The page opens on "1 year" / "All Rights" with no column filters, so
+  // "Clear all" restores exactly that rather than a blank state.
+  const hasActiveFilters =
+    platformFilter.length > 0 || subTypeFilter.length > 0 || movieFilter.length > 0
+    || statusFilter.length > 0 || natureFilter.length > 0 || Boolean(searchQuery)
+    || activeFilter !== "1y" || rightsTypeFilter !== "all";
+
+  const clearAllFilters = () => {
+    setSearchQuery("");
+    setMovieFilter([]);
+    setSubTypeFilter([]);
+    setPlatformFilter([]);
+    setNatureFilter([]);
+    setStatusFilter([]);
+    setRightsTypeFilter("all");
+    setActiveFilter("1y");
+    setCustomFromDate(undefined);
+    setCustomToDate(undefined);
+  };
 
   if (loading) {
     return (
@@ -213,7 +447,6 @@ export default function ExpiringRightsPage() {
     { value: "other", label: "Others", icon: Globe },
   ] as const;
 
-  const alreadyExpired = expiringRights.filter((r) => r.days_until_expiry < 0);
   const critical90 = sortedFiltered.filter((r) => r.days_until_expiry >= 0 && r.days_until_expiry <= 90);
   const approaching9mo = sortedFiltered.filter((r) => r.days_until_expiry > 90 && r.days_until_expiry <= 270);
 
@@ -224,8 +457,9 @@ export default function ExpiringRightsPage() {
         {[
           {
             label: "Already Expired",
-            count: alreadyExpired.length,
-            desc: "Rights past their end date",
+            count: expiredCount,
+            desc: "View in Rights Management",
+            href: "/rights?status=expired",
             iconColor: "var(--st-expired)",
             icon: <AlertTriangle className="h-5 w-5" style={{ color: "var(--st-expired)" }} />,
           },
@@ -243,8 +477,9 @@ export default function ExpiringRightsPage() {
             iconColor: "var(--st-expiring)",
             icon: <Clock className="h-5 w-5" style={{ color: "var(--st-expiring)" }} />,
           },
-        ].map((s) => (
-          <div key={s.label} className="glass-card p-5 flex items-center gap-4">
+        ].map((s) => {
+          const body = (
+            <>
             <div
               className="shrink-0 flex items-center justify-center rounded-[10px]"
               style={{
@@ -261,8 +496,20 @@ export default function ExpiringRightsPage() {
               <div className="text-xs font-semibold text-(--text) mt-0.5">{s.label}</div>
               <div className="text-[11px] text-(--text-faint)">{s.desc}</div>
             </div>
-          </div>
-        ))}
+            </>
+          );
+          // Only the lapsed-rights card navigates; the others summarise rows
+          // already on this page, so there is nowhere to send the user.
+          return s.href ? (
+            <Link key={s.label} href={s.href} className="glass-card p-5 flex items-center gap-4 transition-colors hover:bg-(--hover)">
+              {body}
+            </Link>
+          ) : (
+            <div key={s.label} className="glass-card p-5 flex items-center gap-4">
+              {body}
+            </div>
+          );
+        })}
       </div>
 
       {/* ── Alert Banners ── */}
@@ -285,23 +532,34 @@ export default function ExpiringRightsPage() {
         </div>
       )}
 
-      {/* ── Date Range Segmented Pills + inline custom pickers ── */}
+      {/* ── Compact toolbar: all filters + actions in one row, matching the
+             Rights Management page so both listings read the same way ── */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1 glass-card p-1 rounded-[10px]">
-          {(["90d", "1y", "all", "custom"] as const).map((f) => {
-            const segLabels: Record<string, string> = { "90d": "90 days", "1y": "1 year", "all": "All", "custom": "Custom" };
-            return (
-              <button key={f} onClick={() => setActiveFilter(f)}
-                className={cn("px-3.5 py-1.5 rounded-[8px] text-xs font-semibold transition-all",
-                  activeFilter === f ? "bg-(--svf-accent-soft) text-(--svf-accent-bright) shadow-sm" : "text-(--text-faint) hover:text-(--text)"
-                )}>
-                {segLabels[f]}
-              </button>
-            );
-          })}
+        {/* Search */}
+        <div className="relative w-56">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-(--text-faint)" />
+          <Input
+            placeholder="Search movie or platform…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-sm"
+          />
         </div>
 
-        {/* Custom date pickers — inline on same row */}
+        {/* Expiry window */}
+        <Select value={activeFilter} onValueChange={(v) => setActiveFilter(v as typeof activeFilter)}>
+          <SelectTrigger className="h-9 w-36 bg-(--bg-raise)/40 border-(--svf-border) text-(--text)">
+            <SelectValue placeholder="Expiry window" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="90d">90 days</SelectItem>
+            <SelectItem value="1y">1 year</SelectItem>
+            <SelectItem value="all">All</SelectItem>
+            <SelectItem value="custom">Custom range</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Custom date pickers — inline, only for a custom range */}
         {activeFilter === "custom" && (
           <>
             <Popover>
@@ -334,74 +592,40 @@ export default function ExpiringRightsPage() {
             </Popover>
           </>
         )}
-      </div>
 
-      {/* ── Rights Type Filter Row + Export ── */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1 glass-card p-1 rounded-[10px]">
-          {rightsTypeConfig.filter(({ value }) => value !== "other").map(({ value, label, icon: Icon }) => (
-            <button
-              key={value}
-              onClick={() => setRightsTypeFilter(value)}
-              className={cn(
-                "flex items-center gap-1.5 px-3.5 py-1.5 rounded-[8px] text-xs font-semibold transition-all",
-                rightsTypeFilter === value
-                  ? "bg-(--svf-accent-soft) text-(--svf-accent-bright) shadow-sm"
-                  : "text-(--text-faint) hover:text-(--text)"
-              )}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              {label}
-            </button>
-          ))}
-        </div>
+        {/* Level 1 — rights group */}
+        <Select value={rightsTypeFilter} onValueChange={(v) => setRightsTypeFilter(v as typeof rightsTypeFilter)}>
+          <SelectTrigger className="h-9 w-36 bg-(--bg-raise)/40 border-(--svf-border) text-(--text)">
+            <SelectValue placeholder="Rights type" />
+          </SelectTrigger>
+          <SelectContent>
+            {rightsTypeConfig.map(({ value, label }) => (
+              <SelectItem key={value} value={value}>{label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-        {/* Search */}
-        <div className="relative min-w-50 flex-1 max-w-70">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-(--text-faint)" />
-          <Input
-            placeholder="Search movie or platform…"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-sm"
-          />
-        </div>
+        {/* Levels 2 and 3 (platform type, platform) now live as funnels in the
+            Type and Platform column headers. */}
 
-        <MultiSelectFilter
-          label="All Platforms"
-          options={platforms.map((p) => ({ value: p.id, label: p.name }))}
-          value={platformFilter}
-          onChange={setPlatformFilter}
-          searchable
-          triggerWidth="w-50"
-        />
-
-        {rightsTypeFilter !== "all" && subTypeOptions.length > 0 && (
-          <MultiSelectFilter
-            label="All Types"
-            options={subTypeOptions}
-            value={subTypeFilter}
-            onChange={setSubTypeFilter}
-            triggerWidth="w-45"
-          />
-        )}
-
-        {hasSecondaryFilters && (
+        {hasActiveFilters && (
           <Button
             variant="ghost" size="sm"
-            className="h-9 gap-1.5 text-(--text-faint) hover:text-(--text) hover:bg-(--hover)"
-            onClick={() => { setPlatformFilter(platformOptions); setSubTypeFilter(subTypeOptions); setSearchQuery(""); }}
+            className="h-9 gap-1 text-(--text-faint)"
+            onClick={clearAllFilters}
           >
-            <X className="h-3.5 w-3.5" /> Clear
+            <X className="h-3.5 w-3.5" />Clear all
           </Button>
         )}
 
-        {/* Export button pushed to right */}
+        <div className="flex-1" />
+
+        {/* Actions */}
         <Button
           onClick={exportToExcel}
           disabled={filteredRights.length === 0}
           variant="outline"
-          className="ml-auto h-9 gap-2 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover) shadow-sm shadow-red-500/20"
+          className="h-9 gap-2 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover) shadow-sm shadow-red-500/20"
           size="sm"
         >
           <Download className="h-4 w-4" />
@@ -410,7 +634,7 @@ export default function ExpiringRightsPage() {
       </div>
 
       {/* ── Table ── */}
-      <div style={{ border: "1px solid var(--svf-border)", borderRadius: 14, overflow: "hidden", background: "var(--panel)", backdropFilter: "blur(14px)" }}>
+      <div className="rounded-[14px] border border-(--svf-border) overflow-hidden overflow-x-auto" style={{ background: "var(--panel)", backdropFilter: "blur(14px)" }}>
         {sortedFiltered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
             <CheckCircle className="h-10 w-10" style={{ color: "var(--st-active)", opacity: 0.5 }} />
@@ -418,155 +642,158 @@ export default function ExpiringRightsPage() {
             <p className="text-sm" style={{ color: "var(--text-faint)" }}>All rights in this category are up to date</p>
           </div>
         ) : (
-          <>
-            {/* Table header */}
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "minmax(180px,2fr) 1.2fr 1fr 0.9fr 0.9fr 0.8fr 0.8fr 80px",
-              padding: "0 20px", height: 44, alignItems: "center",
-              background: "var(--bg-deep)", borderBottom: "1px solid var(--svf-border)",
-              fontSize: 11, fontWeight: 700, letterSpacing: "0.08em",
-              textTransform: "uppercase", color: "var(--text-faint)",
-            }}>
-              <div>Movie</div>
-              <div>Platform</div>
-              <div>Type</div>
-              <div>Start Date</div>
-              <div>End Date</div>
-              <div>Days</div>
-              <div>Status</div>
-              <div />
-            </div>
+          <Table>
+            <TableHeader>
+              <TableRow className="border-(--svf-border) bg-(--bg-deep) hover:bg-(--bg-deep)">
+                <SortableFilterableHead column="movie_title" label="Movie" currentSort={sortConfig} onSort={requestSort} className="min-w-45">
+                  <ColumnFilter options={movieOptions} value={movieFilter} onChange={setMovieFilter} searchable searchPlaceholder="Search movie…" />
+                </SortableFilterableHead>
+                <FilterableHead label="Platform">
+                  <ColumnFilter options={platformChoices} value={platformFilter} onChange={setPlatformFilter} searchable searchPlaceholder="Search platform…" />
+                </FilterableHead>
+                <FilterableHead label="Type">
+                  <ColumnFilter options={subTypeOptions} value={subTypeFilter} onChange={setSubTypeFilter} />
+                </FilterableHead>
+                <FilterableHead label="Nature">
+                  <ColumnFilter options={natureOptions} value={natureFilter} onChange={setNatureFilter} />
+                </FilterableHead>
+                {/* start_date / end_date are ISO strings and days_until_expiry a
+                    number, so these sort chronologically, not lexically. */}
+                <SortableHeader column="start_date" label="Start Date" currentSort={sortConfig} onSort={requestSort} />
+                <SortableHeader column="end_date" label="End Date" currentSort={sortConfig} onSort={requestSort} />
+                <SortableHeader column="days_until_expiry" label="Days" currentSort={sortConfig} onSort={requestSort} />
+                <FilterableHead label="Status">
+                  <ColumnFilter options={statusOptions} value={statusFilter} onChange={setStatusFilter} />
+                </FilterableHead>
+                <TableHead className="text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sortedFiltered.map((right) => {
+                const urgencyColor =
+                  right.days_until_expiry < 0 ? "var(--st-expired)"
+                  : right.days_until_expiry <= 90 ? "var(--st-expired)"
+                  : right.days_until_expiry <= 270 ? "var(--st-expiring)"
+                  : "var(--st-active)";
+                const statusLabel = statusOf(right);
+                const isPerpetual = right.end_date && (right.end_date.startsWith("3099") || right.end_date.startsWith("9999"));
+                return (
+                  <TableRow
+                    key={right.id}
+                    className="border-(--svf-border) hover:bg-(--hover) transition-colors"
+                    style={{ borderLeft: `3px solid ${urgencyColor}` }}
+                  >
+                    {/* Movie */}
+                    <TableCell className="min-w-0">
+                      <Link href={`/movies/${right.movie_id}`}
+                        className="block font-semibold text-sm hover:underline"
+                        style={{ color: "var(--text)" }}>
+                        {right.movie_title}
+                      </Link>
+                      <div className="text-[10px] mt-0.5" style={{ color: "var(--text-faint)", fontFamily: "var(--font-mono)" }}>
+                        {right.movie_source === "home_production" ? "Home" : "Acquired"}
+                      </div>
+                    </TableCell>
 
-            {sortedFiltered.map((right) => {
-              const urgencyColor =
-                right.days_until_expiry < 0 ? "var(--st-expired)"
-                : right.days_until_expiry <= 90 ? "var(--st-expired)"
-                : right.days_until_expiry <= 270 ? "var(--st-expiring)"
-                : "var(--st-active)";
-              const statusLabel =
-                right.days_until_expiry < 0 ? "Expired"
-                : right.days_until_expiry <= 90 ? "Critical"
-                : right.days_until_expiry <= 270 ? "Approaching"
-                : "Active";
-              const isPerpetual = right.end_date && (right.end_date.startsWith("3099") || right.end_date.startsWith("9999"));
-              return (
-                <div
-                  key={right.id}
-                  className="group"
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "minmax(180px,2fr) 1.2fr 1fr 0.9fr 0.9fr 0.8fr 0.8fr 80px",
-                    padding: "0 20px", minHeight: 52, alignItems: "center",
-                    borderBottom: "1px solid var(--svf-border)",
-                    borderLeft: `3px solid ${urgencyColor}`,
-                    transition: "background .15s",
-                  }}
-                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--hover)"}
-                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
-                >
-                  {/* Movie */}
-                  <div style={{ minWidth: 0, paddingRight: 12 }}>
-                    <Link href={`/movies/${right.movie_id}`}
-                      className="block font-semibold text-sm truncate hover:underline"
-                      style={{ color: "var(--text)" }}>
-                      {right.movie_title}
-                    </Link>
-                    <div className="text-[10px] mt-0.5 truncate" style={{ color: "var(--text-faint)", fontFamily: "var(--font-mono)" }}>
-                      {right.movie_source === "home_production" ? "Home" : "Acquired"}
-                    </div>
-                  </div>
+                    {/* Platform */}
+                    <TableCell className="text-sm" style={{ color: "var(--text-dim)" }}>
+                      {right.platform_name || "—"}
+                    </TableCell>
 
-                  {/* Platform */}
-                  <div className="text-sm truncate" style={{ color: "var(--text-dim)" }}>
-                    {right.platform_name || "—"}
-                  </div>
+                    {/* Type */}
+                    <TableCell className="text-sm whitespace-nowrap" style={{ color: "var(--text-dim)" }}>
+                      <span className="text-xs">{right.rights_type_name || "—"}</span>
+                    </TableCell>
 
-                  {/* Type */}
-                  <div className="text-sm" style={{ color: "var(--text-dim)" }}>
-                    {right.rights_type_name ? (
-                      <span className="inline-flex items-center gap-1">
-                        {right.rights_type_name.toLowerCase().includes("satellite")
-                          ? <Tv className="h-3 w-3 shrink-0" style={{ color: "var(--st-wtp)" }} />
-                          : <Wifi className="h-3 w-3 shrink-0" style={{ color: "var(--st-open)" }} />}
-                        <span className="truncate text-xs">{right.rights_type_name}</span>
+                    {/* Nature */}
+                    <TableCell>
+                      {right.nature ? (
+                        <Badge variant="outline" className={cn("text-xs whitespace-nowrap",
+                          right.nature === "exclusive"
+                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
+                            : "bg-(--bg-raise) text-(--text-faint) border-(--svf-border-strong)"
+                        )}>
+                          {natureLabel(right.nature)}
+                        </Badge>
+                      ) : <span className="text-xs" style={{ color: "var(--text-faint)" }}>—</span>}
+                    </TableCell>
+
+                    {/* Start date */}
+                    <TableCell className="text-xs tabular-nums whitespace-nowrap" style={{ color: "var(--st-active)", fontFamily: "var(--font-mono)" }}>
+                      {right.start_date ? format(new Date(right.start_date), "dd MMM yy") : "—"}
+                    </TableCell>
+
+                    {/* End / Expiry date */}
+                    <TableCell className="text-xs tabular-nums whitespace-nowrap" style={{ color: "var(--text-dim)", fontFamily: "var(--font-mono)" }}>
+                      {isPerpetual
+                        ? <span style={{ color: "var(--st-active)", fontWeight: 600 }}>Perpetual</span>
+                        : right.end_date ? format(new Date(right.end_date), "dd MMM yy") : "—"}
+                    </TableCell>
+
+                    {/* Days */}
+                    <TableCell className="tabular-nums font-bold text-sm whitespace-nowrap" style={{ color: urgencyColor, fontFamily: "var(--font-mono)" }}>
+                      {isPerpetual ? "∞"
+                        : right.days_until_expiry < 0
+                          ? `${Math.abs(right.days_until_expiry)}d ago`
+                          : `${right.days_until_expiry}d`}
+                    </TableCell>
+
+                    {/* Status pill */}
+                    <TableCell>
+                      <span
+                        className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap align-middle"
+                        style={{
+                          color: urgencyColor,
+                          background: `color-mix(in oklch, ${urgencyColor} 13%, transparent)`,
+                          border: `1px solid color-mix(in oklch, ${urgencyColor} 28%, transparent)`,
+                        }}
+                      >
+                        {statusLabel}
                       </span>
-                    ) : "—"}
-                  </div>
+                    </TableCell>
 
-                  {/* Start date */}
-                  <div className="text-xs tabular-nums" style={{ color: "var(--st-active)", fontFamily: "var(--font-mono)" }}>
-                    {right.start_date ? format(new Date(right.start_date), "dd MMM yy") : "—"}
-                  </div>
-
-                  {/* End / Expiry date */}
-                  <div className="text-xs tabular-nums" style={{ color: "var(--text-dim)", fontFamily: "var(--font-mono)" }}>
-                    {isPerpetual
-                      ? <span style={{ color: "var(--st-active)", fontWeight: 600 }}>Perpetual</span>
-                      : right.end_date ? format(new Date(right.end_date), "dd MMM yy") : "—"}
-                  </div>
-
-                  {/* Days */}
-                  <div className="tabular-nums font-bold text-sm" style={{ color: urgencyColor, fontFamily: "var(--font-mono)" }}>
-                    {isPerpetual ? "∞"
-                      : right.days_until_expiry < 0
-                        ? `${Math.abs(right.days_until_expiry)}d ago`
-                        : `${right.days_until_expiry}d`}
-                  </div>
-
-                  {/* Status pill */}
-                  <div style={{
-                    display: "inline-flex", alignItems: "center",
-                    padding: "2px 9px", borderRadius: 999,
-                    fontSize: 11, fontWeight: 600,
-                    color: urgencyColor,
-                    background: `color-mix(in oklch, ${urgencyColor} 13%, transparent)`,
-                    border: `1px solid color-mix(in oklch, ${urgencyColor} 28%, transparent)`,
-                    whiteSpace: "nowrap",
-                  }}>
-                    {statusLabel}
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <RoleGate
-                      action="edit"
-                      resource="right"
-                      fallback={
-                        <DisabledActionButton size="icon" variant="ghost" className="h-7 w-7" reason="You don't have permission to edit rights.">
-                          <Edit className="h-3.5 w-3.5" />
-                        </DisabledActionButton>
-                      }
-                    >
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button size="icon" variant="ghost" className="h-7 w-7 hover:text-amber-400 hover:bg-amber-500/10" style={{ color: "var(--text-faint)" }} asChild>
-                            <Link href={`/rights/${right.id}/edit`}><Edit className="h-3.5 w-3.5" /></Link>
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Edit</TooltipContent>
-                      </Tooltip>
-                    </RoleGate>
-                    {canDelete ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button size="icon" variant="ghost" className="h-7 w-7 hover:text-red-400 hover:bg-red-500/10" style={{ color: "var(--text-faint)" }} onClick={() => setDeletingRight(right)}>
+                    {/* Actions */}
+                    <TableCell>
+                      <div className="flex items-center justify-end gap-0.5">
+                        <RoleGate
+                          action="edit"
+                          resource="right"
+                          fallback={
+                            <DisabledActionButton size="icon" variant="ghost" className="h-7 w-7" reason="You don't have permission to edit rights.">
+                              <Edit className="h-3.5 w-3.5" />
+                            </DisabledActionButton>
+                          }
+                        >
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button size="icon" variant="ghost" className="h-7 w-7 hover:text-amber-400 hover:bg-amber-500/10" style={{ color: "var(--text-faint)" }} asChild>
+                                <Link href={`/rights/${right.id}/edit`}><Edit className="h-3.5 w-3.5" /></Link>
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Edit</TooltipContent>
+                          </Tooltip>
+                        </RoleGate>
+                        {canDelete ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button size="icon" variant="ghost" className="h-7 w-7 hover:text-red-400 hover:bg-red-500/10" style={{ color: "var(--text-faint)" }} onClick={() => setDeletingRight(right)}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Request Deletion</TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <DisabledActionButton size="icon" variant="ghost" className="h-7 w-7" reason="You don't have permission to request deletion of rights.">
                             <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>Request Deletion</TooltipContent>
-                      </Tooltip>
-                    ) : (
-                      <DisabledActionButton size="icon" variant="ghost" className="h-7 w-7" reason="You don't have permission to request deletion of rights.">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </DisabledActionButton>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-
-          </>
+                          </DisabledActionButton>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
         )}
       </div>
 

@@ -3,55 +3,24 @@
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
+import { BackButton } from "@/components/ui/back-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Edit, GitPullRequest, Loader2 } from "lucide-react";
+import { Calendar, Edit, GitPullRequest, Loader2, Plus } from "lucide-react";
 import { useRequirePermission } from "@/hooks/use-require-permission";
 import { useAuth } from "@/contexts/auth-context";
 import { useAppToast } from "@/hooks/use-app-toast";
-import { getRightById, updateRight } from "@/lib/api/rights";
+import { getRightById, getSiblingRights, createRight, updateRight, deleteRight } from "@/lib/api/rights";
 import { getPlatforms } from "@/lib/api/dashboard";
 import { submitRightChange } from "@/lib/api/pending-changes";
-import { NatureSelector } from "@/components/forms/nature-selector";
+import {
+  FormField, NatureEntryRow, entryFromRow, newEntry, inputCls,
+  type NatureEntry,
+} from "@/components/forms/nature-entry-row";
 import type { Platform, PlatformRight } from "@/lib/types/database";
-
-const TERRITORY_PRESETS = ["World", "India", "Rest of World", "South Asia"];
-
-const inputCls = "h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-sm focus-visible:ring-red-500/40";
-const labelCls = "text-xs font-bold uppercase tracking-widest text-(--text-faint)";
-
-function TerritorySelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const isCustom = value !== "" && !TERRITORY_PRESETS.includes(value);
-  const selectVal = isCustom ? "__custom__" : value || "";
-  return (
-    <div className="space-y-1.5">
-      <Select value={selectVal} onValueChange={v => { if (v !== "__custom__") onChange(v); else onChange(""); }}>
-        <SelectTrigger className={inputCls}><SelectValue placeholder="Territory…" /></SelectTrigger>
-        <SelectContent>
-          {TERRITORY_PRESETS.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-          <SelectItem value="__custom__">Custom…</SelectItem>
-        </SelectContent>
-      </Select>
-      {(isCustom || selectVal === "__custom__") && (
-        <Input value={value} onChange={e => onChange(e.target.value)}
-          placeholder="Enter territory…" className={inputCls} />
-      )}
-    </div>
-  );
-}
-
-function FormField({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <p className={labelCls}>{label}</p>
-      {children}
-      {hint && <p className="text-[10px] text-(--text-faint) leading-relaxed">{hint}</p>}
-    </div>
-  );
-}
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
@@ -66,16 +35,15 @@ export default function EditRightPage() {
   const toast = useAppToast();
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [originalRight, setOriginalRight] = useState<PlatformRight | null>(null);
+  /** The sibling rows as loaded, keyed by id — the "before" state for updates/deletes. */
+  const [originalRows, setOriginalRows] = useState<Record<string, PlatformRight>>({});
   const [movieApprovalStatus, setMovieApprovalStatus] = useState<string | null>(null);
 
   const [platformId, setPlatformId] = useState("");
   const [category, setCategory] = useState("");   // → platform_rights.category
-  const [nature, setNature] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [territory, setTerritory] = useState("");
   const [holdbacks, setHoldbacks] = useState("");
   const [remarks, setRemarks] = useState("");
+  const [entries, setEntries] = useState<NatureEntry[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -93,12 +61,22 @@ export default function EditRightPage() {
         }
         setPlatformId(right.platform_id || "");
         setCategory(right.category || "");
-        setNature(right.nature || "");
-        setStartDate(right.start_date || "");
-        setEndDate(right.end_date || "");
-        setTerritory(right.territory || "");
         setHoldbacks(right.holdbacks || "");
         setRemarks(right.remarks || "");
+
+        // Sibling rows: the other natures of this same right.
+        let rows: PlatformRight[] = [];
+        try {
+          rows = await getSiblingRights({
+            movie_id: right.movie_id,
+            platform_id: right.platform_id ?? null,
+            category: right.category ?? null,
+          });
+        } catch { rows = []; }
+        if (!rows.some(r => r.id === rightId)) rows = [right, ...rows];
+
+        setOriginalRows(Object.fromEntries(rows.map(r => [r.id, r])));
+        setEntries(rows.length ? rows.map(entryFromRow) : [newEntry()]);
       } catch { toast.error("Failed to load right"); }
       finally { setLoading(false); }
     }
@@ -107,36 +85,92 @@ export default function EditRightPage() {
 
   const selectedPlatform = platforms.find(p => p.id === platformId);
 
+  const updateEntry = (key: string, patch: NatureEntry) =>
+    setEntries(prev => prev.map(e => e._key === key ? patch : e));
+  const removeEntry = (key: string) =>
+    setEntries(prev => prev.filter(e => e._key !== key));
+  const addEntry = () => setEntries(prev => [...prev, newEntry()]);
+
   const handleSave = async () => {
-    if (startDate && endDate && startDate > endDate) { toast.error("Start date must be before end date"); return; }
-    setSaving(true);
+    if (!originalRight) return;
+    if (!platformId) { toast.error("Please select a platform"); return; }
+
+    const validEntries = entries.filter(e => e.nature.trim());
+    if (validEntries.length === 0) { toast.error("Add at least one nature entry"); return; }
+    for (const e of validEntries) {
+      if (e.startDate && e.endDate && e.startDate > e.endDate) {
+        toast.error("Start date must be before end date"); return;
+      }
+    }
 
     const combinedRemarks = remarks || undefined;
+    const shared = {
+      platform_id: platformId || undefined,
+      category: category || undefined,
+      holdbacks: holdbacks || undefined,
+      remarks: combinedRemarks,
+    };
+    const rowFor = (e: NatureEntry): Partial<PlatformRight> => ({
+      ...shared,
+      nature: (e.nature || undefined) as PlatformRight["nature"],
+      start_date: e.startDate || undefined,
+      end_date: e.endDate || undefined,
+      territory: e.territory || undefined,
+    });
 
+    // Rows that were loaded but are no longer present (or had their nature
+    // cleared) are deletions — computed here, applied only below, on save.
+    const keptIds = new Set(validEntries.map(e => e._id).filter(Boolean) as string[]);
+    const removedIds = Object.keys(originalRows).filter(id => !keptIds.has(id));
+
+    setSaving(true);
     try {
-      const updatedData: Partial<PlatformRight> = {
-        platform_id: platformId || undefined,
-        category: category || undefined,
-        nature: (nature || undefined) as PlatformRight["nature"],
-        start_date: startDate || undefined,
-        end_date: endDate || undefined,
-        territory: territory || undefined,
-        holdbacks: holdbacks || undefined,
-        remarks: combinedRemarks,
-      };
-
-      if (movieApprovalStatus === "approved" && originalRight) {
+      if (movieApprovalStatus === "approved") {
         const submitterName = profile?.full_name || profile?.email || "Editor";
-        await submitRightChange(
-          originalRight.movie_id, "right_update",
-          { ...updatedData, id: rightId, platforms: selectedPlatform } as any,
-          submitterName, profile?.id, originalRight
-        );
-        toast.success("Right update submitted for approval. Changes will apply once reviewed.");
+        await Promise.all([
+          ...validEntries.map(e =>
+            e._id
+              ? submitRightChange(
+                  originalRight.movie_id, "right_update",
+                  { ...rowFor(e), id: e._id, platforms: selectedPlatform } as any,
+                  submitterName, profile?.id, originalRows[e._id]
+                )
+              : submitRightChange(
+                  originalRight.movie_id, "right_create",
+                  {
+                    ...rowFor(e),
+                    movie_id: originalRight.movie_id,
+                    territory: e.territory || "World",
+                    platforms: selectedPlatform,
+                  } as any,
+                  submitterName, profile?.id
+                )
+          ),
+          ...removedIds.map(id =>
+            submitRightChange(
+              originalRight.movie_id, "right_delete",
+              { ...originalRows[id], id, platforms: selectedPlatform } as any,
+              submitterName, profile?.id, originalRows[id]
+            )
+          ),
+        ]);
+        toast.success("Right changes submitted for approval. Changes will apply once reviewed.");
         return;
       }
 
-      await updateRight(rightId, updatedData);
+      await Promise.all([
+        ...validEntries.map(e =>
+          e._id
+            ? updateRight(e._id, rowFor(e))
+            : createRight({
+                ...rowFor(e),
+                movie_id: originalRight.movie_id,
+                territory: e.territory || "World",
+              })
+        ),
+        ...removedIds.map(id => deleteRight(id)),
+      ]);
+      toast.success("Right updated.");
       router.push("/rights");
     } catch (err) { toast.error(err instanceof Error ? err.message : "Failed to update right"); }
     finally { setSaving(false); }
@@ -151,9 +185,7 @@ export default function EditRightPage() {
       {/* Header */}
       <div className="relative overflow-hidden rounded-[12px] bg-(--panel-solid)/60 border border-(--svf-border) backdrop-blur-xl p-3">
         <div className="relative flex items-center gap-4">
-          <Button variant="ghost" size="sm" asChild className="text-(--text-faint) hover:text-(--text) hover:bg-(--hover) h-8 w-8 p-0 shrink-0">
-            <Link href="/rights"><ArrowLeft className="h-4 w-4" /></Link>
-          </Button>
+          <BackButton fallbackHref="/rights" label={null} iconClassName="h-4 w-4" className="text-(--text-faint) hover:text-(--text) hover:bg-(--hover) h-8 w-8 p-0 shrink-0" />
           <div className="p-2 rounded-[9px] bg-red-500/10 border border-red-500/20">
             <Edit className="h-5 w-5 text-red-400" />
           </div>
@@ -173,7 +205,10 @@ export default function EditRightPage() {
 
       <Card className="glass-card border-(--svf-border)">
         <CardHeader className="pb-3 pt-5 px-5 border-b border-(--svf-border)">
-          <CardTitle className="text-sm font-bold text-(--text)">Right Details</CardTitle>
+          <CardTitle className="flex items-center gap-2.5 text-sm font-bold text-(--text)">
+            Right Details
+            <span className="ml-auto text-[10px] font-normal text-(--text-faint)">Shared across all nature entries below</span>
+          </CardTitle>
         </CardHeader>
         <CardContent className="p-5 space-y-5">
           {/* Platform */}
@@ -204,31 +239,6 @@ export default function EditRightPage() {
               placeholder="e.g. Pay TV, SVOD…" className={inputCls} />
           </FormField>
 
-          {/* Nature */}
-          <FormField label="Nature of Right">
-            <NatureSelector
-              value={nature}
-              onValueChange={setNature}
-              extraOptions={["Shared Exclusive"]}
-              excludeOptions={["Jointly Owned"]}
-            />
-          </FormField>
-
-          {/* Territory */}
-          <FormField label="Territory">
-            <TerritorySelect value={territory} onChange={setTerritory} />
-          </FormField>
-
-          {/* Dates */}
-          <div className="grid grid-cols-2 gap-3">
-            <FormField label="Start Date">
-              <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={inputCls} />
-            </FormField>
-            <FormField label="End Date">
-              <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inputCls} />
-            </FormField>
-          </div>
-
           {/* Holdbacks */}
           <FormField label="Holdbacks" hint="Leave blank if none.">
             <Input value={holdbacks} onChange={e => setHoldbacks(e.target.value)}
@@ -240,6 +250,36 @@ export default function EditRightPage() {
             <Textarea value={remarks} onChange={e => setRemarks(e.target.value)} rows={2}
               className="bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-sm resize-none focus-visible:ring-red-500/40" />
           </FormField>
+        </CardContent>
+      </Card>
+
+      {/* Nature Entries */}
+      <Card className="glass-card border-(--svf-border)">
+        <CardHeader className="pb-3 pt-5 px-5 border-b border-(--svf-border)">
+          <CardTitle className="flex items-center gap-2.5 text-sm font-bold text-(--text)">
+            <div className="p-1.5 rounded-md bg-red-500/10 border border-red-500/20">
+              <Calendar className="h-3.5 w-3.5 text-red-400" />
+            </div>
+            Nature Entries
+            <Button type="button" variant="outline" size="sm" onClick={addEntry}
+              className="ml-auto h-7 text-xs border-(--svf-border) text-(--text-faint) hover:text-(--text) hover:bg-(--hover)">
+              <Plus className="h-3 w-3 mr-1" />Add entry
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-5 space-y-3">
+          <p className="text-xs text-(--text-faint) -mt-1">
+            Each entry is one rights row. Removing an entry deletes that row when you save.
+          </p>
+          {entries.map(entry => (
+            <NatureEntryRow
+              key={entry._key}
+              entry={entry}
+              onChange={(updated) => updateEntry(entry._key, updated)}
+              onRemove={() => removeEntry(entry._key)}
+              isOnly={entries.length === 1}
+            />
+          ))}
         </CardContent>
       </Card>
 

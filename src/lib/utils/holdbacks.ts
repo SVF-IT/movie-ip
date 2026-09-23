@@ -80,18 +80,53 @@ function normaliseHoldbackText(raw: string | null | undefined): string {
 }
 
 /**
- * True when `raw` holds back the given exploitation type. Substring-based, so
- * "No AVOD till 2026" and "youtube holdback" both count for 'avod'.
+ * True when `raw` holds back the given exploitation type.
+ *
+ * Aliases match on word boundaries, not bare substrings: a plain `includes`
+ * made short aliases fire inside unrelated words — 'est' (Electronic
+ * Sell-Through) matched "t-e-r-r-EST-rial", so every terrestrial holdback
+ * registered as a TVOD one and hid the title from internet Open Titles.
+ * Multi-word aliases still match as phrases, and punctuation counts as a
+ * boundary so "No AVOD, FVOD" and "(AVOD)" both match.
  */
 export function holdsBackType(raw: string | null | undefined, type: ExploitationType): boolean {
   const text = normaliseHoldbackText(raw)
   if (!text.trim()) return false
-  return EXPLOITATION_ALIASES[type].some((alias) => text.includes(alias))
+  return EXPLOITATION_ALIASES[type].some((alias) => {
+    const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return new RegExp(`(?<![a-z0-9])${escaped}(?![a-z0-9])`, 'i').test(text)
+  })
 }
 
 /** True when ANY of the supplied raw holdback strings holds back `type`. */
 export function anyHoldsBackType(raws: (string | null | undefined)[], type: ExploitationType): boolean {
   return raws.some((r) => holdsBackType(r, type))
+}
+
+/**
+ * Keep only the comma-separated parts of `raw` that concern one of `types`.
+ *
+ * Movie-wide holdbacks (`movies.syndication_holdback`) are a single free-text
+ * field covering every right type, so a satellite-only note like "No Satellite
+ * till 2027" would otherwise surface in the internet column. Gating already
+ * filters by type via holdsBackType; this is its display counterpart.
+ *
+ * A part is kept only when it names one of `types`. Text naming another type
+ * (e.g. a terrestrial caveat on the internet column) and text naming no type at
+ * all are both dropped, so the column shows holdbacks on the rights in question
+ * and nothing else. Returns null when nothing remains, so callers can omit the
+ * source entirely.
+ */
+export function filterHoldbackTextForTypes(
+  raw: string | null | undefined,
+  types: ExploitationType[]
+): string | null {
+  if (!raw || !raw.trim()) return null
+  const kept = raw
+    .split(',')
+    .map((part) => part.trim())
+    .filter((part) => part && types.some((t) => holdsBackType(part, t)))
+  return kept.length > 0 ? kept.join(', ') : null
 }
 
 // ── Owned-rights classification ──────────────────────────────────────────────

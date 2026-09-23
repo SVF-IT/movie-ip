@@ -36,11 +36,11 @@ import { deleteMovie, getMovieById, getMovieExpiredRights, getMovieRights, getMo
 import { submitRightChange } from "@/lib/api/pending-changes";
 import { deleteRight } from "@/lib/api/rights";
 import { isAdminRole, isEditorRole, type MovieLanguageVersion, type MovieRight, type MovieWithDetails, type PlatformRight } from "@/lib/types/database";
+import { BackButton } from "@/components/ui/back-button";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import {
   AlertTriangle,
-  ArrowLeft,
   Award,
   Calendar,
   CheckCircle2,
@@ -374,9 +374,7 @@ export default function MovieDetailPage() {
   if (!movie && !loading) {
     return (
       <div className="space-y-4">
-        <Button variant="ghost" size="sm" asChild className="text-(--text-faint) hover:text-(--text)">
-          <Link href="/movies"><ArrowLeft className="mr-2 h-4 w-4" />Back to Movies</Link>
-        </Button>
+        <BackButton fallbackHref="/movies" label="Back to Movies" iconClassName="h-4 w-4" />
         <p className="text-(--text-faint) text-sm">Movie not found.</p>
       </div>
     );
@@ -541,9 +539,12 @@ export default function MovieDetailPage() {
         <div className="absolute inset-0 pointer-events-none" style={{ background: "linear-gradient(to right, color-mix(in oklch, var(--bg-raise) 80%, transparent) 0%, transparent 60%)" }} />
 
         <div className="relative flex items-start gap-6 p-6">
-          <Button variant="ghost" size="sm" asChild className="absolute top-5 left-5 text-(--text-faint) hover:text-(--text) hover:bg-(--hover) h-8 w-8 p-0">
-            <Link href="/movies"><ArrowLeft className="h-4 w-4" /></Link>
-          </Button>
+          <BackButton
+            fallbackHref="/movies"
+            label={null}
+            iconClassName="h-4 w-4"
+            className="absolute top-5 left-5 h-8 w-8 p-0"
+          />
 
           {languageVersions.length > 1 && (
             <div className="absolute top-4 right-4">

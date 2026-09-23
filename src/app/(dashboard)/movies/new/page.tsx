@@ -2,6 +2,7 @@
 
 import { LanguageSelector } from "@/components/forms/language-selector";
 import { CensorCertificatesSection } from "@/components/movies/censor-certificates-section";
+import { BackButton } from "@/components/ui/back-button";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,7 +30,6 @@ import type {
   ProductionHouse,
 } from "@/lib/types/database";
 import {
-  ArrowLeft,
   Award,
   Calendar,
   CheckCircle,
@@ -492,9 +492,7 @@ export default function NewMoviePage() {
       {/* Header */}
       <div className="relative overflow-hidden rounded-[12px] bg-(--panel-solid) border border-(--svf-border) p-3">
         <div className="relative flex items-center gap-4">
-          <Button variant="ghost" size="sm" asChild className="text-(--text-faint) hover:text-(--text) hover:bg-(--hover) h-8 w-8 p-0 shrink-0">
-            <Link href="/movies"><ArrowLeft className="h-4 w-4" /></Link>
-          </Button>
+          <BackButton fallbackHref="/movies" label={null} iconClassName="h-4 w-4" className="text-(--text-faint) hover:text-(--text) hover:bg-(--hover) h-8 w-8 p-0 shrink-0" />
           <div className="p-2 rounded-[9px] bg-red-500/10 border border-red-500/20">
             <Plus className="h-5 w-5 text-red-400" />
           </div>

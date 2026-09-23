@@ -51,6 +51,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { stringCodec, useUrlFilterState } from "@/hooks/use-url-filter-state";
 
 function ApprovalStatusBadge({ status }: { status: ApprovalStatus }) {
   if (status === "approved")
@@ -601,8 +602,16 @@ export default function LegalApprovalsPage() {
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const toast = useAppToast();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<ApprovalStatus[]>(["pending"]);
+  const [searchQuery, setSearchQuery] = useUrlFilterState("q", "", stringCodec);
+  const [statusFilter, setStatusFilter] = useUrlFilterState<ApprovalStatus[]>(
+    "ms",
+    ["pending"],
+    {
+      encode: (v) => (v.length ? v.join(",") : "none"),
+      decode: (raw) => (raw && raw !== "none" ? (raw.split(",") as ApprovalStatus[]) : []),
+    },
+    (v) => v.length === 1 && v[0] === "pending"
+  );
 
   // Approving (new movies)
   const [approving, setApproving] = useState(false);
@@ -623,8 +632,16 @@ export default function LegalApprovalsPage() {
   const [changes, setChanges] = useState<PendingChange[]>([]);
   const [changesCount, setChangesCount] = useState(0);
   const [changesLoading, setChangesLoading] = useState(true);
-  const [changesSearch, setChangesSearch] = useState("");
-  const [changesStatusFilter, setChangesStatusFilter] = useState<("pending" | "approved" | "rejected")[]>(["pending"]);
+  const [changesSearch, setChangesSearch] = useUrlFilterState("cq", "", stringCodec);
+  const [changesStatusFilter, setChangesStatusFilter] = useUrlFilterState<("pending" | "approved" | "rejected")[]>(
+    "cs",
+    ["pending"],
+    {
+      encode: (v) => (v.length ? v.join(",") : "none"),
+      decode: (raw) => (raw && raw !== "none" ? (raw.split(",") as ("pending" | "approved" | "rejected")[]) : []),
+    },
+    (v) => v.length === 1 && v[0] === "pending"
+  );
 
   // Approving (changes)
   const [changeApproving, setChangeApproving] = useState(false);

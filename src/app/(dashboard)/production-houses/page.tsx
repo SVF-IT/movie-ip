@@ -31,6 +31,7 @@ import {
 import { AlertTriangle, Download, Edit, Factory, Loader2, Plus, Search, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { stringCodec, useUrlFilterState } from "@/hooks/use-url-filter-state";
 import { useAppToast } from "@/hooks/use-app-toast";
 
 const PRODUCTION_HOUSE_EXPORT_FIELDS: ExportFieldDef[] = [
@@ -41,7 +42,7 @@ const PRODUCTION_HOUSE_EXPORT_FIELDS: ExportFieldDef[] = [
 export default function ProductionHousesPage() {
   const [houses, setHouses] = useState<ProductionHouseWithStats[]>([]);
   const [totalCount, setTotalCount] = useState(0);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useUrlFilterState("q", "", stringCodec);
   const [loading, setLoading] = useState(true);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);

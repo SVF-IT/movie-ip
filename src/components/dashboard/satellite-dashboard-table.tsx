@@ -1,20 +1,19 @@
 'use client'
 
 import { ActiveFilterChips, type ActiveFilterChip } from '@/components/dashboard/active-filter-chips'
-import { HoldbackInfoIcon } from '@/components/dashboard/holdback-info-icon'
 import { DataExportDialog, type ExportFieldDef } from '@/components/import-export/data-export-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
 import { Card } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Input } from '@/components/ui/input'
-import { MultiSelectFilter } from '@/components/ui/multi-select-filter'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { ColumnDateRangeFilter, ColumnFilter, FilterableHead, SortableFilterableHead } from '@/components/ui/column-header-filter'
 import { SortableHeader } from '@/components/ui/sortable-header'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { useMultiSelectFilterState } from '@/hooks/use-multi-select-filter-state'
+import { useUrlMultiSelectFilterState } from '@/hooks/use-url-multi-select-filter-state'
+import { stringCodec, stringListCodec, useUrlFilterState } from '@/hooks/use-url-filter-state'
 import { useSortableTable } from '@/hooks/use-sortable-table'
 import {
   getExpiringSatelliteTitles,
@@ -23,9 +22,9 @@ import {
   type MovieWithSatelliteRights,
 } from '@/lib/api/dashboard'
 import { cn } from '@/lib/utils'
-import { CalendarIcon, CalendarRange, ChevronRight, Download, Loader2, Search, X } from 'lucide-react'
+import { CalendarIcon, CalendarRange, ChevronRight, Download, Loader2, X } from 'lucide-react'
 import Link from 'next/link'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 function isoToDisplay(iso: string): string {
   if (!iso) return ''
@@ -86,7 +85,18 @@ interface SatelliteDashboardTableProps {
    */
   languageOptions?: string[]
   onLanguageChange?: (next: string[]) => void
+  /**
+   * The language selection this page opens with (Bengali). Clearing filters
+   * must return to the state the page started in, not to "all languages" —
+   * which is a state the user could not otherwise reach.
+   */
+  defaultLanguage?: string[]
   totalLanguageCount: number
+  /**
+   * False until the parent's language options have been fetched. The tables hold
+   * their first fetch until then, so the default language filter is applied to it.
+   */
+  languagesReady?: boolean
   expiryYear: string
   onExpiryYearChange: (year: string) => void
   expiryFrom: string
@@ -100,7 +110,7 @@ interface SatelliteDashboardTableProps {
   yearOptions: number[]
   fullPage?: boolean
   /**
-   * Reports the count AFTER every in-table filter (licensor, holdback, open-to type,
+   * Reports the count AFTER every in-table filter (licensor, open-to type,
    * agreement-end, …) so the stat card can show the same number the table lists.
    * The table fetches the full result set (limit 10000), so this is the true total.
    */
@@ -150,7 +160,9 @@ export function SatelliteDashboardTable({
   language,
   languageOptions,
   onLanguageChange,
+  defaultLanguage,
   totalLanguageCount,
+  languagesReady = true,
   expiryYear,
   onExpiryYearChange,
   expiryFrom,
@@ -165,27 +177,41 @@ export function SatelliteDashboardTable({
   fullPage = false,
   onFilteredCountChange,
 }: SatelliteDashboardTableProps) {
-  const CERT_OPTIONS = ['U', 'UA', 'UA 7+', 'UA 13+', 'UA 16+', 'A', 'S']
+  const CERT_OPTIONS = ['U', 'UA', 'UA 7+', 'UA 13+', 'UA 16+', 'A']
 
 
   const [movies, setMovies] = useState<MovieWithSatelliteRights[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useUrlFilterState('sat_q', '', stringCodec)
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
-  const [certFilter, setCertFilter] = useMultiSelectFilterState(CERT_OPTIONS)
+  // Source is a multi-select in the column header; the API still takes a single
+  // value, so an all-or-one selection maps to it and mixed selections are
+  // narrowed client-side alongside the licensor filter.
+  const SOURCE_OPTIONS = [
+    { value: 'home', label: 'Home Production' },
+    { value: 'acquired', label: 'Acquired' },
+    { value: 'bangladeshi', label: 'Bangladesh' },
+  ]
+  const [sourceSel, setSourceSel] = useUrlMultiSelectFilterState('sat_src', SOURCE_OPTIONS.map(o => o.value))
+  const sourceFilter: SourceFilter =
+    sourceSel.length === 1 ? (sourceSel[0] as SourceFilter) : 'all'
+  const [certFilter, setCertFilter] = useUrlMultiSelectFilterState('sat_cert', CERT_OPTIONS)
   const [sortBy, setSortBy] = useState<SortOption>('title_asc')
   const WTP_OPTIONS: { value: 'wtp' | 'wtp_bd' | 'library'; label: string }[] = [
     { value: 'wtp', label: 'WTP' },
     { value: 'wtp_bd', label: 'WTP/BD' },
     { value: 'library', label: 'Library' },
   ]
-  const [wtpFilter, setWtpFilter] = useMultiSelectFilterState(WTP_OPTIONS.map(o => o.value))
-  const [agreementEndBy, setAgreementEndBy] = useState('')
-  // Holdback narrowing: 'all' (default) shows every title; 'with'/'without' narrow by
-  // holdback presence. Any non-'all' choice also reveals the Holdback column.
-  const [holdbackFilter, setHoldbackFilter] = useState<'all' | 'with' | 'without'>('all')
-  const [bangladeshiOnly, setBangladeshiOnly] = useState(false)
+  const [wtpFilter, setWtpFilter] = useUrlMultiSelectFilterState('sat_wtp', WTP_OPTIONS.map(o => o.value))
+  // Sunset/rights window starts at today by default so Open Titles opens on
+  // what is available from now on; the end stays open-ended.
+  const todayIso = useMemo(() => new Date().toLocaleDateString('en-CA'), [])
+  const didInitOpenFrom = useRef(false)
+  useEffect(() => {
+    if (didInitOpenFrom.current) return
+    didInitOpenFrom.current = true
+    if (activeCard === 'open_titles' && !openFrom && !openTo) onOpenFromChange(todayIso)
+  }, [activeCard, openFrom, openTo, todayIso, onOpenFromChange])
   const [showExportDialog, setShowExportDialog] = useState(false)
   const [exportData, setExportData] = useState<Record<string, unknown>[]>([])
   const [exportLoading, setExportLoading] = useState(false)
@@ -202,9 +228,25 @@ export function SatelliteDashboardTable({
     return Array.from(set).sort((a, b) => a.localeCompare(b))
   }, [movies])
 
-  const [licensorFilter, setLicensorFilter] = useMultiSelectFilterState(licensorOptions)
+  const [licensorFilter, setLicensorFilter] = useUrlMultiSelectFilterState('sat_lic', licensorOptions)
 
-  useEffect(() => { setSelectedIds(new Set()) }, [activeCard, language, expiryFrom, expiryTo, openFrom, openTo, sourceFilter, licensorFilter, certFilter, wtpFilter, bangladeshiOnly, agreementEndBy, holdbackFilter])
+  // Title gets a searchable multi-select of the titles currently loaded, so the
+  // header filter can pick exact titles the way Excel's column filter does.
+  const titleOptions = useMemo(() => {
+    const set = new Set<string>()
+    for (const m of movies as any[]) if (m.title) set.add(m.title)
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  }, [movies])
+  // Unlike the other filters, title's options are derived from the fetched rows
+  // rather than a fixed list, so "all selected" can't mean "no filter" — the set
+  // shrinks whenever another filter narrows the data, which would leave a stale
+  // selection looking like an active filter. An empty selection means no filter.
+  const [titleSel, setTitleSel] = useUrlFilterState<string[]>('sat_title', [], stringListCodec, (v) => v.length === 0)
+  const titleFilter = titleSel.length === 0 ? titleOptions : titleSel
+  const setTitleFilter = (next: string[]) =>
+    setTitleSel(next.length >= titleOptions.length ? [] : next)
+
+  useEffect(() => { setSelectedIds(new Set()) }, [activeCard, language, expiryFrom, expiryTo, openFrom, openTo, sourceSel, licensorFilter, certFilter, wtpFilter])
 
   useEffect(() => {
     const timer = setTimeout(() => { setDebouncedSearch(search) }, 300)
@@ -224,10 +266,16 @@ export function SatelliteDashboardTable({
   useEffect(() => {
     setSortBy(activeCard === 'expiring' ? 'expiry_asc' : 'title_asc')
     setWtpFilter(WTP_OPTIONS.map(o => o.value))
-    setAgreementEndBy('')
   }, [activeCard])
 
   const fetchData = useCallback(async (forExport = false) => {
+    // The parent resolves its language options asynchronously and only then applies
+    // the default (Bengali). Fetching before that lands would send no language filter
+    // at all — `language.length < totalLanguageCount` is `0 < 0`, i.e. false — and the
+    // table would report an all-language count to the stat card. `languagesReady`
+    // distinguishes "options not fetched yet" from "fetched and genuinely empty", so a
+    // failed language fetch still renders rather than hanging on a skeleton forever.
+    if (!languagesReady) return
     if (!forExport) setIsLoading(true)
     try {
       const limit = 10000
@@ -239,7 +287,8 @@ export function SatelliteDashboardTable({
       // filter" — rather than the full array, because the option lists (esp. Certification, a
       // hardcoded set) aren't guaranteed to cover every value present in the data (nulls, blanks,
       // legacy values). Sending the full array would silently exclude those rows via `.in()`.
-      const languageParam = language.length < totalLanguageCount ? language : undefined
+      const languageParam =
+        language.length > 0 && language.length < totalLanguageCount ? language : undefined
       const certParam = certFilter.length < CERT_OPTIONS.length ? certFilter : undefined
       const wtpParam = wtpFilter.length < WTP_OPTIONS.length ? wtpFilter : undefined
 
@@ -251,10 +300,8 @@ export function SatelliteDashboardTable({
           sortBy: safeSortBy,
           certification: certParam,
           wtpFilter: wtpParam,
-          bangladeshiOnly: bangladeshiOnly || undefined,
           openFrom: openFrom || undefined,
           openTo: openTo || undefined,
-          holdbackFilter: holdbackFilter === 'all' ? undefined : holdbackFilter,
           limit,
           offset,
         })
@@ -294,7 +341,7 @@ export function SatelliteDashboardTable({
     } finally {
       if (!forExport) setIsLoading(false)
     }
-  }, [activeCard, debouncedSearch, language, totalLanguageCount, sourceFilter, certFilter, expiryFrom, expiryTo, openFrom, openTo, sortBy, wtpFilter, bangladeshiOnly, holdbackFilter])
+  }, [activeCard, debouncedSearch, language, totalLanguageCount, languagesReady, sourceFilter, certFilter, expiryFrom, expiryTo, openFrom, openTo, sortBy, wtpFilter])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -305,10 +352,6 @@ export function SatelliteDashboardTable({
       const data = activeCard !== 'expiring'
         ? (rawData as any[]).filter((m: any) => {
           if (licensorFilter.length < licensorOptions.length && getEffectiveLicensor(m) && !licensorFilter.includes(getEffectiveLicensor(m))) return false
-          if (agreementEndBy) {
-            if (m.source !== 'acquired' || !m.agreement_end_date) return false
-            if (m.agreement_end_date > agreementEndBy) return false
-          }
           return true
         })
         : rawData
@@ -331,7 +374,7 @@ export function SatelliteDashboardTable({
               rows.push({
                 sl_no: idx++,
                 title: movie.title,
-                source: movie.source === 'home_production' ? 'Home' : 'Acquired',
+                source: movie.is_bangladeshi ? 'Bangladesh' : movie.source === 'home_production' ? 'Home' : 'Acquired',
                 platform_name: right.platform_name || '',
                 rights_type_name: right.rights_type_name || '',
                 nature: right.nature || '',
@@ -354,7 +397,7 @@ export function SatelliteDashboardTable({
         preparedData = (sourceData || []).map((row, idx) => ({
           ...row,
           release_date: row.release_date || row.release_year || '',
-          source: row.source === 'home_production' ? 'Home' : 'Acquired',
+          source: row.is_bangladeshi ? 'Bangladesh' : row.source === 'home_production' ? 'Home' : 'Acquired',
           assignor_licensor: row.source === 'home_production' ? '' : (row.assignor_licensor || ''),
           licensee: row.source === 'home_production' ? '' : (row.licensee || ''),
           agreement_start_date: row.source === 'home_production' ? '' : (row.agreement_start_date || ''),
@@ -369,18 +412,32 @@ export function SatelliteDashboardTable({
     } finally {
       setExportLoading(false)
     }
-  }, [fetchData, activeCard, selectedIds, licensorFilter, agreementEndBy])
+  }, [fetchData, activeCard, selectedIds, licensorFilter, sourceSel, titleSel])
 
-  const licensorFilteredMovies = movies.filter((m: any) =>
-    // Titles with no licensor aren't represented in licensorOptions, so they must not be
-    // filtered out by a partial selection — they'd disappear with no way to get them back.
-    licensorFilter.length >= licensorOptions.length || !getEffectiveLicensor(m) || licensorFilter.includes(getEffectiveLicensor(m))
-  ).filter((m: any) => {
-    if (!agreementEndBy) return true
-    // Acquired-only: home productions have no agreement_end_date, so this filter excludes them.
-    if (m.source !== 'acquired' || !m.agreement_end_date) return false
-    return m.agreement_end_date <= agreementEndBy
-  })
+  const matchesSourceSel = (m: any) => {
+    if (sourceSel.length >= SOURCE_OPTIONS.length) return true
+    return sourceSel.some((sel) =>
+      sel === 'home' ? m.source === 'home_production'
+        : sel === 'acquired' ? m.source === 'acquired'
+          : Boolean(m.is_bangladeshi)
+    )
+  }
+
+  const matchesTitleSel = (m: any) =>
+    titleFilter.length >= titleOptions.length || !m.title || titleFilter.includes(m.title)
+
+  // Titles with no licensor aren't represented in licensorOptions, so they must not be
+  // filtered out by a partial selection — they'd disappear with no way to get them back.
+  // The parentheses matter: without them `&&` binds tighter than `||` and a
+  // licensor-less row would bypass the source and title filters entirely.
+  const matchesLicensorSel = (m: any) =>
+    licensorFilter.length >= licensorOptions.length ||
+    !getEffectiveLicensor(m) ||
+    licensorFilter.includes(getEffectiveLicensor(m))
+
+  const licensorFilteredMovies = movies.filter(
+    (m: any) => matchesSourceSel(m) && matchesTitleSel(m) && matchesLicensorSel(m)
+  )
 
   const total = licensorFilteredMovies.length
   const home = licensorFilteredMovies.filter((m: any) => m.source === 'home_production').length
@@ -398,8 +455,12 @@ export function SatelliteDashboardTable({
 
   const { sortedData, sortConfig, requestSort } = useSortableTable(licensorFilteredMovies)
 
-  const getSourceBadge = (source: string) =>
-    source === 'home_production' ? (
+  // Bangladeshi titles are stored as acquired (occasionally home), but the origin
+  // is what matters when reading the list, so it wins over the raw source.
+  const getSourceBadge = (movie: { source?: string; is_bangladeshi?: boolean }) =>
+    movie.is_bangladeshi ? (
+      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-xs">Bangladesh</Badge>
+    ) : movie.source === 'home_production' ? (
       <Badge variant="outline" className="bg-cyan-500/10 text-cyan-400 border-cyan-500/30 text-xs">Home</Badge>
     ) : (
       <Badge variant="outline" className="bg-purple-500/10 text-purple-400 border-purple-500/30 text-xs">Acquired</Badge>
@@ -416,44 +477,35 @@ export function SatelliteDashboardTable({
     return <Badge variant="outline" className={cn('text-xs', colors[cert] || 'bg-muted text-muted-foreground')}>{cert}</Badge>
   }
 
-  const sortOptions: { value: SortOption; label: string }[] = [
-    { value: 'title_asc', label: 'A-Z (Title)' },
-    { value: 'title_desc', label: 'Z-A (Title)' },
-    { value: 'release_date_desc', label: 'Newest Release' },
-    { value: 'release_date_asc', label: 'Oldest Release' },
-    ...(activeCard === 'expiring' ? [
-      { value: 'expiry_asc' as SortOption, label: 'Expiry (Soonest)' },
-      { value: 'expiry_desc' as SortOption, label: 'Expiry (Latest)' },
-    ] : []),
-  ]
-
   const showExpiryFilters = activeCard === 'expiring'
   const showWtpCol = activeCard === 'open_titles'
-  const showLicensorCol = activeCard === 'open_titles' && (sourceFilter === 'acquired' || (licensorFilter.length > 0 && licensorFilter.length < licensorOptions.length))
-  // Holdbacks are always shown on Open Titles — the column is informational and the
-  // dropdown only narrows which rows appear, it no longer gates the column's visibility.
-  const showHoldbackCol = activeCard === 'open_titles'
+  // Licensor now carries its own header filter, so the column is always present
+  // on Open Titles rather than appearing only for acquired/narrowed views.
+  const showLicensorCol = activeCard === 'open_titles'
   // Expiring card: flat per-right rows (no expand/collapse)
   const flatExpiryRows = activeCard === 'expiring'
-  const colSpan = flatExpiryRows ? 9 : showWtpCol ? (showLicensorCol ? 11 : 10) + (showHoldbackCol ? 1 : 0) : 7
+  const colSpan = flatExpiryRows ? 9 : showWtpCol ? (showLicensorCol ? 11 : 10) : 7
 
   // ── row / cell sizing based on mode ──
   const rowCls = ''
   const cellCls = ''
   const headCls = ''
 
-  const inputCls = "h-9 rounded-[8px] bg-(--filter-panel-bg) border-(--filter-border) text-(--text) hover:border-(--filter-border-hover) focus-visible:border-(--filter-border-hover) focus-visible:ring-0 transition-colors"
   const labelCls = "text-[11px] font-medium uppercase tracking-[.06em] text-(--filter-label)"
   const selectTriggerCls = "h-9 rounded-[8px] bg-(--filter-panel-bg) border-(--filter-border) text-(--text) hover:border-(--filter-border-hover) focus-visible:border-(--filter-border-hover) focus-visible:ring-0 transition-colors text-sm"
 
   // Chips describe only genuine narrowing: a filter with every option selected is
   // the same as no filter, so it must not appear as "active".
   const activeChips: ActiveFilterChip[] = []
-  if (debouncedSearch) activeChips.push({ key: 'search', label: 'Search', value: debouncedSearch, onClear: () => setSearch('') })
-  if (sourceFilter !== 'all') activeChips.push({
-    key: 'source', label: 'Source',
-    value: sourceFilter === 'home' ? 'Home Production' : sourceFilter === 'acquired' ? 'Acquired' : 'Bangladesh',
-    onClear: () => setSourceFilter('all'),
+  if (sourceSel.length > 0 && sourceSel.length < SOURCE_OPTIONS.length) activeChips.push({
+    key: 'source', label: 'Type',
+    value: sourceSel.map((v) => SOURCE_OPTIONS.find(o => o.value === v)?.label ?? v).join(', '),
+    onClear: () => setSourceSel(SOURCE_OPTIONS.map(o => o.value)),
+  })
+  if (titleSel.length > 0) activeChips.push({
+    key: 'title', label: 'Title',
+    value: titleSel.length === 1 ? titleSel[0] : `${titleSel.length} selected`,
+    onClear: () => setTitleSel([]),
   })
   if (licensorFilter.length > 0 && licensorFilter.length < licensorOptions.length) activeChips.push({
     key: 'licensor', label: 'Licensor',
@@ -468,17 +520,12 @@ export function SatelliteDashboardTable({
   if (languageOptions && onLanguageChange && language.length > 0 && language.length < totalLanguageCount) activeChips.push({
     key: 'language', label: 'Language',
     value: language.length === 1 ? language[0] : `${language.length} selected`,
-    onClear: () => onLanguageChange(languageOptions),
+    onClear: () => onLanguageChange(defaultLanguage ?? languageOptions),
   })
   if (wtpFilter.length > 0 && wtpFilter.length < WTP_OPTIONS.length) activeChips.push({
     key: 'wtp', label: 'WTP library',
     value: wtpFilter.map((w) => WTP_OPTIONS.find((o) => o.value === w)?.label ?? w).join(', '),
     onClear: () => setWtpFilter(WTP_OPTIONS.map((o) => o.value)),
-  })
-  if (holdbackFilter !== 'all') activeChips.push({
-    key: 'holdback', label: 'Holdback',
-    value: holdbackFilter === 'with' ? 'With holdback' : 'Without holdback',
-    onClear: () => setHoldbackFilter('all'),
   })
   if (openFrom || openTo) activeChips.push({
     key: 'window', label: 'Rights window',
@@ -490,108 +537,28 @@ export function SatelliteDashboardTable({
     value: `${expiryFrom || '…'} → ${expiryTo || '…'}`,
     onClear: () => { onExpiryFromChange(''); onExpiryToChange(''); onExpiryYearChange('all') },
   })
-  if (agreementEndBy) activeChips.push({
-    key: 'agmt', label: 'Agreement ends by', value: agreementEndBy,
-    onClear: () => setAgreementEndBy(''),
-  })
-  if (bangladeshiOnly) activeChips.push({
-    key: 'bd', label: 'Bangladesh', value: 'Only',
-    onClear: () => setBangladeshiOnly(false),
-  })
 
   const clearAllFilters = () => {
     setSearch('')
-    setSourceFilter('all')
+    setSourceSel(SOURCE_OPTIONS.map(o => o.value))
     setLicensorFilter(licensorOptions)
+    setTitleSel([])
     setCertFilter(CERT_OPTIONS)
-    if (languageOptions && onLanguageChange) onLanguageChange(languageOptions)
+    if (onLanguageChange) onLanguageChange(defaultLanguage ?? languageOptions ?? [])
     setWtpFilter(WTP_OPTIONS.map((o) => o.value))
-    setHoldbackFilter('all')
-    onOpenFromChange(''); onOpenToChange('')
+    onOpenFromChange(todayIso); onOpenToChange('')
     onExpiryFromChange(''); onExpiryToChange(''); onExpiryYearChange('all')
-    setAgreementEndBy('')
-    setBangladeshiOnly(false)
   }
 
   const filtersBar = (
     <div className={fullPage
       ? 'px-4 py-3 bg-(--filter-panel-bg) border-b border-(--filter-border)'
       : 'rounded-[14px] border border-(--filter-border) bg-(--filter-panel-bg) p-3.5'}>
-      {/* One labelled grid — search is the first cell rather than its own full-width
-          row, so the block is a row shorter and the table sits higher. */}
+      {/* Most filters now live in the column headers; this grid only renders for the
+          cards that still have bar-level controls, so it collapses entirely rather
+          than leaving an empty row above the chips. */}
+      {showExpiryFilters && (
       <div className="grid gap-x-3 gap-y-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
-        {/* Search */}
-        <div className="flex flex-col gap-1 min-w-0 sm:col-span-2">
-          <span className={labelCls}>Search</span>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-(--filter-label)" />
-            <Input placeholder="Title or production number…" value={search} onChange={(e) => setSearch(e.target.value)}
-              className={`h-9 rounded-[8px] pl-9 text-sm placeholder:text-(--filter-label) bg-(--filter-panel-bg) border-(--filter-border) text-(--text) hover:border-(--filter-border-hover) focus-visible:border-(--filter-border-hover) focus-visible:ring-0 transition-colors`} />
-          </div>
-        </div>
-        {/* Source */}
-        <div className="flex flex-col gap-1 min-w-0">
-          <span className={labelCls}>Source</span>
-          <Select value={sourceFilter} onValueChange={(v) => { setSourceFilter(v as SourceFilter) }}>
-            <SelectTrigger className={`w-full ${selectTriggerCls}`}>
-              <SelectValue placeholder="Source" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Sources</SelectItem>
-              <SelectItem value="home">Home Production</SelectItem>
-              <SelectItem value="acquired">Acquired</SelectItem>
-              <SelectItem value="bangladeshi">Bangladesh</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Licensor */}
-        <div className="flex flex-col gap-1 min-w-0">
-          <span className={labelCls}>Licensor</span>
-          <MultiSelectFilter
-            label="Licensor"
-            options={licensorOptions}
-            value={licensorFilter}
-            onChange={setLicensorFilter}
-            searchable
-            accent="purple"
-            triggerWidth="w-full"
-          />
-        </div>
-
-        {/* Certification */}
-        <div className="flex flex-col gap-1 min-w-0">
-          <span className={labelCls}>Certification</span>
-          <MultiSelectFilter
-            label="Certification"
-            options={CERT_OPTIONS}
-            value={certFilter}
-            onChange={setCertFilter}
-            accent="purple"
-            triggerWidth="w-full"
-            extraPresetRows={[{
-              key: 'except-a',
-              label: 'Except A',
-              isActive: (v) => v.length > 0 && !v.includes('A') && CERT_OPTIONS.filter(c => c !== 'A').every(c => v.includes(c)),
-              onSelect: () => setCertFilter(CERT_OPTIONS.filter(c => c !== 'A')),
-            }]}
-          />
-        </div>
-
-        {/* Language */}
-        {languageOptions && onLanguageChange && (
-          <div className="flex flex-col gap-1 min-w-0">
-            <span className={labelCls}>Language</span>
-            <MultiSelectFilter
-              label="Language"
-              options={languageOptions}
-              value={language}
-              onChange={onLanguageChange}
-              triggerWidth="w-full"
-            />
-          </div>
-        )}
-
 
         {/* Expiry year + date range */}
         {showExpiryFilters && (
@@ -632,82 +599,10 @@ export function SatelliteDashboardTable({
           </>
         )}
 
-        {/* Open titles filters: WTP + date range */}
-        {activeCard === 'open_titles' && (
-          <>
-            <div className="flex flex-col gap-1 min-w-0">
-              <span className={labelCls}>WTP library</span>
-              <MultiSelectFilter
-                label="WTP"
-                options={WTP_OPTIONS}
-                value={wtpFilter}
-                onChange={(v) => setWtpFilter(v as ('wtp' | 'wtp_bd' | 'library')[])}
-                accent="purple"
-                triggerWidth="w-full"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1 min-w-0 sm:col-span-2">
-              <span className={labelCls}>Rights window</span>
-              <div className="flex items-center gap-1 min-w-0 bg-(--filter-panel-bg) border border-(--filter-border) rounded-[8px] px-3 h-9 hover:border-(--filter-border-hover) transition-colors [&_input]:min-w-0 [&_input]:flex-1">
-                  <DateInput value={openFrom} onChange={onOpenFromChange} />
-                <span className="text-(--filter-label) text-[10px] font-medium uppercase px-0.5">to</span>
-                  <DateInput value={openTo} onChange={onOpenToChange} />
-                {(openFrom || openTo) && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onOpenFromChange(''); onOpenToChange('') }}
-                    className="ml-1 p-0.5 text-(--text-faint) hover:text-red-400 transition-colors"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Agreement end-by date — separate from "open until": lets you spot acquired titles whose acquisition agreement itself is expiring by a given date, not just current-right expiry */}
-            <div className="flex flex-col gap-1 min-w-0">
-              <span className={labelCls}>Agreement ends by</span>
-              <div className={`flex items-center gap-1 bg-(--bg-raise) border rounded-[8px] px-3 h-9 transition-colors ${agreementEndBy ? 'border-amber-500/60' : 'border-(--svf-border-strong) hover:border-(--svf-border-strong)'}`}>
-                <DateInput value={agreementEndBy} onChange={setAgreementEndBy} />
-                {agreementEndBy && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setAgreementEndBy('') }}
-                    className="ml-1 p-0.5 text-(--text-faint) hover:text-red-400 transition-colors"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1 min-w-0">
-              <span className={labelCls}>Holdback</span>
-              <Select value={holdbackFilter} onValueChange={(v) => setHoldbackFilter(v as 'all' | 'with' | 'without')}>
-                <SelectTrigger className={cn('h-9 w-full rounded-[8px] text-sm', holdbackFilter !== 'all' ? 'border-amber-500/60 bg-amber-500/5 text-amber-400' : 'bg-(--bg-raise) border-(--svf-border-strong) text-(--text)')}>
-                  <SelectValue placeholder="Holdbacks" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Holdbacks</SelectItem>
-                  <SelectItem value="with">With holdback</SelectItem>
-                  <SelectItem value="without">Without holdback</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <label className={cn(
-              'self-end',
-              'flex items-center gap-1.5 h-9 px-3 rounded-[8px] border transition-colors cursor-pointer',
-              bangladeshiOnly ? 'border-emerald-500/60 bg-emerald-500/5' : 'border-(--svf-border) bg-(--bg-raise) hover:border-(--svf-border-strong)'
-            )}>
-              <Checkbox checked={bangladeshiOnly} onCheckedChange={(v) => setBangladeshiOnly(v === true)} className="h-3.5 w-3.5" />
-              <span className={cn('text-xs', bangladeshiOnly ? 'text-emerald-400' : 'text-(--text)')}>Bangladesh</span>
-            </label>
-          </>
-        )}
-
       </div>
+      )}
 
-      <ActiveFilterChips chips={activeChips} onClearAll={clearAllFilters} />
+      <ActiveFilterChips chips={activeChips} onClearAll={clearAllFilters} divider={showExpiryFilters} />
 
       {/* Actions row — selection count + export */}
       <div className="mt-2.5 flex flex-wrap items-center gap-2.5">
@@ -794,15 +689,54 @@ export function SatelliteDashboardTable({
                     onCheckedChange={toggleSelectAll}
                   />
                 </TableHead>
-                <SortableHeader column="title" label="Title" currentSort={sortConfig} onSort={requestSort} className={headCls} />
-                <SortableHeader column="source" label="Type" currentSort={sortConfig} onSort={requestSort} className={headCls} />
-                <SortableHeader column="certification" label="Cert" currentSort={sortConfig} onSort={requestSort} className={headCls} />
+                <SortableFilterableHead column="title" label="Title" currentSort={sortConfig} onSort={requestSort} className={headCls}>
+                  <ColumnFilter
+                    options={titleOptions}
+                    value={titleFilter}
+                    onChange={setTitleFilter}
+                    searchable
+                    searchValue={search}
+                    onSearchChange={setSearch}
+                    searchPlaceholder="Title or production no…"
+                  />
+                </SortableFilterableHead>
+                <SortableFilterableHead column="source" label="Type" currentSort={sortConfig} onSort={requestSort} className={headCls}>
+                  <ColumnFilter options={SOURCE_OPTIONS} value={sourceSel} onChange={setSourceSel} />
+                </SortableFilterableHead>
+                <SortableFilterableHead column="certification" label="Cert" currentSort={sortConfig} onSort={requestSort} className={cn('w-px px-2', headCls)}>
+                  <ColumnFilter options={CERT_OPTIONS} value={certFilter} onChange={setCertFilter} />
+                </SortableFilterableHead>
                 <SortableHeader column="release_date" label="Release" currentSort={sortConfig} onSort={requestSort} className={headCls} />
-                <SortableHeader column="language" label="Language" currentSort={sortConfig} onSort={requestSort} className={headCls} />
-                {showWtpCol && <TableHead className={headCls}>WTP Library</TableHead>}
-                {showLicensorCol && <TableHead className={headCls}>Licensor</TableHead>}
-                {activeCard === 'open_titles' && <TableHead className={headCls}>Sunset Date</TableHead>}
-                {showHoldbackCol && <TableHead className={cn('w-[92px]', headCls)}>Holdback</TableHead>}
+                <SortableFilterableHead column="language" label="Language" currentSort={sortConfig} onSort={requestSort} className={headCls}>
+                  {languageOptions && onLanguageChange && (
+                    <ColumnFilter options={languageOptions} value={language} onChange={onLanguageChange} searchable />
+                  )}
+                </SortableFilterableHead>
+                {showWtpCol && (
+                  <FilterableHead label="WTP Library" className={headCls}>
+                    <ColumnFilter
+                      options={WTP_OPTIONS}
+                      value={wtpFilter}
+                      onChange={(v) => setWtpFilter(v as ('wtp' | 'wtp_bd' | 'library')[])}
+                    />
+                  </FilterableHead>
+                )}
+                {showLicensorCol && (
+                  <FilterableHead label="Licensor" className={headCls}>
+                    <ColumnFilter options={licensorOptions} value={licensorFilter} onChange={setLicensorFilter} searchable />
+                  </FilterableHead>
+                )}
+                {activeCard === 'open_titles' && (
+                  <FilterableHead label="Sunset Date" className={headCls}>
+                    <ColumnDateRangeFilter
+                      from={openFrom}
+                      to={openTo}
+                      onFromChange={onOpenFromChange}
+                      onToChange={onOpenToChange}
+                      renderInput={(value, onChange) => <DateInput value={value} onChange={onChange} />}
+                    />
+                  </FilterableHead>
+                )}
               </>
             )}
           </TableRow>
@@ -832,15 +766,15 @@ export function SatelliteDashboardTable({
                   <TableCell className={cn('pl-4 w-10', cellCls)}>
                     <Checkbox checked={selectedIds.has(right.id)} onCheckedChange={() => toggleSelect(right.id)} />
                   </TableCell>
-                  <TableCell className={cn('font-medium max-w-48', cellCls)}>
-                    <Link href={`/movies/${movie.id}`} title={movie.title} className="hover:text-primary transition-colors line-clamp-2">
+                  <TableCell className={cn('font-medium whitespace-normal', cellCls)}>
+                    <Link href={`/movies/${movie.id}`} title={movie.title} className="hover:text-primary transition-colors break-words">
                       {movie.title}
                       {(movie.release_year || movie.release_date?.split('-')[0]) && (
                         <span className="font-normal ml-1" style={{ color: 'var(--text-faint)' }}>({movie.release_year || movie.release_date?.split('-')[0]})</span>
                       )}
                     </Link>
                   </TableCell>
-                  <TableCell className={cellCls}>{getSourceBadge(movie.source)}</TableCell>
+                  <TableCell className={cellCls}>{getSourceBadge(movie)}</TableCell>
                   <TableCell className={cn('whitespace-nowrap', cellCls)}>
                     {right.platform_name || <span className="text-muted-foreground">—</span>}
                   </TableCell>
@@ -887,16 +821,16 @@ export function SatelliteDashboardTable({
                 <TableCell className={cn('pl-4 w-10', cellCls)}>
                   <Checkbox checked={selectedIds.has(movie.id)} onCheckedChange={() => toggleSelect(movie.id)} />
                 </TableCell>
-                <TableCell className={cn('font-medium max-w-55', cellCls)}>
-                  <Link href={`/movies/${movie.id}`} title={movie.title} className="hover:text-primary transition-colors line-clamp-1">
+                <TableCell className={cn('font-medium whitespace-normal', cellCls)}>
+                  <Link href={`/movies/${movie.id}`} title={movie.title} className="hover:text-primary transition-colors break-words">
                     {movie.title}
                     {(movie.release_year || movie.release_date?.split('-')[0]) && (
                       <span className="font-normal ml-1" style={{ color: 'var(--text-faint)' }}>({movie.release_year || movie.release_date?.split('-')[0]})</span>
                     )}
                   </Link>
                 </TableCell>
-                <TableCell className={cellCls}>{getSourceBadge(movie.source)}</TableCell>
-                <TableCell className={cellCls}>{movie.certification ? getCertBadge(movie.certification) : <span className="text-muted-foreground text-xs">—</span>}</TableCell>
+                <TableCell className={cellCls}>{getSourceBadge(movie)}</TableCell>
+                <TableCell className={cn('w-px px-2 whitespace-nowrap', cellCls)}>{movie.certification ? getCertBadge(movie.certification) : <span className="text-muted-foreground text-xs">—</span>}</TableCell>
                 <TableCell className={cn('tabular-nums', cellCls)}>
                   {movie.release_date ? movie.release_date.split('-').reverse().join('/') : movie.release_year || '—'}
                 </TableCell>
@@ -909,8 +843,8 @@ export function SatelliteDashboardTable({
                   </TableCell>
                 )}
                 {showLicensorCol && (
-                  <TableCell className={cn('max-w-35', cellCls)} style={{ color: 'var(--text-faint)' }}>
-                    <span className="line-clamp-1 text-xs" title={getEffectiveLicensor(movie) || undefined}>{getEffectiveLicensor(movie) || '—'}</span>
+                  <TableCell className={cn('max-w-45 whitespace-normal', cellCls)} style={{ color: 'var(--text-faint)' }}>
+                    <span className="block text-xs break-words">{getEffectiveLicensor(movie) || '—'}</span>
                   </TableCell>
                 )}
                 {activeCard === 'open_titles' && (
@@ -922,11 +856,6 @@ export function SatelliteDashboardTable({
                     ) : movie.agreement_start_date ? (
                       <span style={{ color: 'var(--text-faint)' }}>{movie.agreement_start_date.split('-').reverse().join('/')} → ∞</span>
                     ) : <span style={{ color: 'var(--text-faint)' }}>—</span>}
-                  </TableCell>
-                )}
-                {showHoldbackCol && (
-                  <TableCell className={cellCls}>
-                    <HoldbackInfoIcon info={movie.holdback_info || { hasAny: false, entries: [] }} />
                   </TableCell>
                 )}
               </TableRow>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { stringCodec, useUrlFilterState } from "@/hooks/use-url-filter-state";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,7 @@ import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { Loader2, ChevronRight, X, FilePlus, FilePen, Trash2 } from "lucide-react";
 import { useAppToast } from "@/hooks/use-app-toast";
 import { useAuth } from "@/contexts/auth-context";
-import { useMultiSelectFilterState } from "@/hooks/use-multi-select-filter-state";
+import { useUrlMultiSelectFilterState } from "@/hooks/use-url-multi-select-filter-state";
 import { format, formatDistanceToNow } from "date-fns";
 import { getAuditLogs, getAuditLogStats } from "@/lib/api/audit";
 import type { AuditLogEntry } from "@/lib/types/database";
@@ -185,10 +186,10 @@ export default function AuditLogPage() {
   const [stats, setStats] = useState({ totalEvents: 0, eventsToday: 0, eventsThisWeek: 0 });
   const TABLE_OPTIONS = Object.keys(TABLE_NAMES);
   const ACTION_OPTIONS = ["INSERT", "UPDATE", "DELETE"];
-  const [tableFilter, setTableFilter]   = useMultiSelectFilterState<string>(TABLE_OPTIONS);
-  const [actionFilter, setActionFilter] = useMultiSelectFilterState<string>(ACTION_OPTIONS);
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo]     = useState("");
+  const [tableFilter, setTableFilter]   = useUrlMultiSelectFilterState<string>("table", TABLE_OPTIONS);
+  const [actionFilter, setActionFilter] = useUrlMultiSelectFilterState<string>("action", ACTION_OPTIONS);
+  const [dateFrom, setDateFrom] = useUrlFilterState("from", "", stringCodec);
+  const [dateTo, setDateTo]     = useUrlFilterState("to", "", stringCodec);
   const [loading, setLoading]   = useState(true);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const toast = useAppToast();

@@ -30,13 +30,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useMultiSelectFilterState } from "@/hooks/use-multi-select-filter-state";
+import { useUrlMultiSelectFilterState } from "@/hooks/use-url-multi-select-filter-state";
 import { useSortableTable } from "@/hooks/use-sortable-table";
 import { deletePlatform, getPlatformsWithStats, getPlatformTypes, type PlatformWithStats } from "@/lib/api/platforms";
 import { cn } from "@/lib/utils";
 import { AlertTriangle, Building2, Download, Edit, Loader2, Plus, Search, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { stringCodec, useUrlFilterState } from "@/hooks/use-url-filter-state";
 import { useAppToast } from "@/hooks/use-app-toast";
 
 const PLATFORM_EXPORT_FIELDS: ExportFieldDef[] = [
@@ -63,8 +64,8 @@ export default function PlatformsPage() {
   const [platforms, setPlatforms] = useState<PlatformWithStats[]>([]);
   const [platformTypes, setPlatformTypes] = useState<string[]>([]);
   const [totalCount, setTotalCount] = useState(0);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useMultiSelectFilterState<string>(platformTypes);
+  const [searchQuery, setSearchQuery] = useUrlFilterState("q", "", stringCodec);
+  const [typeFilter, setTypeFilter] = useUrlMultiSelectFilterState<string>("type", platformTypes);
   const [loading, setLoading] = useState(true);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);

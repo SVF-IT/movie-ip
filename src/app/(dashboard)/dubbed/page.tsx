@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils'
 import { Check, ChevronDown, Download, Film, Languages, Loader2, Search, X, XCircle } from 'lucide-react'
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
+import { stringCodec, stringListCodec, useUrlFilterState } from "@/hooks/use-url-filter-state";
 import { useAppToast } from '@/hooks/use-app-toast'
 
 type DubbedFilter = 'all' | 'dubbed' | 'not_dubbed' | 'cannot_be_dubbed'
@@ -29,12 +30,30 @@ export default function DubbedPage() {
   const [loading, setLoading] = useState(true)
   const toast = useAppToast()
 
-  const [searchQuery, setSearchQuery] = useState('')
-  const [dubbedFilter, setDubbedFilter] = useState<DubbedFilter[]>(['dubbed'])
-  const [languageFilter, setLanguageFilter] = useState<string[]>([])
+  const [searchQuery, setSearchQuery] = useUrlFilterState('q', '', stringCodec)
+  const [dubbedFilter, setDubbedFilter] = useUrlFilterState<DubbedFilter[]>(
+    'dub',
+    ['dubbed'],
+    {
+      // An empty selection is a real state here (it matches nothing), so it
+      // gets its own token rather than collapsing to "no parameter", which
+      // would restore the default instead.
+      encode: (v) => (v.length ? v.join(',') : 'none'),
+      decode: (raw) => (raw && raw !== 'none' ? (raw.split(',') as DubbedFilter[]) : []),
+    },
+    (v) => v.length === 1 && v[0] === 'dubbed'
+  )
+  const [languageFilter, setLanguageFilter] = useUrlFilterState<string[]>('lang', [], stringListCodec, (v) => v.length === 0)
   const [langPopoverOpen, setLangPopoverOpen] = useState(false)
   const [dubbedPopoverOpen, setDubbedPopoverOpen] = useState(false)
-  const [sourceFilter, setSourceFilter] = useState<'all' | 'home_production' | 'acquired'>('all')
+  const [sourceFilter, setSourceFilter] = useUrlFilterState<'all' | 'home_production' | 'acquired'>(
+    'src',
+    'all',
+    {
+      encode: (v) => (v === 'all' ? null : v),
+      decode: (raw) => (raw === 'home_production' || raw === 'acquired' ? raw : 'all'),
+    }
+  )
 
 
   useEffect(() => {
@@ -56,19 +75,18 @@ export default function DubbedPage() {
   const langColumns = ALL_LANGUAGES.filter((l) => l.toLowerCase() !== 'bengali')
 
   const toggleLanguage = (id: string) => {
-    setLanguageFilter((prev) => prev.includes(id) ? prev.filter((l) => l !== id) : [...prev, id])
+    setLanguageFilter(languageFilter.includes(id) ? languageFilter.filter((l) => l !== id) : [...languageFilter, id])
   }
 
   const toggleDubbedFilter = (val: DubbedFilter) => {
     if (val === 'all') { setDubbedFilter(['all']); return }
-    setDubbedFilter((prev) => {
-      const withoutAll = prev.filter((v) => v !== 'all')
-      if (withoutAll.includes(val)) {
-        const next = withoutAll.filter((v) => v !== val)
-        return next.length === 0 ? ['all'] : next
-      }
-      return [...withoutAll, val]
-    })
+    const withoutAll = dubbedFilter.filter((v) => v !== 'all')
+    if (withoutAll.includes(val)) {
+      const next = withoutAll.filter((v) => v !== val)
+      setDubbedFilter(next.length === 0 ? ['all'] : next)
+    } else {
+      setDubbedFilter([...withoutAll, val])
+    }
   }
 
   const isDubbedFilterActive = (val: DubbedFilter) => dubbedFilter.includes(val)

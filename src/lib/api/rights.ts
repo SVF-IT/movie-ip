@@ -1,12 +1,12 @@
 import { createClient } from '@/lib/supabase/client'
 import type { PlatformRight } from '@/lib/types/database'
 import { sanitizeError } from '@/lib/utils/sanitize-error'
-import { notifyRightsMutated } from '@/lib/api/cache'
+import { cachedQuery, notifyRightsMutated } from '@/lib/api/cache'
 
 const supabase = createClient()
 const MAX_LIMIT = 10000
 
-export async function getAllRights(options?: {
+type GetAllRightsOptions = {
   platformId?: string[]
   platformNameContains?: string
   platformTypeCategory?: 'satellite' | 'internet' | 'other'
@@ -20,7 +20,25 @@ export async function getAllRights(options?: {
   movieSearch?: string
   limit?: number
   offset?: number
-}): Promise<{ data: PlatformRight[]; count: number }> {
+}
+
+/**
+ * Cached front door for the rights list.
+ *
+ * Returning to the list — pressing back out of a right, or re-applying a filter
+ * just cleared — would otherwise re-run the identical query. The key names every
+ * option that changes the result, so a hit is always the same question, and any
+ * rights write clears the cache outright.
+ */
+export async function getAllRights(
+  options?: GetAllRightsOptions
+): Promise<{ data: PlatformRight[]; count: number }> {
+  return cachedQuery(`allRights:${JSON.stringify(options ?? {})}`, () => fetchAllRights(options))
+}
+
+async function fetchAllRights(
+  options?: GetAllRightsOptions
+): Promise<{ data: PlatformRight[]; count: number }> {
   if ((options?.platformId && options.platformId.length === 0) || (options?.platformTypeExact && options.platformTypeExact.length === 0)) {
     return { data: [], count: 0 }
   }
@@ -104,11 +122,60 @@ export async function getAllRights(options?: {
   return { data: data || [], count: count || 0 }
 }
 
+/**
+ * How many current rights have already lapsed, optionally only those that
+ * lapsed on or after `since`.
+ *
+ * Counts without fetching rows: the Expiring Rights page shows this as a
+ * headline figure but never lists the rights themselves, since that page is
+ * about upcoming expiries and lapsed ones live in Rights Management.
+ */
+export async function getExpiredRightsCount(since?: string): Promise<number> {
+  const today = new Date().toISOString().split('T')[0]
+  return cachedQuery(`expiredRightsCount:${since ?? 'all'}`, async () => {
+    // No is_current clause: that flag is derived as `end_date >= today`, so
+    // combining it with `end_date < today` is self-contradictory and counted
+    // only rows left stale by an earlier recalculation. A past end date is the
+    // definition of lapsed, and it is what Rights Management filters on too.
+    let query = supabase
+      .from('platform_rights')
+      .select('*', { count: 'exact', head: true })
+      .lt('end_date', today)
+    if (since) query = query.gte('end_date', since)
+    const { count, error } = await query
+    if (error) throw sanitizeError(error)
+    return count || 0
+  })
+}
+
 export async function getRightById(id: string): Promise<PlatformRight | null> {
   const { data, error } = await supabase.from('platform_rights').select(`*, movies(id, title, source), platforms(id, name, platform_type)`).eq('id', id).single()
 
   if (error) throw sanitizeError(error)
   return data
+}
+
+/**
+ * All rows belonging to the same logical "right" as the given one: same movie,
+ * same platform and same category. Each row carries exactly one nature, so the
+ * edit page needs the whole sibling set to show every nature of that right.
+ */
+export async function getSiblingRights(right: {
+  movie_id: string
+  platform_id: string | null
+  category: string | null
+}): Promise<PlatformRight[]> {
+  let query = supabase
+    .from('platform_rights')
+    .select('*')
+    .eq('movie_id', right.movie_id)
+
+  query = right.platform_id ? query.eq('platform_id', right.platform_id) : query.is('platform_id', null)
+  query = right.category ? query.eq('category', right.category) : query.is('category', null)
+
+  const { data, error } = await query.order('created_at', { ascending: true })
+  if (error) throw sanitizeError(error)
+  return (data || []) as PlatformRight[]
 }
 
 async function recalculateWtpLibrary(movieId: string): Promise<void> {

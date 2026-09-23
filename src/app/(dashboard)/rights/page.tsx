@@ -2,19 +2,16 @@
 
 import { DisabledActionButton } from "@/components/disabled-action-button";
 import { DataExportDialog, type ExportFieldDef } from "@/components/import-export/data-export-dialog";
-import { MovieSelector } from "@/components/movies/movie-selector";
 import { RoleGate } from "@/components/role-gate";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  ColumnFilter,
+  FilterableHead,
+  SortableFilterableHead,
+} from "@/components/ui/column-header-filter";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { SortableHeader } from "@/components/ui/sortable-header";
 import {
   Table,
@@ -48,7 +45,9 @@ import {
   X
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { stringListCodec, useUrlFilterState } from "@/hooks/use-url-filter-state";
+import { natureKey, natureLabel, NONE_KEY } from "@/lib/utils/rights-types";
 
 const RIGHTS_EXPORT_FIELDS: ExportFieldDef[] = [
   { key: "movie_title", label: "Movie", getter: (r) => (r.movies as any)?.title || "" },
@@ -71,25 +70,130 @@ interface RightWithDetails extends PlatformRight {
 
 interface PlatformOption { id: string; name: string; platform_type?: string }
 
-// Grouped type dropdown: group label → list of exact platform_type strings
-const RIGHTS_TYPE_GROUPS: { group: string; types: string[] }[] = [
-  { group: "Satellite", types: ["Satellite TV", "DTH VOD", "Terrestrial TV", "Cable TV"] },
-  { group: "Internet", types: ["SVOD", "TVOD", "AVOD", "FVOD", "NVOD", "IPTV"] },
-  { group: "Other", types: ["Air Rights", "Ship Rights", "Surface Rights", "Hotel Rights"] },
+/**
+ * The stable status keys behind the Status column. The cell itself shows a
+ * countdown ("12d left") for anything expiring inside 90 days, which would make
+ * a per-row label useless as a filter value, so the funnel groups those under
+ * one "Expiring Soon" entry.
+ */
+const SOURCE_OPTIONS = [
+  { value: "home_production", label: "Home Production" },
+  { value: "acquired", label: "Acquired" },
 ];
+
+const ALL_STATUSES = ["Expired", "Expiring Soon", "Active", "Perpetual", "No End Date"] as const;
+
+/**
+ * The page opens on "active only" — everything except lapsed rights — which is
+ * also what the server is asked for. "Clear all" restores exactly this.
+ */
+const DEFAULT_STATUS: string[] = ALL_STATUSES.filter((s) => s !== "Expired");
+
+function sameStatusSet(a: string[], b: string[]) {
+  if (a.length !== b.length) return false;
+  const set = new Set(b);
+  return a.every((v) => set.has(v));
+}
+
+/** The status key for a row, matching what the Status cell renders. */
+function statusOf(endDate?: string | null): string {
+  if (!endDate) return "No End Date";
+  if (endDate.startsWith("3099") || endDate.startsWith("9999")) return "Perpetual";
+  const days = differenceInDays(new Date(endDate), new Date());
+  if (days < 0) return "Expired";
+  if (days <= 90) return "Expiring Soon";
+  return "Active";
+}
+
+/**
+ * What to ask the server for, given the picked statuses.
+ *
+ * Only the lapsed/not-lapsed split exists server-side, so a selection that sits
+ * wholly on one side of it narrows the fetch and anything straddling it fetches
+ * both and lets the client-side predicate do the rest. Either way the rows that
+ * *can* appear are never smaller than the selection.
+ */
+function isExpiredParam(statuses: string[]): boolean | undefined {
+  if (statuses.length === 0) return undefined;
+  const wantsExpired = statuses.includes("Expired");
+  const wantsOther = statuses.some((s) => s !== "Expired");
+  if (wantsExpired && !wantsOther) return true;
+  if (!wantsExpired && wantsOther) return false;
+  return undefined;
+}
+
+
+// Grouped type dropdown: group label → list of exact platform_type strings
+
 
 export default function RightsPage() {
   const [rights, setRights] = useState<RightWithDetails[]>([]);
 
-  // All exact platform_type strings across the grouped list, e.g. "Satellite TV", "SVOD"
-  const ALL_RIGHTS_TYPES = RIGHTS_TYPE_GROUPS.flatMap((g) => g.types);
-  const [rightsTypeFilter, setRightsTypeFilter] = useState<string[]>(ALL_RIGHTS_TYPES);
-  // Platform id — populated from DB scoped to selected sub-type(s)
-  const [platformFilter, setPlatformFilter] = useState<string[]>([]);
+  const [sourceFilter, setSourceFilter] = useUrlFilterState<string[]>(
+    "src", [], stringListCodec, (v) => v.length === 0
+  );
+  // Platform id — populated from DB scoped to selected sub-type(s).
+  // "Every option ticked" is the same as no narrowing, so it stays out of the
+  // URL; the option list only arrives after a fetch, hence the ref.
+  const platformOptionsRef = useRef<PlatformOption[]>([]);
+  const [platformFilter, setPlatformFilter] = useUrlFilterState<string[]>(
+    "plat",
+    [],
+    stringListCodec,
+    (v) => platformOptionsRef.current.length > 0 && v.length >= platformOptionsRef.current.length
+  );
   const [platformOptions, setPlatformOptions] = useState<PlatformOption[]>([]);
+  const platformSeeded = useRef(false);
+  const platformFromUrl = useRef(platformFilter.length > 0);
 
-  const [movieIdFilter, setMovieIdFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "expired">("active");
+  // Kept for the ?movie=<id> deep link other pages use; the toolbar picker is
+  // gone because the searchable Movie column funnel replaces it.
+  const [movieIdFilter, setMovieIdFilter] = useUrlFilterState<string>(
+    "movie",
+    "all",
+    { encode: (v) => (v === "all" ? null : v), decode: (raw) => raw || "all" }
+  );
+  /**
+   * Status is now a header funnel, but it still decides *what gets fetched*:
+   * lapsed rights are excluded server-side unless they are asked for. Turning
+   * it into a purely client-side filter would have meant fetching every right
+   * ever recorded on every visit, so the selection is translated back into the
+   * single `isExpired` server param below and only the remaining distinction
+   * (Perpetual / Expiring soon / Active / No end date) is applied client-side.
+   */
+  const [statusFilter, setStatusFilter] = useUrlFilterState<string[]>(
+    "status",
+    DEFAULT_STATUS,
+    {
+      // Legacy single-value links (`?status=expired` from Expiring Rights, and
+      // any bookmark made before this page had funnels) still resolve.
+      encode: (v) => (sameStatusSet(v, DEFAULT_STATUS) ? null : v.join(",")),
+      decode: (raw) => {
+        if (raw === "active") return DEFAULT_STATUS;
+        if (raw === "expired") return ["Expired"];
+        if (raw === "all") return ALL_STATUSES.slice();
+        const picked = raw.split(",").filter((x) => (ALL_STATUSES as readonly string[]).includes(x));
+        return picked.length ? picked : DEFAULT_STATUS;
+      },
+    },
+    (v) => sameStatusSet(v, DEFAULT_STATUS)
+  );
+  // The remaining header funnels follow expiring/page.tsx's convention: an
+  // empty array means "no narrowing", so the default never reaches the URL and
+  // the option lists can shrink as siblings narrow without a stale selection
+  // reading as an active filter.
+  const [movieTitleFilter, setMovieTitleFilter] = useUrlFilterState<string[]>(
+    "mv", [], stringListCodec, (v) => v.length === 0
+  );
+  const [platformTypeFilter, setPlatformTypeFilter] = useUrlFilterState<string[]>(
+    "ptype", [], stringListCodec, (v) => v.length === 0
+  );
+  const [categoryFilter, setCategoryFilter] = useUrlFilterState<string[]>(
+    "cat", [], stringListCodec, (v) => v.length === 0
+  );
+  const [natureFilter, setNatureFilter] = useUrlFilterState<string[]>(
+    "nature", [], stringListCodec, (v) => v.length === 0
+  );
   const [loading, setLoading] = useState(true);
   const toast = useAppToast();
 
@@ -107,32 +211,40 @@ export default function RightsPage() {
   useEffect(() => {
     const supabase = createClient();
     supabase.from("platforms").select("id, name, platform_type").order("name").then(({ data }: { data: PlatformOption[] | null }) => {
-      let opts: PlatformOption[] = data || [];
-      if (rightsTypeFilter.length < ALL_RIGHTS_TYPES.length) {
-        const selected = new Set(rightsTypeFilter.map((t) => t.toLowerCase()));
-        opts = opts.filter((p) => selected.has((p.platform_type || "").toLowerCase()));
-      }
+      // Every platform: the Type column funnel narrows by platform type
+      // client-side, so there is no toolbar control to scope this list by.
+      const opts: PlatformOption[] = data || [];
       setPlatformOptions(opts);
-      setPlatformFilter(opts.map((p) => p.id));
+      platformOptionsRef.current = opts;
+      // Changing the type reseeds the platform ticks to "all", as before — but
+      // the FIRST run is skipped unconditionally, not just when the URL happened
+      // to carry a platform. A guard that only checks one filter wipes whatever
+      // the URL restored for the others the moment the options arrive.
+      if (platformSeeded.current) {
+        setPlatformFilter(opts.map((p) => p.id));
+      } else if (!platformFromUrl.current) {
+        // No platform in the URL: seed the ticks so "all selected" reads as
+        // "no narrowing" rather than an empty, zero-row selection.
+        setPlatformFilter(opts.map((p) => p.id));
+      }
+      platformSeeded.current = true;
     });
-  }, [rightsTypeFilter]);
+  }, []);
 
   const fetchRights = useCallback(async () => {
     try {
       setLoading(true);
 
-      const isExpiredValue = statusFilter === "active" ? false : statusFilter === "expired" ? true : undefined;
+      const isExpiredValue = isExpiredParam(statusFilter);
 
       // A filter is only sent to the server when it's a genuine narrowing. Platform is only
       // meaningful once its (dependent) option list has loaded and the user has narrowed it;
       // sending an empty/partial array before options finish loading would incorrectly restrict
       // to zero platforms instead of "no restriction."
       const platformParam = platformOptions.length > 0 && platformFilter.length < platformOptions.length ? platformFilter : undefined;
-      const rightsTypeParam = rightsTypeFilter.length < ALL_RIGHTS_TYPES.length ? rightsTypeFilter : undefined;
 
       const { data } = await getAllRights({
         platformId: platformParam,
-        platformTypeExact: rightsTypeParam,
         movieId: movieIdFilter !== "all" ? movieIdFilter : undefined,
         isExpired: isExpiredValue,
         limit: 10000,
@@ -146,7 +258,7 @@ export default function RightsPage() {
     } finally {
       setLoading(false);
     }
-  }, [platformFilter, platformOptions.length, movieIdFilter, statusFilter, rightsTypeFilter]);
+  }, [platformFilter, platformOptions.length, movieIdFilter, statusFilter]);
 
   useEffect(() => { fetchRights(); }, [fetchRights]);
 
@@ -160,20 +272,14 @@ export default function RightsPage() {
     return { label: "Active", color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/25" };
   };
 
-  const handleFilterChange = (type: "movieId" | "status", value: string) => {
-    if (type === "movieId") setMovieIdFilter(value);
-    else if (type === "status") setStatusFilter(value as "all" | "active" | "expired");
-  };
 
   const handleExportClick = useCallback(async () => {
     setExportLoading(true);
     try {
-      const isExpiredValue = statusFilter === "active" ? false : statusFilter === "expired" ? true : undefined;
+      const isExpiredValue = isExpiredParam(statusFilter);
       const platformParam = platformOptions.length > 0 && platformFilter.length < platformOptions.length ? platformFilter : undefined;
-      const rightsTypeParam = rightsTypeFilter.length < ALL_RIGHTS_TYPES.length ? rightsTypeFilter : undefined;
       const { data } = await getAllRights({
         platformId: platformParam,
-        platformTypeExact: rightsTypeParam,
         movieId: movieIdFilter !== "all" ? movieIdFilter : undefined,
         isExpired: isExpiredValue,
         limit: 10000,
@@ -185,7 +291,7 @@ export default function RightsPage() {
     } finally {
       setExportLoading(false);
     }
-  }, [platformFilter, platformOptions.length, movieIdFilter, statusFilter, rightsTypeFilter]);
+  }, [platformFilter, platformOptions.length, movieIdFilter, statusFilter]);
 
   const handleDeleteRequest = async () => {
     if (!deletingRight || !profile) return;
@@ -209,54 +315,175 @@ export default function RightsPage() {
     }
   };
 
-  const { sortedData: sortedRights, sortConfig, requestSort } = useSortableTable(rights);
+  /**
+   * One predicate per header funnel, applied independently so a column's option
+   * list can be built from the rows the *other* filters leave visible — the
+   * Excel behaviour where a funnel never offers a choice that yields zero rows,
+   * yet still shows its own unpicked siblings.
+   */
+  const matchMovie = useCallback((r: RightWithDetails) =>
+    movieTitleFilter.length === 0
+    || movieTitleFilter.includes(r.movies?.title || NONE_KEY), [movieTitleFilter]);
+  const matchPlatform = useCallback((r: RightWithDetails) =>
+    platformFilter.length === 0 || platformOptions.length === 0
+    || platformFilter.length >= platformOptions.length
+    || platformFilter.includes(r.platforms?.id || NONE_KEY),
+  [platformFilter, platformOptions.length]);
+  const matchPlatformType = useCallback((r: RightWithDetails) =>
+    platformTypeFilter.length === 0
+    || platformTypeFilter.includes(r.platforms?.platform_type || NONE_KEY), [platformTypeFilter]);
+  const matchCategory = useCallback((r: RightWithDetails) =>
+    categoryFilter.length === 0
+    || categoryFilter.includes(r.category?.trim() ? r.category : NONE_KEY), [categoryFilter]);
+  const matchNature = useCallback((r: RightWithDetails) =>
+    natureFilter.length === 0
+    || natureFilter.includes(r.nature && r.nature.trim() ? natureKey(r.nature) : NONE_KEY), [natureFilter]);
+  const matchStatus = useCallback((r: RightWithDetails) =>
+    statusFilter.length === 0 || statusFilter.includes(statusOf(r.end_date)), [statusFilter]);
+  const matchSource = useCallback((r: RightWithDetails) =>
+    sourceFilter.length === 0 || sourceFilter.includes(r.movies?.source || NONE_KEY), [sourceFilter]);
 
-  const hasFilters = (platformOptions.length > 0 && platformFilter.length < platformOptions.length) || movieIdFilter !== "all" || statusFilter !== "active" || rightsTypeFilter.length < ALL_RIGHTS_TYPES.length;
+  /** Rows visible to a given column's funnel: everything except its own filter. */
+  const rowsExcept = useCallback((skip: "movie" | "platform" | "ptype" | "category" | "nature" | "status") =>
+    rights.filter((r) =>
+      // Source has no column of its own, so it narrows every funnel's options.
+      matchSource(r)
+      && (skip === "movie" || matchMovie(r))
+      && (skip === "platform" || matchPlatform(r))
+      && (skip === "ptype" || matchPlatformType(r))
+      && (skip === "category" || matchCategory(r))
+      && (skip === "nature" || matchNature(r))
+      && (skip === "status" || matchStatus(r))
+    ),
+  [rights, matchSource, matchMovie, matchPlatform, matchPlatformType, matchCategory, matchNature, matchStatus]);
+
+  const movieOptions = useMemo(() => {
+    const set = new Set<string>();
+    let hasBlank = false;
+    for (const r of rowsExcept("movie")) {
+      if (r.movies?.title) set.add(r.movies.title);
+      else hasBlank = true;
+    }
+    const opts = Array.from(set).sort((a, b) => a.localeCompare(b)).map((value) => ({ value, label: value }));
+    return hasBlank ? [...opts, { value: NONE_KEY, label: "— Not set —" }] : opts;
+  }, [rowsExcept]);
+
+  /**
+   * Platform choices come from the rows in view, not the whole platforms table:
+   * that table holds one row per platform *per type*, so a brand carried on both
+   * satellite and internet appears twice with nothing to tell the entries apart.
+   * Every entry is qualified by its type, not just the colliding ones, so the
+   * list reads consistently rather than only explaining itself on collisions.
+   */
+  const platformChoices = useMemo(() => {
+    const byId = new Map<string, string>();
+    const typeById = new Map<string, string>();
+    let hasBlank = false;
+    for (const r of rowsExcept("platform")) {
+      if (!r.platforms?.id) { hasBlank = true; continue; }
+      byId.set(r.platforms.id, r.platforms.name || "—");
+      if (r.platforms.platform_type) typeById.set(r.platforms.id, r.platforms.platform_type);
+    }
+    const opts = Array.from(byId.entries())
+      .map(([value, name]) => {
+        const type = typeById.get(value);
+        return { value, label: type ? `${name} — ${type}` : name };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label));
+    return hasBlank ? [...opts, { value: NONE_KEY, label: "— Not set —" }] : opts;
+  }, [rowsExcept]);
+
+  const platformTypeOptions = useMemo(() => {
+    const set = new Set<string>();
+    let hasBlank = false;
+    for (const r of rowsExcept("ptype")) {
+      if (r.platforms?.platform_type) set.add(r.platforms.platform_type);
+      else hasBlank = true;
+    }
+    const opts = Array.from(set).sort().map((value) => ({ value, label: value }));
+    return hasBlank ? [...opts, { value: NONE_KEY, label: "— Not set —" }] : opts;
+  }, [rowsExcept]);
+
+  const categoryOptions = useMemo(() => {
+    const set = new Set<string>();
+    let hasBlank = false;
+    for (const r of rowsExcept("category")) {
+      if (r.category?.trim()) set.add(r.category);
+      else hasBlank = true;
+    }
+    const opts = Array.from(set).sort().map((value) => ({ value, label: value }));
+    return hasBlank ? [...opts, { value: NONE_KEY, label: "— Not set —" }] : opts;
+  }, [rowsExcept]);
+
+  const natureOptions = useMemo(() => {
+    // Keyed by the folded value, so "Non-exclusive" and "Non-Exclusive" become
+    // one option rather than two that each match half the rows.
+    const byKey = new Map<string, string>();
+    for (const r of rowsExcept("nature")) {
+      if (!r.nature || !r.nature.trim()) byKey.set(NONE_KEY, "— Not set —");
+      else byKey.set(natureKey(r.nature), natureLabel(r.nature));
+    }
+    return Array.from(byKey.entries())
+      .map(([value, label]) => ({ value, label }))
+      // "Not set" belongs at the end rather than sorted among real values.
+      .sort((a, b) =>
+        a.value === NONE_KEY ? 1
+        : b.value === NONE_KEY ? -1
+        : a.label.localeCompare(b.label));
+  }, [rowsExcept]);
+
+  /**
+   * Status is the one funnel whose options are NOT derived from the rows in
+   * view: lapsed rights are excluded from the fetch itself, so deriving from
+   * the rows would drop "Expired" from the list and make it unpickable — the
+   * user could never widen the fetch again. The fixed list is offered instead.
+   */
+  const statusOptions = useMemo(() => ALL_STATUSES.map((value) => ({ value, label: value })), []);
+
+  const filteredRights = useMemo(() => rights.filter((r) =>
+    matchSource(r) && matchMovie(r) && matchPlatform(r) && matchPlatformType(r)
+    && matchCategory(r) && matchNature(r) && matchStatus(r)
+  ), [rights, matchSource, matchMovie, matchPlatform, matchPlatformType, matchCategory, matchNature, matchStatus]);
+
+  const { sortedData: sortedRights, sortConfig, requestSort } = useSortableTable(filteredRights);
+
+  const hasFilters =
+    (platformOptions.length > 0 && platformFilter.length > 0 && platformFilter.length < platformOptions.length)
+    || movieIdFilter !== "all"
+    || !sameStatusSet(statusFilter, DEFAULT_STATUS)
+    || sourceFilter.length > 0
+    || movieTitleFilter.length > 0 || platformTypeFilter.length > 0
+    || categoryFilter.length > 0 || natureFilter.length > 0;
+
+  /** Restores the page's opening default state — note status defaults to "active". */
+  const clearAllFilters = () => {
+    setSourceFilter([]);
+    setPlatformFilter(platformOptions.map((p) => p.id));
+    setMovieIdFilter("all");
+    setStatusFilter(DEFAULT_STATUS);
+    setMovieTitleFilter([]);
+    setPlatformTypeFilter([]);
+    setCategoryFilter([]);
+    setNatureFilter([]);
+  };
 
   return (
     <div className="space-y-4 min-w-0">
       {/* ── Compact toolbar: all filters + actions in one row ── */}
       <div className="flex flex-wrap items-center gap-2">
-        {/* Movie selector */}
-        <div className="w-56">
-          <MovieSelector selectedId={movieIdFilter} onSelect={(id) => handleFilterChange("movieId", id)} />
-        </div>
-
-        {/* Status */}
-        <Select value={statusFilter} onValueChange={(v) => handleFilterChange("status", v)}>
-          <SelectTrigger className="h-9 w-36 bg-(--bg-raise)/40 border-(--svf-border) text-(--text)">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="active">Active Only</SelectItem>
-            <SelectItem value="expired">Expired Only</SelectItem>
-            <SelectItem value="all">All Status</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {/* Rights type multi-select */}
+        {/* Source — the one narrowing the table has no column for. Types live
+            in the Type column funnel, so no duplicate control here. */}
         <MultiSelectFilter
-          label="All Types"
-          options={RIGHTS_TYPE_GROUPS.flatMap(({ group, types }) => types.map((t) => ({ value: t, label: `${group} — ${t}` })))}
-          value={rightsTypeFilter}
-          onChange={setRightsTypeFilter}
+          label="All Sources"
+          options={SOURCE_OPTIONS}
+          value={sourceFilter}
+          onChange={setSourceFilter}
           triggerWidth="w-44"
         />
 
-        {/* Platform — only when types have been narrowed */}
-        {rightsTypeFilter.length < ALL_RIGHTS_TYPES.length && (
-          <MultiSelectFilter
-            label="All Platforms"
-            options={platformOptions.map((p) => ({ value: p.id, label: p.name }))}
-            value={platformFilter}
-            onChange={setPlatformFilter}
-            searchable
-            triggerWidth="w-44"
-          />
-        )}
         {hasFilters && (
-          <Button variant="ghost" size="sm" className="h-9 gap-1 text-(--text-faint)" onClick={() => { setRightsTypeFilter(ALL_RIGHTS_TYPES); setPlatformFilter(platformOptions.map((p) => p.id)); setMovieIdFilter("all"); setStatusFilter("active"); }}>
-            <X className="h-3.5 w-3.5" />Reset
+          <Button variant="ghost" size="sm" className="h-9 gap-1 text-(--text-faint)" onClick={clearAllFilters}>
+            <X className="h-3.5 w-3.5" />Clear all
           </Button>
         )}
 
@@ -292,7 +519,7 @@ export default function RightsPage() {
               <Loader2 className="h-7 w-7 animate-spin text-red-400/60" />
               <p className="text-(--text-faint) text-sm">Loading rights…</p>
             </div>
-          ) : rights.length === 0 ? (
+          ) : sortedRights.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3">
               <div className="p-4 rounded-full bg-(--bg-raise) border border-(--svf-border)">
                 <FileText className="h-8 w-8 text-(--text-faint)" />
@@ -306,15 +533,32 @@ export default function RightsPage() {
                 <Table>
                   <TableHeader style={{ background: "var(--bg-deep)" }}>
                     <TableRow className="border-(--svf-border) hover:bg-transparent">
-                      <SortableHeader column="movies" label="Movie" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)" />
-                      <SortableHeader column="platforms" label="Platform" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden md:table-cell" />
-                      <SortableHeader column="license_type" label="Type" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden lg:table-cell" />
-                      <TableHead className="text-(--text-faint) hidden lg:table-cell">Category</TableHead>
-                      <TableHead className="text-(--text-faint) hidden lg:table-cell">Nature</TableHead>
+                      <SortableFilterableHead column="movies" label="Movie" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">
+                        <ColumnFilter options={movieOptions} value={movieTitleFilter} onChange={setMovieTitleFilter} searchable searchPlaceholder="Search movie…" />
+                      </SortableFilterableHead>
+                      <SortableFilterableHead column="platforms" label="Platform" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden md:table-cell">
+                        <ColumnFilter options={platformChoices} value={platformFilter} onChange={setPlatformFilter} searchable searchPlaceholder="Search platform…" />
+                      </SortableFilterableHead>
+                      {/* Sorted on license_type as before, but filtered on the
+                          platform's type — which is what the cell actually shows. */}
+                      <SortableFilterableHead column="license_type" label="Type" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden lg:table-cell">
+                        <ColumnFilter options={platformTypeOptions} value={platformTypeFilter} onChange={setPlatformTypeFilter} />
+                      </SortableFilterableHead>
+                      <FilterableHead label="Category" className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden lg:table-cell">
+                        <ColumnFilter options={categoryOptions} value={categoryFilter} onChange={setCategoryFilter} />
+                      </FilterableHead>
+                      <FilterableHead label="Nature" className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden lg:table-cell">
+                        <ColumnFilter options={natureOptions} value={natureFilter} onChange={setNatureFilter} />
+                      </FilterableHead>
                       <SortableHeader column="start_date" label="Start Date" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint) hidden lg:table-cell" />
                       <SortableHeader column="end_date" label="End Date" currentSort={sortConfig} onSort={requestSort} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)" />
+                      {/* Holdbacks is free text (e.g. "FVOD, Theatrical
+                          Exploitation"), so it has no small set of distinct
+                          values to funnel on and stays unfiltered. */}
                       <TableHead className="text-(--text-faint) hidden lg:table-cell">Holdbacks</TableHead>
-                      <TableHead className="text-(--text-faint)">Status</TableHead>
+                      <FilterableHead label="Status" className="text-(--text-faint)">
+                        <ColumnFilter options={statusOptions} value={statusFilter} onChange={setStatusFilter} />
+                      </FilterableHead>
                       <TableHead className="text-right text-(--text-faint) pr-6">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -343,7 +587,7 @@ export default function RightsPage() {
                             {right.category || "—"}
                           </TableCell>
                           <TableCell className="hidden lg:table-cell text-(--text-faint)">
-                            {right.nature || "—"}
+                            {right.nature?.trim() ? natureLabel(right.nature) : "—"}
                           </TableCell>
                           <TableCell className="hidden lg:table-cell tabular-nums text-emerald-400 font-medium">
                             {right.start_date ? format(new Date(right.start_date), "dd MMM yy") : "—"}

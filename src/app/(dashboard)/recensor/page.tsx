@@ -16,7 +16,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAppToast } from "@/hooks/use-app-toast";
-import { useMultiSelectFilterState } from "@/hooks/use-multi-select-filter-state";
+import { useUrlMultiSelectFilterState } from "@/hooks/use-url-multi-select-filter-state";
 import { usePermission } from "@/hooks/use-permission";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { stringCodec, useUrlFilterState } from "@/hooks/use-url-filter-state";
 
 interface RecensorMovie {
   id: string;
@@ -57,11 +58,18 @@ export default function RecensorPage() {
   const [movies, setMovies] = useState<RecensorMovie[]>([]);
   const [loading, setLoading] = useState(true);
   const toast = useAppToast();
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useUrlFilterState("q", "", stringCodec);
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
+  const [statusFilter, setStatusFilter] = useUrlFilterState<FilterStatus>(
+    "status",
+    "all",
+    {
+      encode: (v) => (v === "all" ? null : v),
+      decode: (raw) => (raw === "pending" || raw === "done" ? raw : "all"),
+    }
+  );
   const SOURCE_OPTIONS: ("home_production" | "acquired")[] = ["home_production", "acquired"];
-  const [sourceFilter, setSourceFilter] = useMultiSelectFilterState<"home_production" | "acquired">(SOURCE_OPTIONS);
+  const [sourceFilter, setSourceFilter] = useUrlMultiSelectFilterState<"home_production" | "acquired">("src", SOURCE_OPTIONS);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState(0);
 

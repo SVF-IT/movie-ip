@@ -3,10 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { BackButton } from "@/components/ui/back-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Factory, Loader2 } from "lucide-react";
+import { Factory, Loader2 } from "lucide-react";
 import { createProductionHouse } from "@/lib/api/production-houses";
 import { useRequirePermission } from "@/hooks/use-require-permission";
 import { useAppToast } from "@/hooks/use-app-toast";
@@ -46,11 +47,7 @@ export default function NewProductionHousePage() {
       <div className="relative overflow-hidden rounded-[12px] bg-(--panel-solid)/60 border border-(--svf-border) backdrop-blur-xl p-3">
 
         <div className="relative flex items-center gap-4">
-          <Link href="/production-houses">
-            <Button variant="ghost" size="sm" className="text-(--text-faint) hover:text-(--text) hover:bg-(--hover) gap-1.5 h-8">
-              <ArrowLeft className="h-3.5 w-3.5" /> Back
-            </Button>
-          </Link>
+          <BackButton fallbackHref="/production-houses" label="Back" iconClassName="h-3.5 w-3.5" />
           <div className="h-4 w-px bg-(--svf-border)" />
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-[12px] bg-cyan-500/15 border border-cyan-500/30 shadow-lg shadow-cyan-500/10">

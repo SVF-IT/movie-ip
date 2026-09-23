@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
+import { BackButton } from "@/components/ui/back-button";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Building2, Loader2, X } from "lucide-react";
+import { Building2, Loader2, X } from "lucide-react";
 import { updatePlatform, getPlatformTypes } from "@/lib/api/platforms";
 import { createClient } from "@/lib/supabase/client";
 import { useRequirePermission } from "@/hooks/use-require-permission";
@@ -106,11 +107,7 @@ export default function EditPlatformPage() {
       <div className="relative overflow-hidden rounded-[12px] bg-(--panel-solid)/60 border border-(--svf-border) backdrop-blur-xl p-3">
 
         <div className="relative flex items-center gap-4">
-          <Link href="/platforms">
-            <Button variant="ghost" size="sm" className="text-(--text-faint) hover:text-(--text) hover:bg-(--hover) gap-1.5 h-8">
-              <ArrowLeft className="h-3.5 w-3.5" /> Back
-            </Button>
-          </Link>
+          <BackButton fallbackHref="/platforms" label="Back" iconClassName="h-3.5 w-3.5" />
           <div className="h-4 w-px bg-(--svf-border)" />
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-[12px] bg-amber-500/15 border border-amber-500/30 shadow-lg shadow-amber-500/10">

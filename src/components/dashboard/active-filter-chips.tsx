@@ -17,18 +17,36 @@ interface ActiveFilterChipsProps {
   chips: ActiveFilterChip[]
   /** Resets every filter at once. */
   onClearAll: () => void
+  /**
+   * Whether controls are rendered above this row. The divider only makes sense
+   * as a separator — with the filters now in the column headers there is often
+   * nothing above it, and the rule would float on its own.
+   */
+  divider?: boolean
 }
 
 /**
  * Shows which filters are currently narrowing the list, each removable on its own.
- * Renders nothing when no filter is active, so it costs no vertical space in the
- * default view.
+ *
+ * With no filters active it still renders a short "No filters applied" line
+ * rather than nothing: the surrounding panel is drawn by the caller, so
+ * returning null left a bordered box with nothing in it.
  */
-export function ActiveFilterChips({ chips, onClearAll }: ActiveFilterChipsProps) {
-  if (chips.length === 0) return null
+export function ActiveFilterChips({ chips, onClearAll, divider = false }: ActiveFilterChipsProps) {
+  const wrapperCls = divider
+    ? 'mt-3 pt-2.5 border-t border-(--filter-border) flex flex-wrap items-center gap-1.5'
+    : 'flex flex-wrap items-center gap-1.5'
+
+  if (chips.length === 0) {
+    return (
+      <div className={wrapperCls}>
+        <span className="text-[12px] text-(--text-dim)">No filters applied</span>
+      </div>
+    )
+  }
 
   return (
-    <div className="mt-3 pt-2.5 border-t border-(--filter-border) flex flex-wrap items-center gap-1.5">
+    <div className={wrapperCls}>
       <span className="text-[12px] text-(--text-dim)">Filtering by</span>
 
       {chips.map((chip) => (

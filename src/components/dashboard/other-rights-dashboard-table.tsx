@@ -7,12 +7,14 @@ import { Button } from '@/components/ui/button'
 import { Calendar as CalendarPicker } from '@/components/ui/calendar'
 import { Card } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Input } from '@/components/ui/input'
-import { MultiSelectFilter } from '@/components/ui/multi-select-filter'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { useMultiSelectFilterState } from '@/hooks/use-multi-select-filter-state'
+import { ColumnDateRangeFilter, ColumnFilter, FilterableHead, SortableFilterableHead } from '@/components/ui/column-header-filter'
+import { SortableHeader } from '@/components/ui/sortable-header'
+import { useUrlMultiSelectFilterState } from '@/hooks/use-url-multi-select-filter-state'
+import { stringCodec, stringListCodec, useUrlFilterState } from '@/hooks/use-url-filter-state'
+import { useSortableTable } from '@/hooks/use-sortable-table'
 import {
   getActiveOtherRightsTitles,
   getExpiringOtherRightsTitles,
@@ -22,7 +24,7 @@ import {
 } from '@/lib/api/dashboard'
 import type { MovieWithDetails } from '@/lib/types/database'
 import { cn } from '@/lib/utils'
-import { CalendarIcon, CalendarRange, ChevronDown, ChevronRight, ChevronUp, Download, Loader2, Search, X } from 'lucide-react'
+import { CalendarIcon, CalendarRange, ChevronDown, ChevronRight, ChevronUp, Download, Loader2, X } from 'lucide-react'
 import Link from 'next/link'
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 
@@ -85,7 +87,18 @@ interface OtherRightsDashboardTableProps {
    */
   languageOptions?: string[]
   onLanguageChange?: (next: string[]) => void
+  /**
+   * The language selection this page opens with (Bengali). Clearing filters
+   * must return to the state the page started in, not to "all languages" —
+   * which is a state the user could not otherwise reach.
+   */
+  defaultLanguage?: string[]
   totalLanguageCount: number
+  /**
+   * False until the parent's language options have been fetched. The tables hold
+   * their first fetch until then, so the default language filter is applied to it.
+   */
+  languagesReady?: boolean
   expiryYear: string
   onExpiryYearChange: (year: string) => void
   expiryFrom: string
@@ -156,7 +169,9 @@ export function OtherRightsDashboardTable({
   language,
   languageOptions,
   onLanguageChange,
+  defaultLanguage,
   totalLanguageCount,
+  languagesReady = true,
   expiryYear,
   onExpiryYearChange,
   expiryFrom,
@@ -170,17 +185,25 @@ export function OtherRightsDashboardTable({
   yearOptions,
   fullPage = false,
 }: OtherRightsDashboardTableProps) {
-  const CERT_OPTIONS = ['U', 'UA', 'UA 7+', 'UA 13+', 'UA 16+', 'A', 'S']
+  const CERT_OPTIONS = ['U', 'UA', 'UA 7+', 'UA 13+', 'UA 16+', 'A']
 
   const [movies, setMovies] = useState<(MovieWithDetails | MovieWithOtherRights)[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useUrlFilterState('oth_q', '', stringCodec)
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
-  const [certFilter, setCertFilter] = useMultiSelectFilterState(CERT_OPTIONS)
+  // Source is a multi-select in the column header; the API still takes a single
+  // value, so an all-or-one selection maps to it and mixed selections are
+  // narrowed client-side alongside the licensor filter.
+  const SOURCE_OPTIONS = [
+    { value: 'home', label: 'Home Production' },
+    { value: 'acquired', label: 'Acquired' },
+    { value: 'bangladeshi', label: 'Bangladesh' },
+  ]
+  const [sourceSel, setSourceSel] = useUrlMultiSelectFilterState('oth_src', SOURCE_OPTIONS.map(o => o.value))
+  const sourceFilter: SourceFilter =
+    sourceSel.length === 1 ? (sourceSel[0] as SourceFilter) : 'all'
+  const [certFilter, setCertFilter] = useUrlMultiSelectFilterState('oth_cert', CERT_OPTIONS)
   const [sortBy, setSortBy] = useState<SortOption>('title_asc')
-  const [agreementEndBy, setAgreementEndBy] = useState('')
-  const [bangladeshiOnly, setBangladeshiOnly] = useState(false)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [showExportDialog, setShowExportDialog] = useState(false)
   const [exportData, setExportData] = useState<Record<string, unknown>[]>([])
@@ -202,18 +225,45 @@ export function OtherRightsDashboardTable({
     return Array.from(set).sort((a, b) => a.localeCompare(b))
   }, [movies])
 
-  const [licensorFilter, setLicensorFilter] = useMultiSelectFilterState(licensorOptions)
+  const [licensorFilter, setLicensorFilter] = useUrlMultiSelectFilterState('oth_lic', licensorOptions)
 
-  useEffect(() => { setSelectedIds(new Set()) }, [activeCard, language, expiryFrom, expiryTo, openFrom, openTo, sourceFilter, licensorFilter, certFilter, bangladeshiOnly, agreementEndBy])
+  // Title gets a searchable multi-select of the titles currently loaded, so the
+  // header filter can pick exact titles the way Excel's column filter does.
+  const titleOptions = useMemo(() => {
+    const set = new Set<string>()
+    for (const m of movies as any[]) if (m.title) set.add(m.title)
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  }, [movies])
+  // Options are derived from fetched rows, so "all selected" can't mean "no
+  // filter" — the set shrinks as other filters narrow the data. Empty = no filter.
+  const [titleSel, setTitleSel] = useUrlFilterState<string[]>('oth_title', [], stringListCodec, (v) => v.length === 0)
+  const titleFilter = titleSel.length === 0 ? titleOptions : titleSel
+  const setTitleFilter = (next: string[]) =>
+    setTitleSel(next.length >= titleOptions.length ? [] : next)
 
-  const filteredMovies = movies.filter((m: any) =>
+  useEffect(() => { setSelectedIds(new Set()) }, [activeCard, language, expiryFrom, expiryTo, openFrom, openTo, sourceSel, titleSel, licensorFilter, certFilter])
+
+  const matchesSourceSel = (m: any) => {
+    if (sourceSel.length >= SOURCE_OPTIONS.length) return true
+    return sourceSel.some((sel) =>
+      sel === 'home' ? m.source === 'home_production'
+        : sel === 'acquired' ? m.source === 'acquired'
+          : Boolean(m.is_bangladeshi)
+    )
+  }
+
+  const matchesTitleSel = (m: any) =>
+    titleFilter.length >= titleOptions.length || !m.title || titleFilter.includes(m.title)
+
+  const matchesLicensorSel = (m: any) =>
     licensorFilter.length >= licensorOptions.length || licensorFilter.includes(getEffectiveLicensor(m))
-  ).filter((m: any) => {
-    if (!agreementEndBy) return true
-    // Acquired-only: home productions have no agreement_end_date, so this filter excludes them.
-    if (m.source !== 'acquired' || !m.agreement_end_date) return false
-    return m.agreement_end_date <= agreementEndBy
-  })
+
+  const filteredMovies = movies.filter(
+    (m: any) => matchesSourceSel(m) && matchesTitleSel(m) && matchesLicensorSel(m)
+  )
+
+  // Client-side sort, matching the other dashboards' sortable headers.
+  const { sortedData, sortConfig, requestSort } = useSortableTable(filteredMovies)
 
   useEffect(() => {
     const timer = setTimeout(() => { setDebouncedSearch(search) }, 300)
@@ -222,7 +272,6 @@ export function OtherRightsDashboardTable({
 
   useEffect(() => {
     setSortBy(activeCard === 'expiring' ? 'expiry_asc' : 'title_asc')
-    setAgreementEndBy('')
     setExpandedRows(new Set())
   }, [activeCard])
 
@@ -236,6 +285,13 @@ export function OtherRightsDashboardTable({
   }
 
   const fetchData = useCallback(async (forExport = false): Promise<any[] | undefined> => {
+    // The parent resolves its language options asynchronously and only then applies
+    // the default (Bengali). Fetching before that lands would send no language filter
+    // at all — `language.length < totalLanguageCount` is `0 < 0`, i.e. false — and the
+    // table would report an all-language count to the stat card. `languagesReady`
+    // distinguishes "options not fetched yet" from "fetched and genuinely empty", so a
+    // failed language fetch still renders rather than hanging on a skeleton forever.
+    if (!languagesReady) return
     if (!forExport) setIsLoading(true)
     try {
       const limit = 10000
@@ -249,7 +305,8 @@ export function OtherRightsDashboardTable({
       // filter" — since hardcoded/fetched option lists aren't guaranteed to cover every value
       // present in the data (nulls, blanks, legacy values); sending the full array would
       // silently exclude those rows via `.in()`.
-      const languageParam = language.length < totalLanguageCount ? language : undefined
+      const languageParam =
+        language.length > 0 && language.length < totalLanguageCount ? language : undefined
       const certParam = certFilter.length < CERT_OPTIONS.length ? certFilter : undefined
 
       if (activeCard === 'open_titles') {
@@ -259,7 +316,6 @@ export function OtherRightsDashboardTable({
           sourceFilter,
           certification: certParam,
           sortBy: safeSortBy,
-          bangladeshiOnly: bangladeshiOnly || undefined,
           openFrom: openFrom || undefined,
           openTo: openTo || undefined,
           limit,
@@ -300,7 +356,7 @@ export function OtherRightsDashboardTable({
     } finally {
       if (!forExport) setIsLoading(false)
     }
-  }, [activeCard, debouncedSearch, language, totalLanguageCount, sourceFilter, certFilter, expiryFrom, expiryTo, openFrom, openTo, sortBy, bangladeshiOnly])
+  }, [activeCard, debouncedSearch, language, totalLanguageCount, languagesReady, sourceFilter, certFilter, expiryFrom, expiryTo, openFrom, openTo, sortBy])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -315,10 +371,6 @@ export function OtherRightsDashboardTable({
       const rawData = await fetchData(true)
       const data = (rawData as any[]).filter((m: any) => {
         if (licensorFilter.length < licensorOptions.length && !licensorFilter.includes(getEffectiveLicensor(m))) return false
-        if (agreementEndBy) {
-          if (m.source !== 'acquired' || !m.agreement_end_date) return false
-          if (m.agreement_end_date > agreementEndBy) return false
-        }
         return true
       })
       let preparedData: Record<string, unknown>[]
@@ -330,8 +382,8 @@ export function OtherRightsDashboardTable({
             (m.other_rights_list || []).some(r => selectedIds.has(r.id))
           )
           : (data as MovieWithOtherRights[])
-        for (const movie of sourceData || []) {
-          const rights = movie.other_rights_list || []
+        for (const movie of sourceData) {
+          const rights = (movie.other_rights_list || []).filter(r => selectedIds.size === 0 || selectedIds.has(r.id))
           if (rights.length === 0) {
             rows.push({ sl_no: idx++, title: movie.title, source: movie.source, certification: (movie as any).certification, release_date: (movie as any).release_date || (movie as any).release_year || '', language: (movie as any).language })
           } else {
@@ -340,7 +392,7 @@ export function OtherRightsDashboardTable({
               rows.push({
                 sl_no: idx++,
                 title: movie.title,
-                source: movie.source === 'home_production' ? 'Home' : 'Acquired',
+                source: movie.is_bangladeshi ? 'Bangladesh' : movie.source === 'home_production' ? 'Home' : 'Acquired',
                 right_type: right.right_type || '',
                 nature: right.nature || '',
                 start_date: right.start_date || '',
@@ -362,7 +414,7 @@ export function OtherRightsDashboardTable({
         preparedData = (sourceData || []).map((row, idx) => ({
           ...row,
           release_date: row.release_date || row.release_year || '',
-          source: row.source === 'home_production' ? 'Home' : 'Acquired',
+          source: row.is_bangladeshi ? 'Bangladesh' : row.source === 'home_production' ? 'Home' : 'Acquired',
           assignor_licensor: row.source === 'home_production' ? '' : (row.assignor_licensor || ''),
           licensee: row.source === 'home_production' ? '' : (row.licensee || ''),
           agreement_start_date: row.source === 'home_production' ? '' : (row.agreement_start_date || ''),
@@ -377,28 +429,22 @@ export function OtherRightsDashboardTable({
     } finally {
       setExportLoading(false)
     }
-  }, [fetchData, activeCard, selectedIds, licensorFilter, agreementEndBy])
+  }, [fetchData, activeCard, selectedIds, licensorFilter])
 
-  const getSourceBadge = (source: string) =>
-    source === 'home_production' ? (
+  // Bangladeshi titles are stored as acquired (occasionally home), but the origin
+  // is what matters when reading the list, so it wins over the raw source.
+  const getSourceBadge = (movie: { source?: string; is_bangladeshi?: boolean }) =>
+    movie.is_bangladeshi ? (
+      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-xs">Bangladesh</Badge>
+    ) : movie.source === 'home_production' ? (
       <Badge variant="outline" className="bg-cyan-500/10 text-cyan-400 border-cyan-500/30 text-xs">Home</Badge>
     ) : (
       <Badge variant="outline" className="bg-purple-500/10 text-purple-400 border-purple-500/30 text-xs">Acquired</Badge>
     )
 
-  const sortOptions: { value: SortOption; label: string }[] = [
-    { value: 'title_asc', label: 'A-Z (Title)' },
-    { value: 'title_desc', label: 'Z-A (Title)' },
-    { value: 'release_date_desc', label: 'Newest Release' },
-    { value: 'release_date_asc', label: 'Oldest Release' },
-    ...(activeCard === 'expiring' ? [
-      { value: 'expiry_asc' as SortOption, label: 'Expiry (Soonest)' },
-      { value: 'expiry_desc' as SortOption, label: 'Expiry (Latest)' },
-    ] : []),
-  ]
-
   const hasSubRows = activeCard === 'active'
-  const showLicensorCol = activeCard === 'open_titles' && (sourceFilter === 'acquired' || (licensorFilter.length > 0 && licensorFilter.length < licensorOptions.length))
+  // Licensor now carries its own header filter, so the column is always present.
+  const showLicensorCol = activeCard === 'open_titles'
   const colCount = hasSubRows ? 6 : showLicensorCol ? 8 : 7
 
   const exportFields = activeCard === 'open_titles' ? EXPORT_FIELDS_OPEN
@@ -408,18 +454,21 @@ export function OtherRightsDashboardTable({
   const cellCls = ''
   const headCls = ''
 
-  const inputCls = "h-9 rounded-[8px] bg-(--filter-panel-bg) border-(--filter-border) text-(--text) hover:border-(--filter-border-hover) focus-visible:border-(--filter-border-hover) focus-visible:ring-0 transition-colors"
   const labelCls = "text-[11px] font-medium uppercase tracking-[.06em] text-(--filter-label)"
   const selectTriggerCls = "h-9 rounded-[8px] bg-(--filter-panel-bg) border-(--filter-border) text-(--text) hover:border-(--filter-border-hover) focus-visible:border-(--filter-border-hover) focus-visible:ring-0 transition-colors text-sm"
 
   // Chips describe only genuine narrowing: a filter with every option selected is
   // the same as no filter, so it must not appear as "active".
   const activeChips: ActiveFilterChip[] = []
-  if (debouncedSearch) activeChips.push({ key: 'search', label: 'Search', value: debouncedSearch, onClear: () => setSearch('') })
-  if (sourceFilter !== 'all') activeChips.push({
+  if (sourceSel.length > 0 && sourceSel.length < SOURCE_OPTIONS.length) activeChips.push({
     key: 'source', label: 'Source',
-    value: sourceFilter === 'home' ? 'Home Production' : sourceFilter === 'acquired' ? 'Acquired' : 'Bangladesh',
-    onClear: () => setSourceFilter('all'),
+    value: sourceSel.map((v) => SOURCE_OPTIONS.find(o => o.value === v)?.label ?? v).join(', '),
+    onClear: () => setSourceSel(SOURCE_OPTIONS.map(o => o.value)),
+  })
+  if (titleSel.length > 0) activeChips.push({
+    key: 'title', label: 'Title',
+    value: titleSel.length === 1 ? titleSel[0] : `${titleSel.length} selected`,
+    onClear: () => setTitleSel([]),
   })
   if (licensorFilter.length > 0 && licensorFilter.length < licensorOptions.length) activeChips.push({
     key: 'licensor', label: 'Licensor',
@@ -434,7 +483,7 @@ export function OtherRightsDashboardTable({
   if (languageOptions && onLanguageChange && language.length > 0 && language.length < totalLanguageCount) activeChips.push({
     key: 'language', label: 'Language',
     value: language.length === 1 ? language[0] : `${language.length} selected`,
-    onClear: () => onLanguageChange(languageOptions),
+    onClear: () => onLanguageChange(defaultLanguage ?? languageOptions),
   })
   if (openFrom || openTo) activeChips.push({
     key: 'window', label: 'Rights window',
@@ -446,25 +495,16 @@ export function OtherRightsDashboardTable({
     value: `${expiryFrom || '…'} → ${expiryTo || '…'}`,
     onClear: () => { onExpiryFromChange(''); onExpiryToChange(''); onExpiryYearChange('all') },
   })
-  if (agreementEndBy) activeChips.push({
-    key: 'agmt', label: 'Agreement ends by', value: agreementEndBy,
-    onClear: () => setAgreementEndBy(''),
-  })
-  if (bangladeshiOnly) activeChips.push({
-    key: 'bd', label: 'Bangladesh', value: 'Only',
-    onClear: () => setBangladeshiOnly(false),
-  })
 
   const clearAllFilters = () => {
     setSearch('')
-    setSourceFilter('all')
+    setSourceSel(SOURCE_OPTIONS.map(o => o.value))
+    setTitleSel([])
     setLicensorFilter(licensorOptions)
     setCertFilter(CERT_OPTIONS)
-    if (languageOptions && onLanguageChange) onLanguageChange(languageOptions)
+    if (onLanguageChange) onLanguageChange(defaultLanguage ?? languageOptions ?? [])
     onOpenFromChange(''); onOpenToChange('')
     onExpiryFromChange(''); onExpiryToChange(''); onExpiryYearChange('all')
-    setAgreementEndBy('')
-    setBangladeshiOnly(false)
   }
 
   const filtersBar = (
@@ -473,79 +513,9 @@ export function OtherRightsDashboardTable({
       : 'rounded-[14px] border border-(--filter-border) bg-(--filter-panel-bg) p-3.5'}>
       {/* One labelled grid — search is the first cell rather than its own full-width
           row, so the block is a row shorter and the table sits higher. */}
+      {activeCard === 'expiring' && (
       <div className="grid gap-x-3 gap-y-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
-        {/* Search */}
-        <div className="flex flex-col gap-1 min-w-0 sm:col-span-2">
-          <span className={labelCls}>Search</span>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-(--filter-label)" />
-            <Input placeholder="Title or production number…" value={search} onChange={(e) => setSearch(e.target.value)}
-              className={`h-9 rounded-[8px] pl-9 text-sm placeholder:text-(--filter-label) bg-(--filter-panel-bg) border-(--filter-border) text-(--text) hover:border-(--filter-border-hover) focus-visible:border-(--filter-border-hover) focus-visible:ring-0 transition-colors`} />
-          </div>
-        </div>
-        {/* Source */}
-        <div className="flex flex-col gap-1 min-w-0">
-          <span className={labelCls}>Source</span>
-          <Select value={sourceFilter} onValueChange={(v) => { setSourceFilter(v as SourceFilter) }}>
-            <SelectTrigger className={`w-full ${selectTriggerCls}`}>
-              <SelectValue placeholder="Source" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Sources</SelectItem>
-              <SelectItem value="home">Home Production</SelectItem>
-              <SelectItem value="acquired">Acquired</SelectItem>
-              <SelectItem value="bangladeshi">Bangladesh</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Licensor */}
-        <div className="flex flex-col gap-1 min-w-0">
-          <span className={labelCls}>Licensor</span>
-          <MultiSelectFilter
-            label="Licensor"
-            options={licensorOptions}
-            value={licensorFilter}
-            onChange={setLicensorFilter}
-            searchable
-            accent="blue"
-            triggerWidth="w-full"
-          />
-        </div>
-
-        {/* Certification */}
-        <div className="flex flex-col gap-1 min-w-0">
-          <span className={labelCls}>Certification</span>
-          <MultiSelectFilter
-            label="Certification"
-            options={CERT_OPTIONS}
-            value={certFilter}
-            onChange={setCertFilter}
-            accent="blue"
-            triggerWidth="w-full"
-            extraPresetRows={[{
-              key: 'except-a',
-              label: 'Except A',
-              isActive: (v) => v.length > 0 && !v.includes('A') && CERT_OPTIONS.filter(c => c !== 'A').every(c => v.includes(c)),
-              onSelect: () => setCertFilter(CERT_OPTIONS.filter(c => c !== 'A')),
-            }]}
-          />
-        </div>
-
         {/* Language */}
-        {languageOptions && onLanguageChange && (
-          <div className="flex flex-col gap-1 min-w-0">
-            <span className={labelCls}>Language</span>
-            <MultiSelectFilter
-              label="Language"
-              options={languageOptions}
-              value={language}
-              onChange={onLanguageChange}
-              triggerWidth="w-full"
-            />
-          </div>
-        )}
-
         {/* Expiry year + date range */}
         {activeCard === 'expiring' && (
           <>
@@ -585,70 +555,10 @@ export function OtherRightsDashboardTable({
           </>
         )}
 
-        {/* Open titles filters: date range + agreement end + bangladesh */}
-        {activeCard === 'open_titles' && (
-          <>
-            <div className="flex flex-col gap-1 min-w-0 sm:col-span-2">
-              <span className={labelCls}>Rights window</span>
-              <div className="flex items-center gap-1 min-w-0 bg-(--filter-panel-bg) border border-(--filter-border) rounded-[8px] px-3 h-9 hover:border-(--filter-border-hover) transition-colors [&_input]:min-w-0 [&_input]:flex-1">
-                  <DateInput value={openFrom} onChange={onOpenFromChange} />
-                <span className="text-(--filter-label) text-[10px] font-medium uppercase px-0.5">to</span>
-                  <DateInput value={openTo} onChange={onOpenToChange} />
-                {(openFrom || openTo) && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onOpenFromChange(''); onOpenToChange('') }}
-                    className="ml-1 p-0.5 text-(--text-faint) hover:text-red-400 transition-colors"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1 min-w-0">
-              <span className={labelCls}>Agreement ends by</span>
-              <div className={`flex items-center gap-1 bg-(--bg-raise) border rounded-[8px] px-3 h-9 transition-colors ${agreementEndBy ? 'border-amber-500/60' : 'border-(--svf-border-strong) hover:border-(--svf-border-strong)'}`}>
-                <DateInput value={agreementEndBy} onChange={setAgreementEndBy} />
-                {agreementEndBy && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setAgreementEndBy('') }}
-                    className="ml-1 p-0.5 text-(--text-faint) hover:text-red-400 transition-colors"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <label className={cn(
-              'self-end flex items-center gap-1.5 h-9 px-3 rounded-[8px] border transition-colors cursor-pointer',
-              bangladeshiOnly ? 'border-emerald-500/60 bg-emerald-500/5' : 'border-(--svf-border-strong) bg-(--bg-raise) hover:border-(--svf-border-strong)'
-            )}>
-              <Checkbox checked={bangladeshiOnly} onCheckedChange={(v) => setBangladeshiOnly(v === true)} className="h-3.5 w-3.5" />
-              <span className={cn('text-xs', bangladeshiOnly ? 'text-emerald-400' : 'text-(--text)')}>Bangladesh</span>
-            </label>
-          </>
-        )}
-
-        {/* Active rights filters: agreement end-by date */}
-        {activeCard === 'active' && (
-          <div className={`flex items-center gap-1 bg-(--bg-raise) border rounded-[8px] px-3 h-9 transition-colors ${agreementEndBy ? 'border-amber-500/60' : 'border-(--svf-border) hover:border-(--svf-border-strong)'}`}>
-            <span className="text-[10px] font-medium text-(--text-faint) uppercase px-1">Agmt End By</span>
-            <DateInput value={agreementEndBy} onChange={setAgreementEndBy} />
-            {agreementEndBy && (
-              <button
-                onClick={(e) => { e.stopPropagation(); setAgreementEndBy('') }}
-                className="ml-1 p-0.5 text-(--text-faint) hover:text-red-400 transition-colors"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            )}
-          </div>
-        )}
-
       </div>
+      )}
 
-      <ActiveFilterChips chips={activeChips} onClearAll={clearAllFilters} />
+      <ActiveFilterChips chips={activeChips} onClearAll={clearAllFilters} divider={activeCard === 'expiring'} />
 
       {/* Actions row — selection count + export */}
       <div className="mt-2.5 flex flex-wrap items-center gap-2.5">
@@ -739,13 +649,45 @@ export function OtherRightsDashboardTable({
                   />
                 </TableHead>
                 {hasSubRows && <TableHead className={cn('w-8', headCls)} />}
-                <TableHead className={headCls}>Title</TableHead>
-                <TableHead className={headCls}>Source</TableHead>
-                <TableHead className={headCls}>Cert</TableHead>
-                <TableHead className={headCls}>Release</TableHead>
-                <TableHead className={headCls}>Language</TableHead>
-                {showLicensorCol && <TableHead className={headCls}>Licensor</TableHead>}
-                {activeCard === 'open_titles' && <TableHead className={headCls}>Agreement</TableHead>}
+                <SortableFilterableHead column="title" label="Title" currentSort={sortConfig} onSort={requestSort} className={headCls}>
+                  <ColumnFilter
+                    options={titleOptions}
+                    value={titleFilter}
+                    onChange={setTitleFilter}
+                    searchable
+                    searchValue={search}
+                    onSearchChange={setSearch}
+                    searchPlaceholder="Title or production no…"
+                  />
+                </SortableFilterableHead>
+                <SortableFilterableHead column="source" label="Source" currentSort={sortConfig} onSort={requestSort} className={headCls}>
+                  <ColumnFilter options={SOURCE_OPTIONS} value={sourceSel} onChange={setSourceSel} />
+                </SortableFilterableHead>
+                <SortableFilterableHead column="certification" label="Cert" currentSort={sortConfig} onSort={requestSort} className={cn('w-px px-2', headCls)}>
+                  <ColumnFilter options={CERT_OPTIONS} value={certFilter} onChange={setCertFilter} />
+                </SortableFilterableHead>
+                <SortableHeader column="release_date" label="Release" currentSort={sortConfig} onSort={requestSort} className={headCls} />
+                <SortableFilterableHead column="language" label="Language" currentSort={sortConfig} onSort={requestSort} className={headCls}>
+                  {languageOptions && onLanguageChange && (
+                    <ColumnFilter options={languageOptions} value={language} onChange={onLanguageChange} searchable />
+                  )}
+                </SortableFilterableHead>
+                {showLicensorCol && (
+                  <FilterableHead label="Licensor" className={headCls}>
+                    <ColumnFilter options={licensorOptions} value={licensorFilter} onChange={setLicensorFilter} searchable />
+                  </FilterableHead>
+                )}
+                {activeCard === 'open_titles' && (
+                  <FilterableHead label="Agreement" className={headCls}>
+                    <ColumnDateRangeFilter
+                      from={openFrom}
+                      to={openTo}
+                      onFromChange={onOpenFromChange}
+                      onToChange={onOpenToChange}
+                      renderInput={(value, onChange) => <DateInput value={value} onChange={onChange} />}
+                    />
+                  </FilterableHead>
+                )}
                 {activeCard === 'active' && <TableHead className={headCls}>Rights Count</TableHead>}
               </>
             )}
@@ -776,15 +718,15 @@ export function OtherRightsDashboardTable({
                   <TableCell className={cn('pl-4 w-10', cellCls)}>
                     <Checkbox checked={selectedIds.has(right.id)} onCheckedChange={() => toggleSelect(right.id)} />
                   </TableCell>
-                  <TableCell className={cn('font-medium max-w-48', cellCls)}>
-                    <Link href={`/movies/${movie.id}`} title={movie.title} className="hover:text-primary transition-colors line-clamp-2">
+                  <TableCell className={cn('font-medium whitespace-normal', cellCls)}>
+                    <Link href={`/movies/${movie.id}`} title={movie.title} className="hover:text-primary transition-colors break-words">
                       {movie.title}
                       {(movie.release_year || movie.release_date?.split('-')[0]) && (
                         <span className="font-normal ml-1" style={{ color: 'var(--text-faint)' }}>({movie.release_year || movie.release_date?.split('-')[0]})</span>
                       )}
                     </Link>
                   </TableCell>
-                  <TableCell className={cellCls}>{getSourceBadge(movie.source)}</TableCell>
+                  <TableCell className={cellCls}>{getSourceBadge(movie)}</TableCell>
                   <TableCell className={cellCls}>
                     {right.right_type ? (
                       <Badge variant="outline" className="bg-(--bg-raise)/60 text-(--text-faint) border-(--svf-border) text-xs whitespace-nowrap">
@@ -819,7 +761,7 @@ export function OtherRightsDashboardTable({
               </TableCell>
             </TableRow>
           ) : (
-            filteredMovies.map((movie: any, idx: number) => {
+            sortedData.map((movie: any, idx: number) => {
               const isExpanded = expandedRows.has(movie.id)
               const otherRights: OtherRight[] = (movie as MovieWithOtherRights).other_rights_list || []
               return (
@@ -847,23 +789,23 @@ export function OtherRightsDashboardTable({
                         ) : <div className="w-5" />}
                       </TableCell>
                     )}
-                    <TableCell className={cn('font-medium max-w-50', cellCls)}>
-                      <Link href={`/movies/${movie.id}`} title={movie.title} className="hover:text-primary transition-colors line-clamp-1" onClick={(e) => e.stopPropagation()}>
+                    <TableCell className={cn('font-medium whitespace-normal', cellCls)}>
+                      <Link href={`/movies/${movie.id}`} title={movie.title} className="hover:text-primary transition-colors break-words" onClick={(e) => e.stopPropagation()}>
                         {movie.title}
                         {(movie.release_year || movie.release_date?.split('-')[0]) && (
                           <span className="font-normal ml-1" style={{ color: 'var(--text-faint)' }}>({movie.release_year || movie.release_date?.split('-')[0]})</span>
                         )}
                       </Link>
                     </TableCell>
-                    <TableCell className={cellCls} onClick={(e) => e.stopPropagation()}>{getSourceBadge(movie.source)}</TableCell>
-                    <TableCell className={cn('text-muted-foreground', cellCls)}>{movie.certification || '—'}</TableCell>
+                    <TableCell className={cellCls} onClick={(e) => e.stopPropagation()}>{getSourceBadge(movie)}</TableCell>
+                    <TableCell className={cn('text-muted-foreground w-px px-2 whitespace-nowrap', cellCls)}>{movie.certification || '—'}</TableCell>
                     <TableCell className={cn('tabular-nums', cellCls)}>
                       {movie.release_date ? movie.release_date.split('-').reverse().join('/') : movie.release_year || '—'}
                     </TableCell>
                     <TableCell className={cellCls}>{movie.language || '—'}</TableCell>
                     {showLicensorCol && (
-                      <TableCell className={cn('max-w-35', cellCls)} style={{ color: 'var(--text-faint)' }} onClick={(e) => e.stopPropagation()}>
-                        <span className="line-clamp-1 text-xs" title={getEffectiveLicensor(movie) || undefined}>{getEffectiveLicensor(movie) || '—'}</span>
+                      <TableCell className={cn('max-w-45 whitespace-normal', cellCls)} style={{ color: 'var(--text-faint)' }} onClick={(e) => e.stopPropagation()}>
+                        <span className="block text-xs break-words">{getEffectiveLicensor(movie) || '—'}</span>
                       </TableCell>
                     )}
                     {activeCard === 'open_titles' && (

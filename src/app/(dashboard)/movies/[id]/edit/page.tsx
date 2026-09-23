@@ -3,6 +3,7 @@
 import { LanguageSelector } from "@/components/forms/language-selector";
 import { CensorCertificatesSection } from "@/components/movies/censor-certificates-section";
 import { Badge } from "@/components/ui/badge";
+import { BackButton } from "@/components/ui/back-button";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FileUpload } from "@/components/ui/file-upload";
@@ -53,7 +54,7 @@ import type {
   Person,
   ProductionHouse,
 } from "@/lib/types/database";
-import { AlertTriangle, ArrowLeft, CheckCircle, Clock, Film, GitPullRequest, Loader2, Plus, RotateCcw, Search, X, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle, Clock, Film, GitPullRequest, Loader2, Plus, RotateCcw, Search, X, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -722,11 +723,7 @@ export default function EditMoviePage() {
       <div className="relative overflow-hidden rounded-[12px] bg-(--panel-solid) border border-(--svf-border) p-3">
 
         <div className="relative flex items-center gap-4">
-          <Link href="/movies">
-            <Button variant="ghost" size="sm" className="text-(--text-faint) hover:text-(--text) hover:bg-(--hover) gap-1.5 h-8">
-              <ArrowLeft className="h-3.5 w-3.5" /> Back
-            </Button>
-          </Link>
+          <BackButton fallbackHref="/movies" label="Back" iconClassName="h-3.5 w-3.5" />
           <div className="h-4 w-px bg-(--hover)" />
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-[12px] bg-amber-500/15 border border-amber-500/30 shadow-lg shadow-amber-500/10">

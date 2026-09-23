@@ -1,8 +1,8 @@
 import { createClient } from '@/lib/supabase/client'
-import type { MovieWithDetails, Platform, RightsNatureType } from '@/lib/types/database'
-import { buildHoldbackInfo, flattenHoldbackInfo, holdsBackType, anyHoldsBackType, anyClassificationAllowsType, INTERNET_EXPLOITATION_TYPES, type ExploitationType, type HoldbackInfo } from '@/lib/utils/holdbacks'
+import type { MovieWithDetails, Platform } from '@/lib/types/database'
+import { buildHoldbackInfo, filterHoldbackTextForTypes, flattenHoldbackInfo, holdsBackType, anyHoldsBackType, anyClassificationAllowsType, INTERNET_EXPLOITATION_TYPES, type ExploitationType, type HoldbackInfo } from '@/lib/utils/holdbacks'
 import { orContains } from '@/lib/utils/search'
-import { onRightsMutated } from '@/lib/api/cache'
+import { cachedQuery, onRightsMutated } from '@/lib/api/cache'
 
 const supabase = createClient()
 
@@ -305,10 +305,14 @@ function isOtherExploitationPlatform(pt: string): boolean {
 
 export async function getPlatforms(): Promise<Platform[]> {
   try {
-    const { data, error } = await supabase.from('platforms').select('*').order('name')
-
-    if (error) throw error
-    return data || []
+    // Lookup lists are read on nearly every page mount and change rarely, so the
+    // result is cached; a throw still falls through to the catch below and is
+    // never cached, so a failure retries rather than sticking for the TTL.
+    return await cachedQuery('platforms', async () => {
+      const { data, error } = await supabase.from('platforms').select('*').order('name')
+      if (error) throw error
+      return data || []
+    })
   } catch (error) {
     console.error('Error fetching platforms:', error)
     return []
@@ -336,15 +340,12 @@ export async function getRightsFocusedStats(): Promise<RightsFocusedStats> {
     // Get all movies that are NOT expired and NOT "Sold to Grassroot"
     // A movie is expired if its agreement_end_date is in the past
     // Movies sold to grassroot (remapped to Sold/Expired) should not be part of any open titles or WTP count
-    const moviesQuery = supabase.from('movies').select('id, source, home_sold, jointly_owned, agreement_end_date, jointly_exploitation_rights').eq('approval_status', 'approved')
+    const moviesQuery = supabase.from('movies').select('id, source, home_sold, jointly_owned, agreement_end_date, jointly_exploitation_rights, wtp_library').eq('approval_status', 'approved')
     const { data: allMovies } = await moviesQuery
     // Route through the shared helper so this count applies the same sold / expired /
     // held-by-partner rules as every other open-titles query.
-    const allMovieIds = new Set(
-      (allMovies || [])
-        .filter((m: any) => !isSoldOrExpired(m, today))
-        .map((m: { id: string }) => m.id),
-    )
+    const liveMovies = (allMovies || []).filter((m: any) => !isSoldOrExpired(m, today))
+    const allMovieIds = new Set(liveMovies.map((m: { id: string }) => m.id))
 
     // Get movies with active rights
     const { data: moviesWithActiveRights } = await supabase.from('platform_rights').select('movie_id').eq('is_current', true)
@@ -353,8 +354,12 @@ export async function getRightsFocusedStats(): Promise<RightsFocusedStats> {
     // Open Titles: Movies without any current rights
     const openTitlesCount = allMovieIds.size - moviesWithRightsSet.size
 
-    // WTP count: movies where wtp_library is 'WTP' or 'WTP/BD'
-    const { count: wtpCount } = await supabase.from('movies').select('*', { count: 'exact', head: true }).in('wtp_library', ['WTP', 'WTP/BD'])
+    // WTP count: live titles tagged WTP or WTP/BD. Counted from the same
+    // sold/expired-filtered set as open titles — a lapsed or sold film is not
+    // ours to sell, so it is not WTP inventory.
+    const wtpCount = liveMovies.filter(
+      (m: any) => m.wtp_library === 'WTP' || m.wtp_library === 'WTP/BD'
+    ).length
 
     // Expiring Rights Count (in next 1 year)
     const { count: expiringCount } = await supabase.from('platform_rights').select('*', { count: 'exact', head: true }).eq('is_current', true).gte('end_date', today).lte('end_date', oneYearDate)
@@ -474,7 +479,10 @@ async function computeRightsModeStats(mode: RightsMode, language?: string[], ope
         const mrEnd = acqSatEndDates.get(m.id)
         // mrEnd undefined = no row (already excluded above); null = perpetual
         const endDate = mrEnd ?? m.agreement_end_date ?? null
-        if (endDate && endDate < today) return false
+        // referenceDate, not today: getOpenTitlesForMode gates on it here too, and
+        // using today would make the stat card and tab pill disagree with the table
+        // whenever an "open until" date is selected.
+        if (endDate && endDate < referenceDate) return false
         return true
       })
       const eligibleAcquiredIds = eligibleAcquired.map((m: any) => m.id)
@@ -486,7 +494,8 @@ async function computeRightsModeStats(mode: RightsMode, language?: string[], ope
         acqSatStatRights = await fetchPlatformRightsChunked(eligibleAcquiredIds, 'movie_id, platforms(platform_type), end_date, holdbacks, is_current')
         acqSatStatRights.forEach((r: any) => {
           if (!isAcquiredSatellitePlatform(r.platforms?.platform_type || '')) return
-          if (!r.end_date || r.end_date >= today) moviesWithActiveSatPlatformRight.add(r.movie_id)
+          // referenceDate, not today — matches getOpenTitlesForMode's gating.
+          if (!r.end_date || r.end_date >= referenceDate) moviesWithActiveSatPlatformRight.add(r.movie_id)
         })
       }
       openAcquiredCount = eligibleAcquired.filter((m: any) =>
@@ -565,14 +574,12 @@ async function computeRightsModeStats(mode: RightsMode, language?: string[], ope
 
     const openTitlesCount = openHomeCount + openAcquiredCount
 
-    // WTP — approved + language-filtered
-    let wtpQuery = supabase
-      .from('movies')
-      .select('*', { count: 'exact', head: true })
-      .eq('approval_status', 'approved')
-      .in('wtp_library', ['WTP', 'WTP/BD'])
-    if (language && language.length > 0) wtpQuery = wtpQuery.in('language', language)
-    const { count: wtpCount } = await wtpQuery
+    // WTP — counted from validMovies, which is already approved, language-filtered
+    // and stripped of sold/expired titles, so the card matches the rows the WTP
+    // table actually lists (it applies the same isSoldOrExpired rule).
+    const wtpCount = validMovies.filter(
+      (m: any) => m.wtp_library === 'WTP' || m.wtp_library === 'WTP/BD'
+    ).length
 
     // Expiring rights — count unique movies with a matching platform_right expiring in current year
     let expiringCount = 0
@@ -887,10 +894,24 @@ export async function getOpenTitlesForMode(
       )
       openTitles = openTitles.map((m: any) => {
         const ctx = holdbackContext.get(m.id) || { movieRights: [], platformRights: [] }
+        // Internet must only surface internet holdbacks. The platform-right and
+        // rights-level sources are already scoped (internet platforms;
+        // Internet/Negative movie_rights), but syndication_holdback is a single
+        // movie-wide field covering every right type, so a satellite-only note
+        // would otherwise appear here. Scope each source to the internet types.
         const info = buildHoldbackInfo([
-          { label: 'Movie-wide', raw: m.syndication_holdback },
-          { label: 'Rights-level (movie_rights)', raw: ctx.movieRights.join(', ') },
-          ...ctx.platformRights.map((pr) => ({ label: `Platform right (${pr.platformName})`, raw: pr.raw })),
+          {
+            label: 'Movie-wide',
+            raw: filterHoldbackTextForTypes(m.syndication_holdback, INTERNET_EXPLOITATION_TYPES),
+          },
+          {
+            label: 'Rights-level (movie_rights)',
+            raw: filterHoldbackTextForTypes(ctx.movieRights.join(', '), INTERNET_EXPLOITATION_TYPES),
+          },
+          ...ctx.platformRights.map((pr) => ({
+            label: `Platform right (${pr.platformName})`,
+            raw: filterHoldbackTextForTypes(pr.raw, INTERNET_EXPLOITATION_TYPES),
+          })),
         ])
         return {
           ...m,
@@ -1455,11 +1476,12 @@ export async function getClipRightsMovies(options?: {
 
 export async function getLanguages(): Promise<string[]> {
   try {
-    const { data, error } = await supabase.from('movies').select('language').not('language', 'is', null)
-    if (error) throw error
-
-    const uniqueLanguages = Array.from(new Set((data as { language: string }[]).map((m) => m.language)))
-    return uniqueLanguages.sort()
+    return await cachedQuery('languages', async () => {
+      const { data, error } = await supabase.from('movies').select('language').not('language', 'is', null)
+      if (error) throw error
+      const uniqueLanguages = Array.from(new Set((data as { language: string }[]).map((m) => m.language)))
+      return uniqueLanguages.sort()
+    })
   } catch (error) {
     console.error('Error fetching languages:', error)
     return []
@@ -1975,6 +1997,9 @@ export async function getMoviesForDashboard(options?: {
     } else if (options?.category === 'acquired') {
       query = query.eq('source', 'acquired')
     } else if (options?.category === 'wtp') {
+      // The search filter above may already own this query's single `or` slot —
+      // in PostgREST a second `.or()` replaces the first rather than ANDing with
+      // it — so the live-title rule is applied client-side further down instead.
       query = query.in('wtp_library', ['WTP', 'WTP/BD'])
     }
 
@@ -2140,77 +2165,20 @@ export async function getMoviesForDashboard(options?: {
   }
 }
 
-// Get all rights nature types from lookup table
-export async function getRightsNatureTypes(): Promise<RightsNatureType[]> {
-  try {
-    const { data, error } = await supabase.from('rights_nature_types').select('*').eq('is_active', true).order('name')
-
-    if (error) throw error
-
-    // Define the strictly allowed nature types
-    const allowedNatures = ['Exclusive', 'Non-Exclusive', 'Jointly Owned']
-
-    // Map and filter existing data
-    const mappedData = (data || [])
-      .map((item: RightsNatureType) => {
-        let name = item.name
-        if (name === 'Jointly Production') name = 'Jointly Owned'
-        if (name === 'Sold/Expired' || name === 'Sold to Grassroot') name = 'Sold'
-        return { ...item, name }
-      })
-      .filter((item: RightsNatureType) => allowedNatures.includes(item.name))
-
-    // Ensure allowed options are present even if not in DB
-    const finalData = [...mappedData]
-    allowedNatures.forEach((name) => {
-      if (!finalData.find((d) => d.name === name)) {
-        finalData.push({ id: name.toLowerCase().replace(/ /g, '_'), name, is_active: true })
-      }
-    })
-
-    return finalData.sort((a, b) => a.name.localeCompare(b.name))
-  } catch (error) {
-    console.error('Error fetching rights nature types:', error)
-    // Return default fallback values
-    return [
-      { id: 'exclusive', name: 'Exclusive', is_active: true },
-      { id: 'non_exclusive', name: 'Non-Exclusive', is_active: true },
-      { id: 'jointly_owned', name: 'Jointly Owned', is_active: true },
-    ]
-  }
-}
-
 // Get all distinct certification values from movies
 export async function getDistinctCertifications(): Promise<string[]> {
   try {
-    const { data, error } = await supabase.from('movies').select('certification').not('certification', 'is', null)
-
-    if (error) throw error
-
-    const certs = (data || []).map((m: { certification: string | null }) => m.certification).filter((c: string | null): c is string => Boolean(c))
-    const unique: string[] = Array.from(new Set(certs))
-    unique.sort()
-    return unique
+    return await cachedQuery('distinctCertifications', async () => {
+      const { data, error } = await supabase.from('movies').select('certification').not('certification', 'is', null)
+      if (error) throw error
+      const certs = (data || []).map((m: { certification: string | null }) => m.certification).filter((c: string | null): c is string => Boolean(c))
+      const unique: string[] = Array.from(new Set(certs))
+      unique.sort()
+      return unique
+    })
   } catch (error) {
     console.error('Error fetching distinct certifications:', error)
     return []
-  }
-}
-
-// Get unique nature values from actual platform_rights data
-// Add a new nature type
-export async function addNatureType(name: string, description?: string): Promise<string> {
-  try {
-    const { data, error } = await supabase.rpc('add_nature_type', {
-      p_name: name,
-      p_description: description,
-    })
-
-    if (error) throw error
-    return data
-  } catch (error) {
-    console.error('Error adding nature type:', error)
-    throw error
   }
 }
 

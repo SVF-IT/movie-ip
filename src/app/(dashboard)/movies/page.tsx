@@ -1,5 +1,6 @@
 "use client";
 
+import { ActiveFilterChips, type ActiveFilterChip } from "@/components/dashboard/active-filter-chips";
 import { DisabledActionButton } from "@/components/disabled-action-button";
 import { ComprehensiveCSVImportDialog } from "@/components/import-export/comprehensive-csv-import-dialog";
 import type { ExportFieldDef } from "@/components/import-export/data-export-dialog";
@@ -12,7 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
+import { ColumnFilter, FilterableHead } from "@/components/ui/column-header-filter";
+import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import {
   Select,
   SelectContent,
@@ -30,8 +32,8 @@ import {
 } from "@/components/ui/table";
 import { useAuth } from "@/contexts/auth-context";
 import { useAppToast } from "@/hooks/use-app-toast";
-import { useMultiSelectFilterState } from "@/hooks/use-multi-select-filter-state";
-import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
+import { useUrlMultiSelectFilterState } from "@/hooks/use-url-multi-select-filter-state";
+import { stringCodec, stringListCodec, useUrlFilterState } from "@/hooks/use-url-filter-state";
 import { getDistinctCertifications, getPlatforms } from "@/lib/api/dashboard";
 import { getBulkMoviePlatformRights, getGroupedMovies, getLanguages } from "@/lib/api/movies";
 import { isAdminRole, isEditorRole, type GroupedMovie, type MovieLanguageVersion, type Platform, type PlatformRight } from "@/lib/types/database";
@@ -39,15 +41,39 @@ import { cn } from "@/lib/utils";
 import {
   Activity,
   Calendar,
+  ChevronDown, ChevronsUpDown, ChevronUp,
   Download, Edit, ExternalLink, Film,
   Image as ImageIcon,
   Languages,
-  LayoutGrid, List, Loader2, Plus, Search, Settings2, ShieldCheck, Star,
-  Upload, X
+  LayoutGrid, List, Loader2, Plus, ShieldCheck,
+  Upload
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
+
+/**
+ * A jointly-produced title whose exploitation rights sit with the partner house
+ * rather than SVF is not ours to sell, so it counts as gone from the catalogue.
+ */
+function heldByOtherHouse(version?: MovieLanguageVersion): boolean {
+  if (!version || version.jointly_owned !== true) return false;
+  const holder = (version.jointly_exploitation_rights || "").trim();
+  if (!holder) return false;
+  return !/^svf\b/i.test(holder);
+}
+
+/**
+ * A home production is gone when the sold flag is set, when a legacy imported row
+ * says "Sold" in its exploitation-rights text, or when a joint partner holds the
+ * rights. Mirrors isSoldOrExpired in lib/api/dashboard.ts; keep the two in step.
+ */
+function isSoldHome(version?: MovieLanguageVersion): boolean {
+  if (!version) return false;
+  if (version.home_sold === true) return true;
+  if (/sold/i.test(version.jointly_exploitation_rights || "")) return true;
+  return heldByOtherHouse(version);
+}
 
 export default function MoviesPage() {
   const { profile } = useAuth();
@@ -58,20 +84,58 @@ export default function MoviesPage() {
   const [movies, setMovies] = useState<GroupedMovie[]>([]);
   const [allFilteredMovies, setAllFilteredMovies] = useState<GroupedMovie[]>([]);
   const [totalCount, setTotalCount] = useState(0);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [sourceFilter, setSourceFilter] = useState<string>("all");
-  const [versionFilter, setVersionFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useUrlFilterState("q", "", stringCodec);
+  // Typing shouldn't refetch on every keystroke; the query settles first.
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const SOURCE_OPTIONS = [
+    { value: "home_production", label: "Home Production" },
+    { value: "acquired", label: "Acquired" },
+    { value: "jointly_owned", label: "Joint Production" },
+    { value: "bangladeshi", label: "Bangladesh" },
+    { value: "expired", label: "Expired" },
+  ];
+  // Home + Acquired is the whole live catalogue: every joint production and
+  // Bangladeshi title is already one or the other, so those two ticks are the
+  // default. "Expired" is a separate bucket that is only ever included when
+  // explicitly ticked — it is never implied by "everything selected".
+  const DEFAULT_SOURCES = ["home_production", "acquired"];
+  const [sourceSel, setSourceSel] = useUrlMultiSelectFilterState<string>("src", DEFAULT_SOURCES);
+  // Several downstream behaviours (column visibility, agreement-expiry) only make
+  // sense for exactly one source, so they key off the lone selection.
+  const soleSource = sourceSel.length === 1 ? sourceSel[0] : null;
+  const VERSION_OPTIONS = [
+    { value: "multi", label: "Multi-Version" },
+    { value: "single", label: "Single Version" },
+  ];
+  const [versionSel, setVersionSel] = useUrlMultiSelectFilterState<string>("ver", VERSION_OPTIONS.map(o => o.value));
+  // Both ticked (or none) is the same as no narrowing.
+  const versionFilter = versionSel.length === 1 ? versionSel[0] : "all";
   const [loading, setLoading] = useState(true);
   const toast = useAppToast();
 
   const [languages, setLanguages] = useState<string[]>([]);
-  const [certificationFilter, setCertificationFilter] = useMultiSelectFilterState<string>([]);
+  // Title's funnel lists the titles currently loaded rather than a fixed set, so
+  // "all selected" can't mean "no filter" — the list shrinks whenever another
+  // filter narrows the data. An empty selection means no title filter.
+  const [titleSel, setTitleSel] = useUrlFilterState<string[]>("title", [], stringListCodec, (v) => v.length === 0);
+  const [certificationFilter, setCertificationFilter] = useUrlMultiSelectFilterState<string>("cert", []);
   const [certificationOptions, setCertificationOptions] = useState<string[]>([]);
-  const [languageFilter, setLanguageFilter] = useMultiSelectFilterState<string>([]);
+  const [languageFilter, setLanguageFilter] = useUrlMultiSelectFilterState<string>("lang", []);
   const WTP_OPTIONS = ["WTP", "WTP/BD", "Library"];
-  const [wtpFilter, setWtpFilter] = useMultiSelectFilterState<string>(WTP_OPTIONS);
-  const [sortBy, setSortBy] = useState<'title_asc' | 'title_desc' | 'created_at_desc' | 'release_date_asc' | 'release_date_desc'>('title_asc');
-  const [agreementExpiryYear, setAgreementExpiryYear] = useState<string>("all");
+  const [wtpFilter, setWtpFilter] = useUrlMultiSelectFilterState<string>("wtp", WTP_OPTIONS);
+  // Sorting is driven entirely by the Release column header now: unsorted falls
+  // back to A–Z by title, and clicking the column cycles newest/oldest release.
+  const [releaseSort, setReleaseSort] = useUrlFilterState<'none' | 'desc' | 'asc'>(
+    'sort', 'none',
+    { encode: (v) => (v === 'none' ? null : v), decode: (raw) => (raw === 'asc' ? 'asc' : raw === 'desc' ? 'desc' : 'none') },
+  );
+  const sortBy: 'title_asc' | 'release_date_asc' | 'release_date_desc' =
+    releaseSort === 'none' ? 'title_asc' : releaseSort === 'desc' ? 'release_date_desc' : 'release_date_asc';
+  // Unlike the other filters, an empty selection here means "any year" rather
+  // than "nothing matches" — the year list is a fixed window, not the set of
+  // values present in the data, so all-checked and none-checked both mean no
+  // narrowing.
+  const [expiryYearSel, setExpiryYearSel] = useUrlFilterState<string[]>("expiry", [], stringListCodec, (v) => v.length === 0);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
@@ -94,12 +158,13 @@ export default function MoviesPage() {
       if (bengali) setLanguageFilter([bengali]);
     }).catch(() => { });
     getDistinctCertifications().then((certs) => {
-      const standardCerts = ['U', 'UA', 'UA 7+', 'UA 13+', 'UA 16+', 'A', 'S'];
-      const dbCerts = certs.filter(c => c !== 'U/A');
+      const standardCerts = ['U', 'UA', 'UA 7+', 'UA 13+', 'UA 16+', 'A'];
+      // 'S' (restricted to specialised audiences) is never offered as a filter.
+      const dbCerts = certs.filter(c => c !== 'U/A' && c !== 'S');
       const merged = Array.from(new Set([...standardCerts, ...dbCerts]));
       setCertificationOptions(merged);
     }).catch(() => {
-      setCertificationOptions(['U', 'UA', 'UA 7+', 'UA 13+', 'UA 16+', 'A', 'S']);
+      setCertificationOptions(['U', 'UA', 'UA 7+', 'UA 13+', 'UA 16+', 'A']);
     });
     // Check anniversary notification preference
     fetch('/api/notifications/preferences')
@@ -117,43 +182,56 @@ export default function MoviesPage() {
     try {
       setLoading(true);
 
-      const source = (sourceFilter === "all" || sourceFilter === "jointly_owned") ? undefined : (sourceFilter as "home_production" | "acquired" | "expired" | "bangladeshi");
-
-      // A filter is only sent to the server when it's a genuine narrowing (partial selection or
-      // fully cleared). When every known option is checked, we pass undefined — the same as "no
-      // filter" — since option lists (esp. Certification, partly hardcoded) aren't guaranteed to
-      // cover every value present in the data; sending the full array would silently exclude
-      // rows with off-list/blank values via `.in()`.
+      // Each picked source is its own query, merged and deduped by production_no.
+      // "Expired" is really two (expired acquired + sold home production) and is
+      // only ever fetched when ticked — it is never part of an unfiltered view.
+      // "Joint Production" and "Bangladesh" are narrowings of the live catalogue
+      // rather than separate buckets, so they never pull in expired titles.
       const commonParams = {
-        search: searchQuery || undefined,
-        language: (versionFilter === "multi") ? undefined : (languageFilter.length < languages.length ? languageFilter : undefined),
+        search: debouncedSearch || undefined,
+        // An empty selection means "no language narrowing", not "match no
+        // language" — unticking Select all should widen the list, not empty it.
+        language: (versionFilter === "multi") ? undefined : (languageFilter.length > 0 && languageFilter.length < languages.length ? languageFilter : undefined),
         certification: certificationFilter.length < certificationOptions.length ? certificationFilter : undefined,
         sortBy,
         approvalStatus: "approved" as const,
       };
 
-      let allGroupedData: GroupedMovie[];
+      type SourceQuery = { source?: "home_production" | "acquired" | "expired" | "sold" | "bangladeshi"; natureOfRights?: string };
+      const queriesFor = (v: string): SourceQuery[] => {
+        if (v === "expired") return [{ source: "expired" }, { source: "sold" }];
+        if (v === "jointly_owned") return [{ natureOfRights: "Jointly Owned" }];
+        return [{ source: v as SourceQuery["source"] }];
+      };
 
-      if (sourceFilter === "expired") {
-        // "Expired" = expired acquired movies + sold home prod movies (merged, deduped)
-        const [expiredRes, soldRes] = await Promise.all([
-          getGroupedMovies({ ...commonParams, source: "expired" }),
-          getGroupedMovies({ ...commonParams, source: "sold" }),
-        ]);
-        const seen = new Set<string>();
-        allGroupedData = [...(expiredRes.data || []), ...(soldRes.data || [])].filter(m => {
+      // An empty selection falls back to the live catalogue rather than to
+      // "everything", so clearing the filter can never surface expired titles.
+      const picked = sourceSel.length === 0 ? DEFAULT_SOURCES : sourceSel;
+      const queries: SourceQuery[] = picked.flatMap(queriesFor);
+
+      const results = await Promise.all(
+        queries.map(q => getGroupedMovies({ ...commonParams, ...q }))
+      );
+
+      // "Joint Production" and "Bangladesh" are narrowings of the catalogue with
+      // no agreement-date condition of their own, so they return expired and sold
+      // titles too. Unless Expired was ticked, strip those back out.
+      const wantExpired = picked.includes("expired");
+      const today = new Date();
+      const isDeadTitle = (m: GroupedMovie) => {
+        const v = m.primary_version || m.versions[0];
+        if (m.source === "home_production") return isSoldHome(v);
+        return !!v?.agreement_end_date && new Date(v.agreement_end_date) < today;
+      };
+
+      const seen = new Set<string>();
+      const allGroupedData: GroupedMovie[] = results
+        .flatMap(r => r.data || [])
+        .filter(m => {
           if (seen.has(m.production_no)) return false;
           seen.add(m.production_no);
-          return true;
+          return wantExpired || !isDeadTitle(m);
         });
-      } else {
-        const { data } = await getGroupedMovies({
-          ...commonParams,
-          source,
-          natureOfRights: sourceFilter === "jointly_owned" ? "Jointly Owned" : undefined,
-        });
-        allGroupedData = data;
-      }
 
       let filteredData = allGroupedData;
 
@@ -163,12 +241,12 @@ export default function MoviesPage() {
         filteredData = filteredData.filter(m => m.total_versions === 1);
       }
 
-      if (agreementExpiryYear !== "all" && sourceFilter === "acquired") {
-        const yearNum = parseInt(agreementExpiryYear);
+      if (expiryYearSel.length > 0 && soleSource === "acquired") {
+        const years = new Set(expiryYearSel.map(y => parseInt(y)));
         filteredData = filteredData.filter(m => {
           const endDate = m.primary_version?.agreement_end_date;
           if (!endDate) return false;
-          return new Date(endDate).getFullYear() === yearNum;
+          return years.has(new Date(endDate).getFullYear());
         });
       }
 
@@ -186,14 +264,31 @@ export default function MoviesPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, sourceFilter, versionFilter, languageFilter, languages.length, certificationFilter, certificationOptions.length, wtpFilter, sortBy, agreementExpiryYear]);
+  }, [debouncedSearch, sourceSel, soleSource, versionFilter, languageFilter, languages.length, certificationFilter, certificationOptions.length, wtpFilter, sortBy, expiryYearSel]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   useEffect(() => { fetchMovies(); }, [fetchMovies]);
 
-  const handleSourceChange = (value: string) => {
-    setSourceFilter(value);
-    if (value === "home_production" || value === "expired" || value === "jointly_owned" || value === "bangladeshi") {
-      setAgreementExpiryYear("all");
+  // A title picked in the column funnel must not outlive the options it came
+  // from, but clearing it whenever rows change would also wipe a selection just
+  // restored from the URL by a back navigation. Prune to what still exists.
+  useEffect(() => {
+    if (titleSel.length === 0 || movies.length === 0) return;
+    const available = new Set(movies.map((m) => m.title));
+    const kept = titleSel.filter((t) => available.has(t));
+    if (kept.length !== titleSel.length) setTitleSel(kept);
+  }, [movies, titleSel, setTitleSel]);
+
+  const handleSourceChange = (next: string[]) => {
+    setSourceSel(next);
+    // Agreement expiry only applies to acquired titles; any other selection
+    // would leave a filter active that can never match.
+    if (!(next.length === 1 && next[0] === "acquired")) {
+      setExpiryYearSel([]);
     }
   };
 
@@ -205,9 +300,21 @@ export default function MoviesPage() {
     });
   };
 
+  const titleOptions = useMemo(
+    () => Array.from(new Set(movies.map(m => m.title).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [movies]
+  );
+  const titleFilter = titleSel.length === 0 ? titleOptions : titleSel;
+  const setTitleFilter = (next: string[]) =>
+    setTitleSel(next.length >= titleOptions.length ? [] : next);
+  const visibleMovies = useMemo(
+    () => (titleSel.length === 0 ? movies : movies.filter(m => titleSel.includes(m.title))),
+    [movies, titleSel]
+  );
+
   const toggleSelectAll = () => {
-    if (selectedIds.size === movies.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(movies.map(m => m.production_no)));
+    if (selectedIds.size === visibleMovies.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(visibleMovies.map(m => m.production_no)));
   };
 
   const exportMovies = selectedIds.size > 0
@@ -424,10 +531,67 @@ export default function MoviesPage() {
     }
   };
 
-  const hasFilters = searchQuery || sourceFilter !== "all" || versionFilter !== "all"
-    || languageFilter.length !== 1 || certificationFilter.length < certificationOptions.length
-    || wtpFilter.length < WTP_OPTIONS.length
-    || agreementExpiryYear !== "all";
+  // Every active narrowing gets a chip, so the filters in the column headers are
+  // visible without opening each funnel.
+  const bengali = languages.find(l => l.toLowerCase() === "bengali");
+  const defaultLanguages = bengali ? [bengali] : [];
+  const clearAllFilters = () => {
+    setSearchQuery(""); setSourceSel(DEFAULT_SOURCES); setVersionSel(VERSION_OPTIONS.map(o => o.value));
+    setLanguageFilter(defaultLanguages);
+    setCertificationFilter(certificationOptions);
+    setWtpFilter(WTP_OPTIONS);
+    setTitleSel([]); setReleaseSort('none');
+    setExpiryYearSel([]);
+  };
+
+  const activeChips: ActiveFilterChip[] = [];
+  if (searchQuery) activeChips.push({
+    key: 'search', label: 'Search', value: searchQuery, onClear: () => setSearchQuery(""),
+  });
+  if (titleSel.length > 0) activeChips.push({
+    key: 'title', label: 'Title',
+    value: titleSel.length === 1 ? titleSel[0] : `${titleSel.length} selected`,
+    onClear: () => setTitleSel([]),
+  });
+  const isDefaultSources =
+    sourceSel.length === DEFAULT_SOURCES.length && DEFAULT_SOURCES.every(v => sourceSel.includes(v));
+  if (!isDefaultSources) activeChips.push({
+    key: 'source', label: 'Source',
+    value: sourceSel.length === 0
+      ? 'None'
+      : sourceSel.map(v => SOURCE_OPTIONS.find(o => o.value === v)?.label ?? v).join(', '),
+    onClear: () => handleSourceChange(DEFAULT_SOURCES),
+  });
+  if (releaseSort !== 'none') activeChips.push({
+    key: 'release-sort', label: 'Sorted by',
+    value: releaseSort === 'desc' ? 'Newest release' : 'Oldest release',
+    onClear: () => setReleaseSort('none'),
+  });
+  if (certificationFilter.length > 0 && certificationFilter.length < certificationOptions.length) activeChips.push({
+    key: 'cert', label: 'Certification',
+    value: certificationFilter.length === 1 ? certificationFilter[0] : `${certificationFilter.length} selected`,
+    onClear: () => setCertificationFilter(certificationOptions),
+  });
+  if (languageFilter.length > 0 && languageFilter.length < languages.length) activeChips.push({
+    key: 'language', label: 'Language',
+    value: languageFilter.length === 1 ? languageFilter[0] : `${languageFilter.length} selected`,
+    onClear: () => setLanguageFilter(defaultLanguages),
+  });
+  if (wtpFilter.length > 0 && wtpFilter.length < WTP_OPTIONS.length) activeChips.push({
+    key: 'wtp', label: 'WTP library',
+    value: wtpFilter.join(', '),
+    onClear: () => setWtpFilter(WTP_OPTIONS),
+  });
+  if (versionSel.length > 0 && versionSel.length < VERSION_OPTIONS.length) activeChips.push({
+    key: 'versions', label: 'Versions',
+    value: versionSel.map(v => VERSION_OPTIONS.find(o => o.value === v)?.label ?? v).join(', '),
+    onClear: () => setVersionSel(VERSION_OPTIONS.map(o => o.value)),
+  });
+  if (expiryYearSel.length > 0) activeChips.push({
+    key: 'expiry', label: 'Agreement expiry',
+    value: expiryYearSel.length === 1 ? expiryYearSel[0] : `${expiryYearSel.length} years`,
+    onClear: () => setExpiryYearSel([]),
+  });
 
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return "—";
@@ -457,13 +621,16 @@ export default function MoviesPage() {
     );
   };
 
-  const showAgreementExpiry = sourceFilter === "acquired";
-  const isJointlyOwnedFilter = sourceFilter === "jointly_owned";
+  const showAgreementExpiry = soleSource === "acquired";
+  const isJointlyOwnedFilter = soleSource === "jointly_owned";
   const showJointProdCols = isJointlyOwnedFilter;
   const showBuyBackCol = isJointlyOwnedFilter;
-  const showAgreementEndCol = sourceFilter !== "home_production" && !isJointlyOwnedFilter;
-  const showMultiVersionCol = versionFilter === "multi";
-  const showLicensorCol = sourceFilter === "acquired";
+  // Agreement End only means something for titles that carry an acquisition
+  // agreement, so it is opt-in: Acquired, Bangladesh or Expired on their own.
+  // Any other pick (or a mixed selection) would show a column that is mostly "—".
+  const showAgreementEndCol =
+    soleSource === "acquired" || soleSource === "bangladeshi" || soleSource === "expired";
+  const showLicensorCol = soleSource === "acquired";
 
   // Duotone hue per movie for poster
   const movieHue = (movie: GroupedMovie, idx: number) => {
@@ -564,131 +731,37 @@ export default function MoviesPage() {
         </div>
       </div>
 
-      {/* Filters — all original filters restored */}
+      {/* Filters — title, source, language, certification and WTP live in the column headers */}
       <Card className="glass-card overflow-hidden">
         <CardContent className="px-4 py-3">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            <div className="col-span-2 sm:col-span-1 xl:col-span-2">
-              <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Movie Keywords</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5" style={{ color: "var(--text-faint)" }} />
-                <Input placeholder="Search by title or production no…" value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 h-9" />
-              </div>
-            </div>
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Source</label>
-              <Select value={sourceFilter} onValueChange={handleSourceChange}>
-                <SelectTrigger className="h-9 w-full">
-                  <div className="flex items-center gap-2"><Film className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} /><SelectValue placeholder="All Sources" /></div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Sources</SelectItem>
-                  <SelectItem value="home_production">Home Production</SelectItem>
-                  <SelectItem value="acquired">Acquired</SelectItem>
-                  <SelectItem value="jointly_owned">Joint Production</SelectItem>
-                  <SelectItem value="bangladeshi">Bangladesh</SelectItem>
-                  <SelectItem value="expired">Expired</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Language</label>
+              <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Versions</label>
               <MultiSelectFilter
-                label="Language"
-                options={languages}
-                value={languageFilter}
-                onChange={setLanguageFilter}
+                label="All Versions"
+                options={VERSION_OPTIONS}
+                value={versionSel}
+                onChange={setVersionSel}
                 triggerWidth="w-full"
                 icon={<Languages className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} />}
               />
             </div>
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Certification</label>
-              <MultiSelectFilter
-                label="All Certs"
-                options={certificationOptions}
-                value={certificationFilter}
-                onChange={setCertificationFilter}
-                triggerWidth="w-full"
-                icon={<ShieldCheck className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} />}
-                extraPresetRows={[{
-                  key: 'except-a',
-                  label: 'Except A',
-                  isActive: (v) => v.length > 0 && !v.includes('A') && certificationOptions.filter(c => c !== 'A').every(c => v.includes(c)),
-                  onSelect: () => setCertificationFilter(certificationOptions.filter(c => c !== 'A')),
-                }]}
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Versions</label>
-              <Select value={versionFilter} onValueChange={(v) => { setVersionFilter(v); }}>
-                <SelectTrigger className="h-9 w-full">
-                  <div className="flex items-center gap-2"><Languages className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} /><SelectValue placeholder="All Versions" /></div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Movies</SelectItem>
-                  <SelectItem value="multi">Multi-Version</SelectItem>
-                  <SelectItem value="single">Single Version</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>WTP / Library</label>
-              <MultiSelectFilter
-                label="All"
-                options={WTP_OPTIONS}
-                value={wtpFilter}
-                onChange={setWtpFilter}
-                triggerWidth="w-full"
-                icon={<Star className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} />}
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Sort By</label>
-              <Select value={sortBy} onValueChange={(v: any) => { setSortBy(v); }}>
-                <SelectTrigger className="h-9 w-full">
-                  <div className="flex items-center gap-2"><Settings2 className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} /><SelectValue /></div>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="title_asc">A–Z (Title)</SelectItem>
-                  <SelectItem value="title_desc">Z–A (Title)</SelectItem>
-                  <SelectItem value="release_date_desc">Newest Release</SelectItem>
-                  <SelectItem value="release_date_asc">Oldest Release</SelectItem>
-                  <SelectItem value="created_at_desc">Newly Created</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {hasFilters && (
-              <div className="flex items-end">
-                <Button variant="outline" size="sm" className="h-9 gap-1.5 w-full bg-red-500/5 border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50" onClick={() => {
-                  setSearchQuery(""); setSourceFilter("all"); setVersionFilter("all");
-                  const bengali = languages.find(l => l.toLowerCase() === "bengali");
-                  setLanguageFilter(bengali ? [bengali] : []);
-                  setCertificationFilter(certificationOptions); setWtpFilter(WTP_OPTIONS);
-                  setAgreementExpiryYear("all");
-                }}>
-                  <X className="h-3.5 w-3.5" />Clear Filters
-                </Button>
-              </div>
-            )}
           </div>
+
+          <ActiveFilterChips chips={activeChips} onClearAll={clearAllFilters} divider />
 
           {showAgreementExpiry && (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 pt-2" style={{ borderTop: "1px solid var(--svf-border)" }}>
               <div>
                 <label className="text-[10px] font-bold uppercase tracking-widest mb-1.5 block" style={{ color: "var(--text-faint)" }}>Agreement Expiry</label>
-                <Select value={agreementExpiryYear} onValueChange={(v) => { setAgreementExpiryYear(v); }}>
-                  <SelectTrigger className="h-9 w-full">
-                    <div className="flex items-center gap-2"><Calendar className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} /><SelectValue placeholder="Any Year" /></div>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Any Year</SelectItem>
-                    {expiryYearOptions.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <MultiSelectFilter
+                  label="Any Year"
+                  options={expiryYearOptions}
+                  value={expiryYearSel.length === 0 ? expiryYearOptions : expiryYearSel}
+                  onChange={(next) => setExpiryYearSel(next.length >= expiryYearOptions.length ? [] : next)}
+                  triggerWidth="w-full"
+                  icon={<Calendar className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--text-faint)" }} />}
+                />
               </div>
             </div>
           )}
@@ -702,12 +775,12 @@ export default function MoviesPage() {
             <div className="col-span-full flex justify-center py-20">
               <Loader2 className="h-7 w-7 animate-spin" style={{ color: "var(--svf-accent)" }} />
             </div>
-          ) : movies.length === 0 ? (
+          ) : visibleMovies.length === 0 ? (
             <div className="col-span-full flex flex-col items-center justify-center py-20 gap-3">
               <Film className="h-8 w-8" style={{ color: "var(--text-faint)" }} />
               <p style={{ color: "var(--text-faint)" }}>No movies found</p>
             </div>
-          ) : movies.map((movie, idx) => {
+          ) : visibleMovies.map((movie, idx) => {
             const pv = movie.primary_version || movie.versions[0];
             const movieId = pv?.id;
             const hue = movieHue(movie, idx);
@@ -775,7 +848,7 @@ export default function MoviesPage() {
                 <Loader2 className="h-7 w-7 animate-spin" style={{ color: "var(--svf-accent)" }} />
                 <p className="text-sm" style={{ color: "var(--text-faint)" }}>Loading catalog…</p>
               </div>
-            ) : movies.length === 0 ? (
+            ) : visibleMovies.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 gap-3">
                 <div className="p-4 rounded-full" style={{ background: "var(--hover)", border: "1px solid var(--svf-border)" }}>
                   <Film className="h-8 w-8" style={{ color: "var(--text-faint)" }} />
@@ -790,39 +863,86 @@ export default function MoviesPage() {
                     <TableRow style={{ borderColor: "var(--svf-border)" }} className="hover:bg-transparent">
                       <TableHead className="w-10 pl-4">
                         <Checkbox
-                          checked={movies.length > 0 && selectedIds.size === movies.length}
+                          checked={visibleMovies.length > 0 && selectedIds.size === visibleMovies.length}
                           onCheckedChange={toggleSelectAll}
                           aria-label="Select all"
                         />
                       </TableHead>
-                      <TableHead className="pl-2 text-(--text-faint)">Title</TableHead>
-                      <TableHead className="text-(--text-faint)">Source</TableHead>
-                      <TableHead className="hidden sm:table-cell text-(--text-faint)">Release</TableHead>
-                      <TableHead className="hidden md:table-cell text-(--text-faint)">Cert</TableHead>
-                      {showMultiVersionCol && <TableHead className="hidden lg:table-cell text-(--text-faint)">Languages</TableHead>}
+                      <FilterableHead label="Title" className="pl-2 text-(--text-faint)">
+                        <ColumnFilter
+                          options={titleOptions}
+                          value={titleFilter}
+                          onChange={setTitleFilter}
+                          searchable
+                          searchValue={searchQuery}
+                          onSearchChange={setSearchQuery}
+                          searchPlaceholder="Search title or prod no…"
+                        />
+                      </FilterableHead>
+                      <FilterableHead label="Source" className="text-(--text-faint)">
+                        <ColumnFilter
+                          options={SOURCE_OPTIONS}
+                          value={sourceSel}
+                          onChange={handleSourceChange}
+                        />
+                      </FilterableHead>
+                      <TableHead className="hidden sm:table-cell text-(--text-faint)">
+                        <button
+                          type="button"
+                          onClick={() => setReleaseSort(releaseSort === 'none' ? 'desc' : releaseSort === 'desc' ? 'asc' : 'none')}
+                          className="flex items-center gap-1 cursor-pointer hover:underline whitespace-nowrap"
+                          title={releaseSort === 'desc' ? 'Newest first' : releaseSort === 'asc' ? 'Oldest first' : 'Sort by release date'}
+                        >
+                          <span>Release</span>
+                          {releaseSort === 'desc' ? <ChevronDown className="h-3.5 w-3.5" />
+                            : releaseSort === 'asc' ? <ChevronUp className="h-3.5 w-3.5" />
+                              : <ChevronsUpDown className="h-3.5 w-3.5 opacity-50" />}
+                        </button>
+                      </TableHead>
+                      <FilterableHead label="Cert" className="hidden md:table-cell w-px px-1 text-(--text-faint)">
+                        <ColumnFilter
+                          options={certificationOptions}
+                          value={certificationFilter}
+                          onChange={setCertificationFilter}
+                        />
+                      </FilterableHead>
+                      <FilterableHead label="Language" className="hidden lg:table-cell text-(--text-faint)">
+                        <ColumnFilter
+                          options={languages}
+                          value={languageFilter}
+                          onChange={setLanguageFilter}
+                          searchable
+                        />
+                      </FilterableHead>
                       {showJointProdCols && (
                         <>
                           <TableHead className="hidden lg:table-cell text-(--text-faint)">Rev Share</TableHead>
                           <TableHead className="hidden lg:table-cell text-(--text-faint)">Prod House</TableHead>
                         </>
                       )}
-                      <TableHead className="hidden lg:table-cell text-(--text-faint)">Rights</TableHead>
+                      <TableHead className="hidden lg:table-cell min-w-32 text-(--text-faint)">Rights</TableHead>
                       {showLicensorCol && <TableHead className="hidden lg:table-cell text-(--text-faint)">Licensor</TableHead>}
                       {showAgreementEndCol && <TableHead className="hidden xl:table-cell text-(--text-faint)">Agreement End</TableHead>}
                       {showBuyBackCol && <TableHead className="hidden xl:table-cell text-(--text-faint)">Buy Back</TableHead>}
-                      <TableHead className="hidden xl:table-cell text-(--text-faint)">WTP</TableHead>
+                      <FilterableHead label="WTP" className="hidden xl:table-cell text-(--text-faint)">
+                        <ColumnFilter options={WTP_OPTIONS} value={wtpFilter} onChange={setWtpFilter} />
+                      </FilterableHead>
                       <TableHead className="text-right pr-6 text-(--text-faint)">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {movies.map((movie, idx) => {
+                    {visibleMovies.map((movie, idx) => {
                       const pv = movie.primary_version || movie.versions[0];
                       const movieId = pv?.id;
-                      // Home production movies shown in the "expired" tab that have no agreement_end_date
-                      // are sold movies (returned by the "sold" source query in getGroupedMovies).
-                      const isSold = sourceFilter === "expired" && movie.source === "home_production";
+                      // Read sold/expired off the row itself. Inferring it from the
+                      // active source tab marked every home production as sold as
+                      // soon as "Expired" was among the ticked sources.
+                      const isSold = movie.source === "home_production" && isSoldHome(pv);
                       const isAcquired = movie.source === "acquired" && !isSold;
-                      const isExpiredAgreement = pv?.agreement_end_date && new Date(pv.agreement_end_date) < new Date();
+                      // Bangladeshi titles are stored as home/acquired, but the origin is
+                      // what matters when reading the list, so it wins the source badge.
+                      const isBangladeshi = (pv as any)?.is_bangladeshi === true;
+                      const isExpiredAgreement = !!pv?.agreement_end_date && new Date(pv.agreement_end_date) < new Date();
                       const isExpired = isExpiredAgreement || isSold;
                       const hue = movieHue(movie, idx);
                       const hue2 = (hue + 40) % 360;
@@ -855,7 +975,7 @@ export default function MoviesPage() {
                                 <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "45%", background: "linear-gradient(to top, rgba(0,0,0,0.65), transparent)" }} />
                               </div>
                               <div className="min-w-0">
-                                <Link href={`/movies/${movieId}`} title={movie.title} className="font-semibold text-sm hover:text-red-400 transition-colors line-clamp-1 block" style={{ color: "var(--text)" }}>
+                                <Link href={`/movies/${movieId}`} title={movie.title} className="font-semibold text-sm hover:text-red-400 transition-colors break-words block" style={{ color: "var(--text)" }}>
                                   {movie.title}
                                   {movie.release_year && <span style={{ color: "var(--text-faint)", fontWeight: 400, marginLeft: 5 }}>({movie.release_year})</span>}
                                 </Link>
@@ -869,28 +989,31 @@ export default function MoviesPage() {
                           <TableCell>
                             <div className="flex flex-col gap-1">
                               <Badge variant="outline" className={cn("text-[10px] w-fit font-semibold px-2 py-0.5",
-                                movie.source === "acquired" ? "bg-violet-500/10 text-violet-400 border-violet-500/25"
-                                  : (movie.primary_version as any)?.jointly_owned ? "bg-amber-500/10 text-amber-400 border-amber-500/25"
-                                    : "bg-indigo-500/10 text-indigo-400 border-indigo-500/25"
+                                isBangladeshi ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
+                                  : movie.source === "acquired" ? "bg-violet-500/10 text-violet-400 border-violet-500/25"
+                                    : (movie.primary_version as any)?.jointly_owned ? "bg-amber-500/10 text-amber-400 border-amber-500/25"
+                                      : "bg-indigo-500/10 text-indigo-400 border-indigo-500/25"
                               )}>
-                                {movie.source === "acquired" ? "Acquired" : (movie.primary_version as any)?.jointly_owned ? "Jointly Owned" : "Home"}
+                                {isBangladeshi ? "Bangladesh"
+                                  : movie.source === "acquired" ? "Acquired"
+                                    : (movie.primary_version as any)?.jointly_owned ? "Jointly Owned" : "Home"}
                               </Badge>
                               {isExpired && <Badge variant="destructive" className="text-[10px] w-fit font-semibold px-2 py-0.5">Expired</Badge>}
                             </div>
                           </TableCell>
 
-                          <TableCell className="hidden sm:table-cell tabular-nums" style={{ color: "var(--text-faint)" }}>
+                          <TableCell className="hidden sm:table-cell tabular-nums whitespace-nowrap" style={{ color: "var(--text-faint)" }}>
                             {pv?.release_date ? new Date(pv.release_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : (movie.release_year || "—")}
                           </TableCell>
 
-                          <TableCell className="hidden md:table-cell">
+                          <TableCell className="hidden md:table-cell w-px px-2 whitespace-nowrap">
                             {movie.certification ? (
                               <Badge variant="secondary" className="text-[10px] font-bold">{movie.certification}</Badge>
                             ) : <span className="text-xs" style={{ color: "var(--text-faint)" }}>—</span>}
                           </TableCell>
 
-                          {showMultiVersionCol && (
-                            <TableCell className="hidden lg:table-cell">
+                          <TableCell className="hidden lg:table-cell">
+                            {movie.total_versions > 1 ? (
                               <div className="flex items-center gap-1.5">
                                 <span className="text-xs" style={{ color: "var(--text-faint)" }}>{movie.total_versions}</span>
                                 <div className="flex -space-x-1">
@@ -906,8 +1029,12 @@ export default function MoviesPage() {
                                   )}
                                 </div>
                               </div>
-                            </TableCell>
-                          )}
+                            ) : (
+                              <span className="text-xs" style={{ color: "var(--text)" }}>
+                                {(movie.primary_version || movie.versions[0])?.language || "—"}
+                              </span>
+                            )}
+                          </TableCell>
 
                           {showJointProdCols && (
                             <>
@@ -917,16 +1044,16 @@ export default function MoviesPage() {
                           )}
 
                           <TableCell className="hidden lg:table-cell">
-                            <div className="flex items-center gap-1.5 text-xs">
-                              <Activity className="h-3 w-3" style={{ color: "var(--text-faint)" }} />
+                            <div className="flex items-center gap-1.5 text-xs whitespace-nowrap">
+                              <Activity className="h-3 w-3 shrink-0" style={{ color: "var(--text-faint)" }} />
                               <span className="font-semibold" style={{ color: "var(--st-active)" }}>{movie.total_rights - movie.expired_rights}</span>
                               {movie.expired_rights > 0 && <span style={{ color: "var(--st-expired)", opacity: 0.7 }}>/ {movie.expired_rights} exp</span>}
                             </div>
                           </TableCell>
 
                           {showLicensorCol && (
-                            <TableCell className="hidden lg:table-cell max-w-[140px]" style={{ color: "var(--text-faint)" }}>
-                              <span title={pv?.assignor_licensor || undefined} className="line-clamp-1">{pv?.assignor_licensor || "—"}</span>
+                            <TableCell className="hidden lg:table-cell max-w-[180px]" style={{ color: "var(--text-faint)" }}>
+                              <span className="block whitespace-normal break-words">{pv?.assignor_licensor || "—"}</span>
                             </TableCell>
                           )}
 

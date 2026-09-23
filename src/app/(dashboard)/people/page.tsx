@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from "@/contexts/auth-context";
 import { useAppToast } from "@/hooks/use-app-toast";
-import { useMultiSelectFilterState } from "@/hooks/use-multi-select-filter-state";
+import { useUrlMultiSelectFilterState } from "@/hooks/use-url-multi-select-filter-state";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { createPerson, getPeopleWithStats, getPersonMovieTitles, type PersonWithStats } from "@/lib/api/people";
 import { cn } from "@/lib/utils";
@@ -44,6 +44,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { stringCodec, useUrlFilterState } from "@/hooks/use-url-filter-state";
 import { isAdminRole, isEditorRole } from "@/lib/types/database";
 
 const PEOPLE_EXPORT_FIELDS: ExportFieldDef[] = [
@@ -66,10 +67,18 @@ export default function PeoplePage() {
 
   const [people, setPeople] = useState<PersonWithStats[]>([]);
   const [totalCount, setTotalCount] = useState(0);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useUrlFilterState("q", "", stringCodec);
   const ROLE_OPTIONS: ("actor" | "director")[] = ["actor", "director"];
-  const [roleFilter, setRoleFilter] = useMultiSelectFilterState<"actor" | "director">(ROLE_OPTIONS);
-  const [sortBy, setSortBy] = useState<SortOption>("name_asc");
+  const [roleFilter, setRoleFilter] = useUrlMultiSelectFilterState<"actor" | "director">("role", ROLE_OPTIONS);
+  const [sortBy, setSortBy] = useUrlFilterState<SortOption>(
+    "sort",
+    "name_asc",
+    {
+      encode: (v) => (v === "name_asc" ? null : v),
+      decode: (raw) =>
+        raw === "name_desc" || raw === "movies_desc" || raw === "movies_asc" ? raw : "name_asc",
+    }
+  );
   const [loading, setLoading] = useState(true);
   const toast = useAppToast();
   const [viewMode, setViewMode] = useState<"highlights" | "directory">("highlights");

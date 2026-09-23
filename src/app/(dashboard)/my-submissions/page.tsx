@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
 import { useAuth } from "@/contexts/auth-context";
 import { useAppToast } from "@/hooks/use-app-toast";
-import { useMultiSelectFilterState } from "@/hooks/use-multi-select-filter-state";
+import { useUrlMultiSelectFilterState } from "@/hooks/use-url-multi-select-filter-state";
 import { getMovieApprovalHistory, getPendingMovies, type PendingMovieForApproval } from "@/lib/api/approvals";
 import { resubmitMovie } from "@/lib/api/approvals";
 import { getPendingChanges, type PendingChange, type PendingChangeStatus } from "@/lib/api/pending-changes";
@@ -31,6 +31,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { stringCodec, useUrlFilterState } from "@/hooks/use-url-filter-state";
 import { isEditorRole } from "@/lib/types/database";
 
 // ── Shared status badge ────────────────────────────────────────────────────────
@@ -343,21 +344,25 @@ export default function MySubmissionsPage() {
     }
   }, [authLoading, profile, router]);
 
-  const [tab, setTab] = useState<Tab>("movies");
+  const [tab, setTab] = useUrlFilterState<Tab>(
+    "tab",
+    "movies",
+    { encode: (v) => (v === "movies" ? null : v), decode: (raw) => (raw === "changes" ? "changes" : "movies") as Tab }
+  );
 
   // ── New movie submissions ──
   const [movies, setMovies] = useState<PendingMovieForApproval[]>([]);
   const [moviesLoading, setMoviesLoading] = useState(true);
-  const [movieSearch, setMovieSearch] = useState("");
+  const [movieSearch, setMovieSearch] = useUrlFilterState("mq", "", stringCodec);
   const MOVIE_STATUS_OPTIONS: ApprovalStatus[] = ["pending", "rejected"];
-  const [movieStatus, setMovieStatus] = useMultiSelectFilterState<ApprovalStatus>(MOVIE_STATUS_OPTIONS);
+  const [movieStatus, setMovieStatus] = useUrlMultiSelectFilterState<ApprovalStatus>("ms", MOVIE_STATUS_OPTIONS);
 
   // ── Pending changes ──
   const [changes, setChanges] = useState<PendingChange[]>([]);
   const [changesLoading, setChangesLoading] = useState(true);
-  const [changeSearch, setChangeSearch] = useState("");
+  const [changeSearch, setChangeSearch] = useUrlFilterState("cq", "", stringCodec);
   const CHANGE_STATUS_OPTIONS: PendingChangeStatus[] = ["pending", "approved", "rejected"];
-  const [changeStatus, setChangeStatus] = useMultiSelectFilterState<PendingChangeStatus>(CHANGE_STATUS_OPTIONS);
+  const [changeStatus, setChangeStatus] = useUrlMultiSelectFilterState<PendingChangeStatus>("cs", CHANGE_STATUS_OPTIONS);
 
   const toast = useAppToast();
 

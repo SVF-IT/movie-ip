@@ -38,6 +38,7 @@ import {
   X
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { stringCodec, useUrlFilterState } from "@/hooks/use-url-filter-state";
 import { useAppToast } from "@/hooks/use-app-toast";
 
 const DIRECTOR_EXPORT_FIELDS: ExportFieldDef[] = [
@@ -51,8 +52,16 @@ type SortOption = "name_asc" | "name_desc" | "movies_desc" | "movies_asc";
 export default function DirectorsPage() {
   const [directors, setDirectors] = useState<PersonWithStats[]>([]);
   const [totalCount, setTotalCount] = useState(0);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState<SortOption>("name_asc");
+  const [searchQuery, setSearchQuery] = useUrlFilterState("q", "", stringCodec);
+  const [sortBy, setSortBy] = useUrlFilterState<SortOption>(
+    "sort",
+    "name_asc",
+    {
+      encode: (v) => (v === "name_asc" ? null : v),
+      decode: (raw) =>
+        raw === "name_desc" || raw === "movies_desc" || raw === "movies_asc" ? raw : "name_asc",
+    }
+  );
   const [loading, setLoading] = useState(true);
   const toast = useAppToast();
 

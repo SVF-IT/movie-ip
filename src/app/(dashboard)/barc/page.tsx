@@ -56,6 +56,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { stringCodec, useUrlFilterState } from "@/hooks/use-url-filter-state";
 
 const ALL = "__all__";
 
@@ -103,7 +104,7 @@ export default function BarcPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sheets, setSheets] = useState<BarcSheet[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useUrlFilterState("q", "", stringCodec);
 
   const [options, setOptions] = useState({
     years: [] as number[],
@@ -115,17 +116,55 @@ export default function BarcPage() {
 
   // NIMS and the weekly averages are yearly figures, so the page opens on a
   // single year rather than every year at once.
-  const [filters, setFilters] = useState<BarcFilters>({ year: new Date().getFullYear() });
+  const initialYear = new Date().getFullYear();
+  // Every BARC filter lives in one object, so it is mirrored as one compact
+  // `a:b` parameter rather than eight separate keys.
+  const [filters, setFilters] = useUrlFilterState<BarcFilters>(
+    "f",
+    { year: initialYear },
+    {
+      encode: (v) => {
+        const parts = Object.entries(v)
+          .filter(([, val]) => val !== null && val !== undefined && val !== "")
+          .map(([k, val]) => `${k}:${encodeURIComponent(String(val))}`);
+        return parts.length ? parts.join("~") : null;
+      },
+      decode: (raw) => {
+        const out: Record<string, unknown> = {};
+        raw.split("~").forEach((part) => {
+          const i = part.indexOf(":");
+          if (i < 0) return;
+          const k = part.slice(0, i);
+          const val = decodeURIComponent(part.slice(i + 1));
+          out[k] = k === "year" || k === "week" ? Number(val) : val;
+        });
+        return out as BarcFilters;
+      },
+    },
+    (v) => {
+      const keys = Object.entries(v).filter(
+        ([, val]) => val !== null && val !== undefined && val !== ""
+      );
+      return keys.length === 1 && keys[0][0] === "year" && keys[0][1] === initialYear;
+    }
+  );
+
+  // loadOptions runs once on mount; it reads the live filters through a ref so
+  // it does not need them as a dependency.
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
 
   const loadOptions = useCallback(async () => {
     try {
       const opts = await getBarcFilterOptions();
       setOptions(opts);
       // Fall back to the latest year with data if the current year has none.
-      setFilters((prev) =>
-        prev.year && opts.years.length > 0 && !opts.years.includes(prev.year)
-          ? { ...prev, year: opts.years[0] }
-          : prev
+      setFilters(
+        filtersRef.current.year &&
+          opts.years.length > 0 &&
+          !opts.years.includes(filtersRef.current.year as number)
+          ? { ...filtersRef.current, year: opts.years[0] }
+          : filtersRef.current
       );
     } catch (e) {
       toastRef.current.error(e instanceof Error ? e.message : "Could not load filters.");
@@ -191,15 +230,15 @@ export default function BarcPage() {
   };
 
   const setFilter = (key: keyof BarcFilters, value: string) =>
-    setFilters((prev) => ({
-      ...prev,
+    setFilters({
+      ...filters,
       [key]:
         value === ALL
           ? null
           : key === "year" || key === "week"
             ? Number(value)
             : value,
-    }));
+    });
 
   const handleDownload = async (sheet: BarcSheet) => {
     try {
@@ -302,7 +341,7 @@ export default function BarcPage() {
                 className="h-9 w-full"
                 value={filters.dateFrom ?? ""}
                 onChange={(e) =>
-                  setFilters((p) => ({ ...p, dateFrom: e.target.value || null }))
+                  setFilters({ ...filters, dateFrom: e.target.value || null })
                 }
               />
             </div>
@@ -314,7 +353,7 @@ export default function BarcPage() {
                 className="h-9 w-full"
                 value={filters.dateTo ?? ""}
                 onChange={(e) =>
-                  setFilters((p) => ({ ...p, dateTo: e.target.value || null }))
+                  setFilters({ ...filters, dateTo: e.target.value || null })
                 }
               />
             </div>
