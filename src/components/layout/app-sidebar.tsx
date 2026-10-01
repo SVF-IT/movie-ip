@@ -26,6 +26,7 @@ import {
   FolderCog,
   Gavel,
   Languages,
+  Layers,
   LogOut,
   Megaphone,
   Satellite,
@@ -42,6 +43,14 @@ import { usePathname, useRouter } from "next/navigation";
 
 // ── Nav structure — all original items preserved ─────────────────────────────
 const NAV_BASE = [
+  {
+    group: "Templates",
+    accent: "var(--svf-accent)",
+    groupIcon: Layers,
+    items: [
+      { title: "Templates", icon: Layers, href: "/templates" },
+    ],
+  },
   {
     group: "Catalogue",
     accent: "oklch(0.7867 0.1467 203.29)",

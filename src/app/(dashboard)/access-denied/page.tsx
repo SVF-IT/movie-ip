@@ -19,6 +19,11 @@ const REASON_COPY: Record<string, { label: string; description: string }> = {
     label: "Editor access required",
     description: "This section is restricted to editors.",
   },
+  templates: {
+    label: "Template editing requires write access",
+    description:
+      "Anyone can run a saved template, but creating and editing them is limited to the admin, legal and editor roles.",
+  },
   barc: {
     label: "BARC access required",
     description: "BARC ratings data is restricted to administrators and data analysts.",

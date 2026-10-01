@@ -35,6 +35,18 @@ export function isBarcRole(role?: string | null): boolean {
   return BARC_ROLES.includes(role as UserRole)
 }
 
+/**
+ * May create, edit and delete templates.
+ *
+ * Wider than the admin tier: templates are a working tool for the people who
+ * handle rights day to day, so legal and the editor tier author them too.
+ * Viewer is still read-only — everyone can RUN a template, which is a plain
+ * SELECT and needs no privilege.
+ */
+export function canManageTemplates(role?: string | null): boolean {
+  return isAdminRole(role) || role === 'legal' || isEditorRole(role)
+}
+
 /** Applies changes directly rather than queueing them for approval. */
 export function canBypassApproval(role?: string | null): boolean {
   return isAdminRole(role) || role === 'legal'

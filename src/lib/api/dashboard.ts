@@ -246,7 +246,10 @@ function isSatellitePlatformType(pt: string): boolean {
 
 function isInternetPlatformType(pt: string): boolean {
   const n = pt.toLowerCase()
-  const isOther = /air|ship|surface|hotel/i.test(n)
+  // Keep in step with isOtherExploitationPlatform below: this is defined as
+  // "neither satellite nor other", so a type that one of them gains must be
+  // subtracted here too or it would count as internet as well.
+  const isOther = /air|ship|surface|hotel|other/i.test(n)
   return !isSatellitePlatformType(pt) && !isOther
 }
 
@@ -299,7 +302,7 @@ function isHoichoiPlatform(name: string): boolean {
 // are free-text — if an admin ever creates one (e.g. "Airborne TV"), this lets the "not
 // currently exploited" check on the Other Rights tab recognize it.
 function isOtherExploitationPlatform(pt: string): boolean {
-  return /air|ship|surface|hotel/i.test(pt)
+  return /air|ship|surface|hotel|other/i.test(pt)
 }
 
 

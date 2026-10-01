@@ -130,6 +130,17 @@ export async function middleware(request: NextRequest) {
       }
     }
 
+    // ── Template builder ──────────────────────────────────────────────────
+    // Everyone may RUN a template; authoring is for the roles that already have
+    // full CRUD on rights — admin tier, legal and the editor tier. The RLS
+    // policies on `templates` enforce this at the database, so this is about not
+    // showing a viewer a form whose save would be rejected.
+    if (pathname.startsWith("/templates/builder")) {
+      if (!isAdminTier && role !== "legal" && !isEditorRole(role)) {
+        return redirectToAccessDenied(request, "templates", pathname);
+      }
+    }
+
     // ── Editor-tier routes ────────────────────────────────────────────────
     // data_analyst is editor-shaped: its changes queue for approval, so it has a
     // submissions list of its own and the sidebar shows that group.

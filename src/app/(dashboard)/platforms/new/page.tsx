@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Building2, Loader2, X } from "lucide-react";
 import { createPlatform, getRightsTypeNames } from "@/lib/api/platforms";
+import { PLATFORM_TYPES, platformTypeOptions } from "@/lib/utils/platform-types";
 import { useRequirePermission } from "@/hooks/use-require-permission";
 import { useAppToast } from "@/hooks/use-app-toast";
 
@@ -57,8 +58,12 @@ export default function NewPlatformPage() {
   const [saving, setSaving] = useState(false);
   const toast = useAppToast();
 
+  // The canonical list plus anything already in the data, so a type nobody has
+  // used yet is still offered and an older spelling is never dropped.
   useEffect(() => {
-    getRightsTypeNames().then(setExistingTypes).catch(() => {});
+    getRightsTypeNames()
+      .then((inUse) => setExistingTypes(platformTypeOptions(inUse)))
+      .catch(() => setExistingTypes(PLATFORM_TYPES));
   }, []);
 
   const handleSave = async () => {

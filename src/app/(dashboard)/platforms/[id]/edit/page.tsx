@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Building2, Loader2, X } from "lucide-react";
 import { updatePlatform, getPlatformTypes } from "@/lib/api/platforms";
+import { platformTypeOptions } from "@/lib/utils/platform-types";
 import { createClient } from "@/lib/supabase/client";
 import { useRequirePermission } from "@/hooks/use-require-permission";
 import { useAppToast } from "@/hooks/use-app-toast";
@@ -66,7 +67,9 @@ export default function EditPlatformPage() {
     async function load() {
       try {
         const [types] = await Promise.all([getPlatformTypes()]);
-        setExistingTypes(types);
+        // Canonical list plus whatever the data already uses, so every type is
+        // reachable here as well as on the create form.
+        setExistingTypes(platformTypeOptions(types));
         const supabase = createClient();
         const { data } = await supabase.from("platforms").select("*").eq("id", platformId).single();
         if (data) {
