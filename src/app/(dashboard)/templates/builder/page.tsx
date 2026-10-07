@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { useAppToast } from "@/hooks/use-app-toast";
 import {
@@ -42,6 +43,7 @@ import {
   type TemplateSort,
   type TemplateType,
 } from "@/lib/types/templates";
+import { TERRITORY_PRESETS } from "@/lib/utils/exclusivity";
 import {
   EXPLOITATION_TYPE_LABELS,
   INTERNET_EXPLOITATION_TYPES,
@@ -57,6 +59,7 @@ import {
   Lock,
   Save,
   SlidersHorizontal,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -117,6 +120,8 @@ function BuilderInner() {
   const [licensors, setLicensors] = useState<FilterOption[]>([]);
   const [wtpOptions, setWtpOptions] = useState<FilterOption[]>([]);
   const [buyerPlatforms, setBuyerPlatforms] = useState<string[]>([]);
+  // A territory outside the three presets is typed in.
+  const [useCustomTerritory, setUseCustomTerritory] = useState(false);
 
   const [preview, setPreview] = useState<{ total: number; now: number; later: number } | null>(null);
   const [previewing, setPreviewing] = useState(false);
@@ -149,6 +154,10 @@ function BuilderInner() {
         setName(t.name);
         setDescription(t.description || "");
         setDef(t.definition);
+        // A saved template may carry a territory that is not a preset.
+        if (t.definition.filters.territory && !TERRITORY_PRESETS.includes(t.definition.filters.territory)) {
+          setUseCustomTerritory(true);
+        }
       } else {
         toast.error("Template not found");
         router.push("/templates");
@@ -629,6 +638,86 @@ function BuilderInner() {
                       onChange={(e) =>
                         setFilter({ rightsWindow: { ...win, to: e.target.value || undefined } })
                       }
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="territory">Territory</Label>
+                  {!useCustomTerritory ? (
+                    <Select
+                      value={def.filters.territory}
+                      onValueChange={(v) => {
+                        if (v === "__custom__") {
+                          setUseCustomTerritory(true);
+                          setFilter({ territory: "" });
+                        } else {
+                          setFilter({ territory: v });
+                        }
+                      }}
+                    >
+                      <SelectTrigger id="territory">
+                        <SelectValue placeholder="Select territory…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TERRITORY_PRESETS.map((t) => (
+                          <SelectItem key={t} value={t}>
+                            {t}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value="__custom__">Custom…</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Input
+                        value={def.filters.territory}
+                        onChange={(e) => setFilter({ territory: e.target.value })}
+                        placeholder="e.g. South Asia, Taiwan…"
+                        className="flex-1"
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Back to the preset list"
+                        onClick={() => {
+                          setUseCustomTerritory(false);
+                          setFilter({ territory: "World" });
+                        }}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                  <p className="text-xs text-(--text-faint)">
+                    Where you are selling. Only an exclusive deal covering this
+                    territory blocks a title — an exclusive India deal leaves Rest
+                    of World open.
+                  </p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="nohb">Holdbacks</Label>
+                  <div className="flex items-start justify-between gap-4 rounded-lg border border-(--border) p-3">
+                    <div className="min-w-0">
+                      <Label htmlFor="nohb" className="cursor-pointer text-sm font-medium">
+                        Without holdbacks only
+                      </Label>
+                      <p className="mt-0.5 text-xs text-(--text-faint)">
+                        Drops titles carrying a holdback on{" "}
+                        {def.rights.family === "internet" && def.rights.exploitationType
+                          ? EXPLOITATION_TYPE_LABELS[def.rights.exploitationType]
+                          : "satellite"}{" "}
+                        rights, including buyer restrictions such as Sony or Zee.
+                        Holdbacks on other rights are ignored.
+                      </p>
+                    </div>
+                    <Switch
+                      id="nohb"
+                      checked={def.filters.withoutHoldbacks}
+                      onCheckedChange={(v: boolean) => setFilter({ withoutHoldbacks: v })}
                     />
                   </div>
                 </div>

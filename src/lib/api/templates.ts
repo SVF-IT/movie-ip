@@ -14,6 +14,8 @@ import {
   EXCLUSIVITY_LABELS,
   namedPlatformRestrictions,
   readExclusivity,
+  readTerritory,
+  territoryCovers,
 } from '@/lib/utils/exclusivity'
 import {
   normaliseDefinition,
@@ -336,6 +338,8 @@ export async function runTemplate(
   if (family === 'internet' && !subType) return EMPTY
   // The exploitation type every check is about.
   const RIGHT: ExploitationType = family === 'satellite' ? 'satellite' : subType!
+  // The territory the template is selling into. Blank means World.
+  const askingTerritory = readTerritory(def.filters.territory)
 
   try {
     const today = new Date().toISOString().split('T')[0]
@@ -398,7 +402,11 @@ export async function runTemplate(
     }
 
     // ── Base rule: A-certified titles are not broadcastable ──────────────────
-    movies = movies.filter((m) => (m.certification || '').trim().toUpperCase() !== 'A')
+    // Satellite only. Broadcast is regulated; streaming is not, so an
+    // A-certificate film is perfectly sellable to SVOD, AVOD and the rest.
+    if (family === 'satellite') {
+      movies = movies.filter((m) => (m.certification || '').trim().toUpperCase() !== 'A')
+    }
 
     // ── Base rules: home exclusions ──────────────────────────────────────────
     movies = movies.filter((m) => {
@@ -487,6 +495,9 @@ export async function runTemplate(
       // deal leaves the title open to OTHER buyers, but not to this one again,
       // so "selling to" must exclude it.
       const alreadyWith = new Set<string>()
+      // Holdback text from deals of the SAME family as the right being sold,
+      // which is what the "without holdbacks" filter weighs.
+      const sameFamilyHoldbacks: string[] = []
 
       for (const r of rights) {
         const platformType = r.platforms?.platform_type || ''
@@ -499,21 +510,45 @@ export async function runTemplate(
           // Hoichoi is SVF's own OTT and non-exclusive, so a Hoichoi deal never
           // closes a title — it is not even worth showing as an encumbrance.
           const inHouse = family === 'internet' && isHoichoiPlatform(platformName)
+          // A deal only blocks where it actually applies. An exclusive India
+          // deal leaves Rest of World free to sell, so the territories must
+          // overlap before exclusivity matters at all. A right with no
+          // territory recorded covers World.
+          const dealTerritory = readTerritory(r.territory)
+          // The deal only blocks where it actually grants the territory being
+          // sold into. An exclusive India deal leaves Rest of World sellable.
+          const sameTerritory = territoryCovers(dealTerritory, askingTerritory)
           // Only an exclusive deal stops another sale. Shared and non-exclusive
           // deals leave the title sellable, so they are shown as context.
-          const blocks = !inHouse && blocksFurtherSale(r.nature, RIGHT)
+          const blocks = !inHouse && sameTerritory && blocksFurtherSale(r.nature, RIGHT)
 
           if (!inHouse) {
+            const nature = EXCLUSIVITY_LABELS[readExclusivity(r.nature, RIGHT)]
+            // Name the territory when it is not the World default, so a row
+            // that stays open despite a live exclusive deal explains itself.
+            const where = dealTerritory === 'World' ? '' : ` — ${dealTerritory}`
             attached.push({
-              label: blocks ? platformName : `${platformName} (${EXCLUSIVITY_LABELS[readExclusivity(r.nature, RIGHT)]})`,
+              label: blocks ? `${platformName}${where}` : `${platformName} (${nature}${where})`,
               kind: 'deal',
               startDate: r.start_date ?? null,
               endDate: r.end_date ?? null,
             })
           }
           if (blocks) note(r.end_date ?? null)
-          if (!inHouse) alreadyWith.add(platformName)
+          // Already-with only counts where the deal actually applies: the same
+          // buyer can take the title in a territory they do not yet hold.
+          if (!inHouse && sameTerritory) alreadyWith.add(platformName)
         }
+
+        // Holdbacks are only weighed on deals of the same family. A holdback
+        // written on an internet deal says nothing about satellite, and vice
+        // versa — reading across families would exclude titles for a
+        // restriction that does not apply to the right being sold.
+        const sameFamily =
+          family === 'satellite'
+            ? isSatellitePlatform(platformType)
+            : internetTypeOf(platformType) !== null
+        if (sameFamily && r.holdbacks) sameFamilyHoldbacks.push(r.holdbacks)
 
         // A holdback naming the RIGHT ITSELF closes it while that deal is live.
         if (holdsBackType(r.holdbacks, RIGHT)) {
@@ -526,8 +561,11 @@ export async function runTemplate(
           note(r.end_date ?? null)
         }
 
-        // A holdback naming a COMPANY only says who cannot buy.
-        for (const p of namedPlatformRestrictions(r.holdbacks, platformNames)) cannotSellTo.add(p)
+        // A holdback naming a COMPANY only says who cannot buy — and only on a
+        // deal of this family, for the same reason as above.
+        if (sameFamily) {
+          for (const p of namedPlatformRestrictions(r.holdbacks, platformNames)) cannotSellTo.add(p)
+        }
       }
 
       // Movie-wide holdback. It carries no date of its own, so it blocks
@@ -638,6 +676,26 @@ export async function runTemplate(
         filters.sellingTo.some((p) => restrictions.includes(p) || alreadyWith.has(p))
       ) {
         continue
+      }
+
+      // "Without holdbacks": drop anything carrying a holdback on the right
+      // being sold — a satellite holdback for a satellite template, an SVOD one
+      // for an SVOD template. Company restrictions ("Sony, Zee-owned") count
+      // too: they narrow the buyer list even though they do not close the right.
+      //
+      // Deliberately scoped: an AVOD holdback must not exclude a title from
+      // SVOD results, because it says nothing about selling SVOD.
+      if (filters.withoutHoldbacks) {
+        const movieWide = holdsBackType(m.syndication_holdback, RIGHT)
+        const onThisFamily = sameFamilyHoldbacks.some(
+          (h) => holdsBackType(h, RIGHT) || namedPlatformRestrictions(h, platformNames).length > 0,
+        )
+        const onOwnedRights = liveOwnedRights.some(
+          (r) =>
+            holdsBackType(r.holdbacks, RIGHT) ||
+            namedPlatformRestrictions(r.holdbacks, platformNames).length > 0,
+        )
+        if (movieWide || onThisFamily || onOwnedRights) continue
       }
 
       rows.push({

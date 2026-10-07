@@ -132,6 +132,21 @@ export interface TemplateFilters
    * Empty means no exclusion.
    */
   sellingTo: string[]
+  /**
+   * The territory being sold into. A deal only blocks a sale when the two
+   * territories overlap, so an exclusive India deal leaves Rest of World open.
+   * Blank means World, which is also what a right with no territory recorded
+   * is taken to cover.
+   */
+  territory: string
+  /**
+   * Drop titles carrying any holdback on the right being sold.
+   *
+   * Scoped to that right: a satellite template weighs holdbacks on satellite
+   * deals, an SVOD template weighs SVOD ones. An AVOD holdback is irrelevant to
+   * an SVOD sale and never excludes a title from it.
+   */
+  withoutHoldbacks: boolean
   /** Defaults to today onwards, i.e. every future open. */
   rightsWindow: RightsWindow
 }
@@ -190,7 +205,7 @@ const OPEN_TITLES_SATELLITE: BaseRuleSet = {
   rules: [
     { scope: 'both', text: 'Only approved titles are considered.' },
     { scope: 'both', text: 'A-certified titles are excluded — they are not broadcastable.' },
-    { scope: 'both', text: 'No live satellite deal attached (Satellite TV, DTH VOD, Terrestrial TV).' },
+    { scope: 'both', text: 'No live satellite deal attached (Satellite TV, DTH VOD, Terrestrial TV) covering the selected territory. A deal with no nature recorded counts as Exclusive for World; an exclusive India deal still leaves Rest of World open.' },
     { scope: 'both', text: 'No holdback naming Satellite on the title or on any attached platform right.' },
     { scope: 'home', text: 'Sold titles are excluded.' },
     { scope: 'home', text: 'Jointly owned titles where a partner house holds exploitation rights are excluded.' },
@@ -219,7 +234,6 @@ function internetRules(type: ExploitationType): BaseRuleSet {
     suggestedLanguages: ['Bengali'],
     rules: [
       { scope: 'both', text: 'Only approved titles are considered.' },
-      { scope: 'both', text: 'A-certified titles are excluded.' },
       {
         scope: 'both',
         text: `No live EXCLUSIVE ${T} deal attached. Shared-Exclusive and Non-Exclusive deals leave the title open and are shown as context.`,
@@ -291,6 +305,8 @@ export const DEFAULT_FILTERS: TemplateFilters = {
   licensors: [],
   wtp: [],
   sellingTo: [],
+  territory: 'World',
+  withoutHoldbacks: false,
   rightsWindow: {},
 }
 
@@ -372,6 +388,11 @@ export function normaliseDefinition(raw: unknown): TemplateDefinition {
       // Renamed from cannotSellTo, which read as "keep these" rather than
       // "exclude titles barred from these"; older templates are still honoured.
       sellingTo: strList(d.filters?.sellingTo ?? d.filters?.cannotSellTo),
+      territory:
+        typeof d.filters?.territory === 'string' && d.filters.territory.trim()
+          ? d.filters.territory.trim()
+          : 'World',
+      withoutHoldbacks: d.filters?.withoutHoldbacks === true,
       rightsWindow: {
         from: isoDate(d.filters?.rightsWindow?.from),
         to: isoDate(d.filters?.rightsWindow?.to),
@@ -399,6 +420,9 @@ export function describeDefinition(def: TemplateDefinition): string {
   }
   if (f.wtp.length > 0) parts.push(f.wtp.join('/'))
   if (f.sellingTo.length > 0) parts.push(`pitchable to ${f.sellingTo.join(', ')}`)
+  // World is the default, so saying it adds nothing.
+  if (f.territory && f.territory !== 'World') parts.push(`in ${f.territory}`)
+  if (f.withoutHoldbacks) parts.push('no holdbacks')
   // Only an end date is a real narrowing; a start date alone is the default
   // "from today onwards" and does not need spelling out.
   if (f.rightsWindow.to) {

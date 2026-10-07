@@ -200,3 +200,68 @@ function matchKnownPlatform(word: string, knownPlatforms: string[]): string | nu
   }
   return null
 }
+
+// ── Territory ────────────────────────────────────────────────────────────────
+
+/**
+ * The territories a right can be granted for.
+ *
+ * Three canonical options plus free text. "Rest of World" means everywhere
+ * except India; anything outside these three is typed in as a custom value and
+ * treated as its own place.
+ */
+export const TERRITORY_PRESETS = ['World', 'India', 'Rest of World']
+
+/** A blank territory means World: a right granted with no limit covers everywhere. */
+export function readTerritory(territory: string | null | undefined): string {
+  const t = (territory || '').trim()
+  return t || 'World'
+}
+
+/**
+ * Does a deal in `dealTerritory` cover the territory being sold into?
+ *
+ * The question is containment, not overlap: an exclusive deal blocks a sale
+ * only where the deal actually grants that territory.
+ *
+ *   World          contains everything.
+ *   India          contains only India.
+ *   Rest of World  is everywhere except India, so it contains neither India
+ *                  nor World, but does contain any other named place.
+ *
+ * A custom territory (South Asia, Taiwan, …) is its own place: it covers a sale
+ * into the same place, and into Rest of World, since that is where it sits.
+ *
+ * Asking for World is the strict case — only a World deal covers it — because
+ * selling World rights means granting every territory at once.
+ */
+export function territoryCovers(dealTerritory: string, askingFor: string): boolean {
+  const deal = dealTerritory.trim().toLowerCase()
+  const want = askingFor.trim().toLowerCase()
+  if (!deal || !want) return true
+  if (deal === want) return true
+
+  // "World except X" grants everywhere but the named exclusion.
+  const except = deal.match(/^world\s+(?:except|excluding|other than)\s+(.+)$/)
+  if (except) {
+    const excluded = except[1].trim()
+    return !(excluded.includes(want) || want.includes(excluded))
+  }
+
+  if (deal === 'world') return true
+  // Only a World deal can block a World sale; a regional exclusive leaves the
+  // other regions sellable, so it does not cover "everywhere at once".
+  if (want === 'world') return false
+
+  const isIndia = (t: string) => t === 'india'
+  const isRow = (t: string) => t === 'rest of world'
+
+  // Rest of World is everywhere except India.
+  if (isRow(deal)) return !isIndia(want)
+  // An India deal covers India alone.
+  if (isIndia(deal)) return false
+
+  // A custom territory sits inside Rest of World unless it IS India.
+  if (isRow(want)) return !isIndia(deal)
+  return false
+}
