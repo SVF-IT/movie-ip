@@ -14,6 +14,26 @@ export const BARC_SHEET_ACCEPTED_TYPES = [".xlsx", ".xls", ".csv"];
 const INSERT_CHUNK = 1000;
 /** Rows per duplicate-check call; keeps the JSON payload to a sane size. */
 const DUPLICATE_CHECK_CHUNK = 2000;
+/** PostgREST caps a response at 1000 rows; reads page through in steps of this. */
+const READ_PAGE = 1000;
+
+/**
+ * Pages through a telecast query until it is exhausted. A single request is
+ * silently cut off at 1000 rows, which dropped whole regions from the filter
+ * list and computed metrics from a fraction of the data.
+ */
+async function fetchAllTelecasts<T>(
+  build: () => { range: (from: number, to: number) => PromiseLike<{ data: unknown; error: unknown }> }
+): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; from += READ_PAGE) {
+    const { data, error } = await build().range(from, from + READ_PAGE - 1);
+    if (error) throw sanitizeError(error);
+    const page = (data || []) as T[];
+    out.push(...page);
+    if (page.length < READ_PAGE) return out;
+  }
+}
 
 export interface BarcSheet {
   id: string;
@@ -367,15 +387,6 @@ export async function getBarcFilterOptions(): Promise<{
   regions: string[];
   weeks: number[];
 }> {
-  const { data, error } = await supabase
-    .from("barc_telecasts")
-    .select("telecast_year, target, channel, region, week");
-
-  if (error) throw sanitizeError(error);
-
-  const uniq = <T,>(vals: (T | null | undefined)[]): T[] =>
-    [...new Set(vals.filter((v): v is T => v !== null && v !== undefined))];
-
   type OptionRow = {
     telecast_year: number | null;
     target: string | null;
@@ -383,7 +394,16 @@ export async function getBarcFilterOptions(): Promise<{
     region: string | null;
     week: number | null;
   };
-  const rows = (data || []) as OptionRow[];
+  const rows = await fetchAllTelecasts<OptionRow>(() =>
+    supabase
+      .from("barc_telecasts")
+      .select("telecast_year, target, channel, region, week")
+      .order("id")
+  );
+
+  const uniq = <T,>(vals: (T | null | undefined)[]): T[] =>
+    [...new Set(vals.filter((v): v is T => v !== null && v !== undefined))];
+
   return {
     years: uniq(rows.map((r) => r.telecast_year)).sort((a, b) => b - a),
     targets: uniq(rows.map((r) => r.target)).sort(),
@@ -408,7 +428,7 @@ export interface BarcMovieRow {
   channels: string[];
   /** Distinct BARC weeks the movie appeared in, under the current filters. */
   weekCount: number;
-  /** Telecast rows — a movie shown 3x in a day counts 3 times. */
+  /** Distinct airings (week + date + day + start + end + target). */
   nims: number;
   /** Average across weeks of each week's summed GRP. */
   grp: number | null;
@@ -423,27 +443,29 @@ export interface BarcMovieRow {
  * change to computeBarcMetrics takes effect immediately.
  */
 export async function getBarcMovieRows(filters: BarcFilters = {}): Promise<BarcMovieRow[]> {
-  let query = supabase
-    .from("barc_telecasts")
-    .select(
-      "movie_id, description_raw, telecast_year, target, channel, region, week, telecast_date, rat_pct, daily_avg_rch_pct, ats_sec, grp"
-    )
-    .not("movie_id", "is", null);
+  const buildQuery = () => {
+    let query = supabase
+      .from("barc_telecasts")
+      .select(
+        "movie_id, description_raw, telecast_year, target, channel, region, week, telecast_date, week_day, start_time_sec, end_time_sec, rat_pct, daily_avg_rch_pct, ats_sec, grp"
+      )
+      .not("movie_id", "is", null);
 
-  if (filters.year) query = query.eq("telecast_year", filters.year);
-  if (filters.target) query = query.eq("target", filters.target);
-  if (filters.channel) query = query.eq("channel", filters.channel);
-  if (filters.region) query = query.eq("region", filters.region);
-  if (filters.week) query = query.eq("week", filters.week);
-  if (filters.movieId) query = query.eq("movie_id", filters.movieId);
-  if (filters.sheetId) query = query.eq("sheet_id", filters.sheetId);
-  if (filters.dateFrom) query = query.gte("telecast_date", filters.dateFrom);
-  if (filters.dateTo) query = query.lte("telecast_date", filters.dateTo);
+    if (filters.year) query = query.eq("telecast_year", filters.year);
+    if (filters.target) query = query.eq("target", filters.target);
+    if (filters.channel) query = query.eq("channel", filters.channel);
+    if (filters.region) query = query.eq("region", filters.region);
+    if (filters.week) query = query.eq("week", filters.week);
+    if (filters.movieId) query = query.eq("movie_id", filters.movieId);
+    if (filters.sheetId) query = query.eq("sheet_id", filters.sheetId);
+    if (filters.dateFrom) query = query.gte("telecast_date", filters.dateFrom);
+    if (filters.dateTo) query = query.lte("telecast_date", filters.dateTo);
 
-  const { data, error } = await query;
-  if (error) throw sanitizeError(error);
+    // A stable order keeps pages from overlapping or skipping rows.
+    return query.order("id");
+  };
 
-  const rows = (data || []) as BarcTelecastAggRow[];
+  const rows = await fetchAllTelecasts<BarcTelecastAggRow>(buildQuery);
   if (rows.length === 0) return [];
 
   const byMovie = new Map<string, BarcTelecastAggRow[]>();

@@ -5,6 +5,7 @@ import { DisabledActionButton } from "@/components/disabled-action-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { ColumnFilter, FilterableHead } from "@/components/ui/column-header-filter";
 import {
   Dialog,
   DialogContent,
@@ -12,7 +13,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/table";
 import { useAppToast } from "@/hooks/use-app-toast";
 import { usePermission } from "@/hooks/use-permission";
+import { stringListCodec, useUrlFilterState } from "@/hooks/use-url-filter-state";
 import {
   deleteBarcSheet,
   getBarcFilterOptions,
@@ -48,7 +49,6 @@ import {
   FileSpreadsheet,
   Loader2,
   MapPin,
-  Search,
   Trash2,
   Tv,
   Upload,
@@ -56,9 +56,41 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { stringCodec, useUrlFilterState } from "@/hooks/use-url-filter-state";
 
 const ALL = "__all__";
+/** Option key for a blank value, so rows without one stay filterable. */
+const NONE_KEY = "__none__";
+/**
+ * Every telecast is reported once per target audience, and NIMS counts each
+ * target separately, so "all targets" multiplies the figures. The page opens on
+ * this one; if a sheet does not carry it, the first available target is used.
+ */
+const DEFAULT_TARGET = "2+ All";
+
+/** The filters this page offers; anything else in an old link is ignored. */
+const FILTER_KEYS = ["region", "year", "week", "target", "channel"];
+
+type ColumnKey = "movie" | "description" | "source" | "certification" | "language";
+
+/** The value a row contributes to a header funnel. */
+function columnValues(r: BarcMovieRow, col: ColumnKey): string[] {
+  switch (col) {
+    case "movie":
+      return [r.title];
+    case "description":
+      return r.descriptions.length ? r.descriptions : [NONE_KEY];
+    case "source":
+      return [r.source || NONE_KEY];
+    case "certification":
+      return [r.certification || NONE_KEY];
+    case "language":
+      return [r.language || NONE_KEY];
+  }
+}
+
+function sourceLabel(source: string): string {
+  return source === "home_production" ? "Home" : "Acquired";
+}
 
 /** The small uppercase caption above each filter, as on the Movies page. */
 function FilterLabel({ children }: { children: React.ReactNode }) {
@@ -72,15 +104,13 @@ function FilterLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Seconds → h:mm:ss / m:ss, matching how ATS reads in the source sheet. */
-function formatDuration(sec: number | null): string {
-  if (sec === null) return "—";
-  const total = Math.round(sec);
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+/**
+ * Seconds → Excel's time serial: the fraction of a day, which is how Excel
+ * shows a time cell in Number format (22:29 → 0.0156134259259259).
+ */
+function toDayFraction(sec: number): number {
+  // Excel keeps 15 significant digits; matching it keeps the two identical.
+  return Number((sec / 86400).toPrecision(15));
 }
 
 function formatMetric(value: number | null, digits = 2): string {
@@ -104,7 +134,6 @@ export default function BarcPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sheets, setSheets] = useState<BarcSheet[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [search, setSearch] = useUrlFilterState("q", "", stringCodec);
 
   const [options, setOptions] = useState({
     years: [] as number[],
@@ -121,7 +150,7 @@ export default function BarcPage() {
   // `a:b` parameter rather than eight separate keys.
   const [filters, setFilters] = useUrlFilterState<BarcFilters>(
     "f",
-    { year: initialYear },
+    { year: initialYear, target: DEFAULT_TARGET },
     {
       encode: (v) => {
         const parts = Object.entries(v)
@@ -135,6 +164,7 @@ export default function BarcPage() {
           const i = part.indexOf(":");
           if (i < 0) return;
           const k = part.slice(0, i);
+          if (!FILTER_KEYS.includes(k)) return;
           const val = decodeURIComponent(part.slice(i + 1));
           out[k] = k === "year" || k === "week" ? Number(val) : val;
         });
@@ -145,9 +175,38 @@ export default function BarcPage() {
       const keys = Object.entries(v).filter(
         ([, val]) => val !== null && val !== undefined && val !== ""
       );
-      return keys.length === 1 && keys[0][0] === "year" && keys[0][1] === initialYear;
+      return (
+        keys.length === 2 &&
+        v.year === initialYear &&
+        v.target === DEFAULT_TARGET
+      );
     }
   );
+
+  // Header funnels. Empty means "no narrowing", so the default never reaches
+  // the URL and the option lists can shrink without a stale pick showing.
+  const [movieFilter, setMovieFilter] = useUrlFilterState<string[]>(
+    "movie", [], stringListCodec, (v) => v.length === 0
+  );
+  const [descFilter, setDescFilter] = useUrlFilterState<string[]>(
+    "desc", [], stringListCodec, (v) => v.length === 0
+  );
+  const [sourceFilter, setSourceFilter] = useUrlFilterState<string[]>(
+    "src", [], stringListCodec, (v) => v.length === 0
+  );
+  const [certFilter, setCertFilter] = useUrlFilterState<string[]>(
+    "cert", [], stringListCodec, (v) => v.length === 0
+  );
+  const [langFilter, setLangFilter] = useUrlFilterState<string[]>(
+    "lang", [], stringListCodec, (v) => v.length === 0
+  );
+  const columnFilters: Record<ColumnKey, string[]> = {
+    movie: movieFilter,
+    description: descFilter,
+    source: sourceFilter,
+    certification: certFilter,
+    language: langFilter,
+  };
 
   // loadOptions runs once on mount; it reads the live filters through a ref so
   // it does not need them as a dependency.
@@ -158,14 +217,17 @@ export default function BarcPage() {
     try {
       const opts = await getBarcFilterOptions();
       setOptions(opts);
-      // Fall back to the latest year with data if the current year has none.
-      setFilters(
-        filtersRef.current.year &&
-          opts.years.length > 0 &&
-          !opts.years.includes(filtersRef.current.year as number)
-          ? { ...filtersRef.current, year: opts.years[0] }
-          : filtersRef.current
-      );
+      // Fall back to the latest year with data if the current year has none,
+      // and to the first target if the default target is not in the data.
+      const current = filtersRef.current;
+      const next = { ...current };
+      if (current.year && opts.years.length > 0 && !opts.years.includes(current.year)) {
+        next.year = opts.years[0];
+      }
+      if (current.target && opts.targets.length > 0 && !opts.targets.includes(current.target)) {
+        next.target = opts.targets.includes(DEFAULT_TARGET) ? DEFAULT_TARGET : opts.targets[0];
+      }
+      setFilters(next);
     } catch (e) {
       toastRef.current.error(e instanceof Error ? e.message : "Could not load filters.");
     }
@@ -203,30 +265,68 @@ export default function BarcPage() {
     loadRows();
   }, [loadRows]);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return rows;
-    // Matches anywhere in the title or any of its BARC descriptions — the
-    // description is often the only name a telecast is recognisable by.
-    return rows.filter(
-      (r) =>
-        r.title.toLowerCase().includes(q) ||
-        r.descriptions.some((d) => d.toLowerCase().includes(q))
-    );
-  }, [rows, search]);
+  /** Rows passing every header funnel except `skip` — what that funnel offers. */
+  const rowsExcept = useCallback(
+    (skip: ColumnKey | null) =>
+      rows.filter((r) =>
+        (Object.keys(columnFilters) as ColumnKey[]).every((col) => {
+          const picked = columnFilters[col];
+          return (
+            col === skip ||
+            picked.length === 0 ||
+            columnValues(r, col).some((v) => picked.includes(v))
+          );
+        })
+      ),
+    // columnFilters is rebuilt each render; its five arrays are the real inputs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows, movieFilter, descFilter, sourceFilter, certFilter, langFilter]
+  );
+
+  const filtered = useMemo(() => rowsExcept(null), [rowsExcept]);
+
+  /** Interdependent options: only values that still yield rows. */
+  const columnOptions = useCallback(
+    (col: ColumnKey, label: (v: string) => string = (v) => v) => {
+      const values = new Set<string>();
+      for (const r of rowsExcept(col)) columnValues(r, col).forEach((v) => values.add(v));
+      return [...values]
+        .sort((a, b) =>
+          a === NONE_KEY ? 1 : b === NONE_KEY ? -1 : label(a).localeCompare(label(b))
+        )
+        .map((value) => ({
+          value,
+          label: value === NONE_KEY ? "— Not set —" : label(value),
+        }));
+    },
+    [rowsExcept]
+  );
 
   const defaultYear = options.years[0] ?? new Date().getFullYear();
-  // The year defaults to the latest with data, so it alone is not "a filter".
+  const defaultTarget =
+    options.targets.length === 0 || options.targets.includes(DEFAULT_TARGET)
+      ? DEFAULT_TARGET
+      : options.targets[0];
+  // Year and target open on a default, so those alone are not "a filter".
   const hasFilters =
-    !!search ||
+    Object.values(columnFilters).some((v) => v.length > 0) ||
     Object.entries(filters).some(
       ([k, v]) =>
-        v !== null && v !== undefined && v !== "" && !(k === "year" && v === defaultYear)
-    );
+        v !== null &&
+        v !== undefined &&
+        v !== "" &&
+        !(k === "year" && v === defaultYear) &&
+        !(k === "target" && v === defaultTarget)
+    ) ||
+    !filters.target;
 
   const resetFilters = () => {
-    setFilters({ year: defaultYear });
-    setSearch("");
+    setFilters({ year: defaultYear, target: defaultTarget });
+    setMovieFilter([]);
+    setDescFilter([]);
+    setSourceFilter([]);
+    setCertFilter([]);
+    setLangFilter([]);
   };
 
   const setFilter = (key: keyof BarcFilters, value: string) =>
@@ -239,6 +339,36 @@ export default function BarcPage() {
             ? Number(value)
             : value,
     });
+
+  const exportToExcel = async () => {
+    const XLSX = await import("xlsx");
+    const data = filtered.map((r) => ({
+      Movie: r.title,
+      "Production House": r.production_house_name || "",
+      "BARC Description": r.descriptions.join(", "),
+      Channels: r.channels.join(", "),
+      Source: r.source ? sourceLabel(r.source) : "",
+      Certification: r.certification || "",
+      Language: r.language || "",
+      "Release Date": r.release_date || "",
+      NIMS: r.nims,
+      Rating: r.rating === null ? "" : Number(r.rating.toFixed(3)),
+      GRP: r.grp === null ? "" : Number(r.grp.toFixed(3)),
+      "Avg. Time": r.weighted_ats_sec === null ? "" : toDayFraction(r.weighted_ats_sec),
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    ws["!cols"] = Object.keys(data[0] || {}).map((key) => ({
+      wch: Math.max(key.length, ...data.map((r) => String((r as Record<string, unknown>)[key] ?? "").length)) + 2,
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "BARC");
+    // The file name carries the active filters so exports stay distinguishable.
+    const tag = FILTER_KEYS.map((k) => filters[k as keyof BarcFilters])
+      .filter((v) => v !== null && v !== undefined && v !== "")
+      .join("-")
+      .replace(/[^A-Za-z0-9+-]+/g, "_");
+    XLSX.writeFile(wb, `barc${tag ? `-${tag}` : ""}-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
 
   const handleDownload = async (sheet: BarcSheet) => {
     try {
@@ -308,112 +438,83 @@ export default function BarcPage() {
 
   return (
     <div className="space-y-4 min-w-0">
+      {/* ── Sheets & export ── */}
+      <Card className="glass-card overflow-hidden">
+        <CardContent className="flex flex-wrap items-center gap-2 px-4 py-3">
+          {canManage ? (
+            <Button
+              size="sm"
+              className="h-9 gap-2 border-0 bg-red-600 text-white shadow-lg shadow-red-900/30 hover:bg-red-500"
+              onClick={() => setUploadOpen(true)}
+            >
+              <Upload className="h-4 w-4" />
+              Upload Sheet
+            </Button>
+          ) : (
+            <DisabledActionButton
+              className="h-9 gap-2 border-0 bg-red-600 shadow-lg shadow-red-900/30"
+              reason="Only editors and admins can upload BARC sheets."
+            >
+              <Upload className="h-4 w-4" />
+              Upload Sheet
+            </DisabledActionButton>
+          )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 gap-2 border-(--svf-border-strong) bg-(--bg-raise) text-(--text) hover:bg-(--hover)"
+            onClick={() => setSheetsOpen(true)}
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            View Sheets
+            {sheets.length > 0 && (
+              <Badge variant="secondary" className="ml-0.5">
+                {sheets.length}
+              </Badge>
+            )}
+          </Button>
+
+          <div className="flex-1" />
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 gap-2 border-(--svf-border-strong) bg-(--bg-raise) text-(--text) hover:bg-(--hover)"
+            onClick={exportToExcel}
+            disabled={loading || filtered.length === 0}
+          >
+            <Download className="h-4 w-4" />
+            Export
+          </Button>
+        </CardContent>
+      </Card>
+
       {/* ── Filters ── */}
       <Card className="glass-card overflow-hidden">
         <CardContent className="px-4 py-3">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            <div className="col-span-2 sm:col-span-1 xl:col-span-2">
-              <FilterLabel>Movie keywords</FilterLabel>
-              <div className="relative">
-                <Search
-                  className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2"
-                  style={{ color: "var(--text-faint)" }}
-                />
-                <Input
-                  placeholder="Search by movie or description…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="h-9 pl-9"
-                />
-              </div>
-            </div>
-
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {filterSelect("Region", "region", options.regions, MapPin)}
             {filterSelect("Year", "year", options.years, CalendarDays)}
+            {filterSelect("Week", "week", options.weeks, CalendarRange)}
             {filterSelect("Target", "target", options.targets, Users)}
             {filterSelect("Channel", "channel", options.channels, Tv)}
-            {filterSelect("Region", "region", options.regions, MapPin)}
-            {filterSelect("Week", "week", options.weeks, CalendarRange)}
-
-            <div>
-              <FilterLabel>Telecast from</FilterLabel>
-              <Input
-                type="date"
-                className="h-9 w-full"
-                value={filters.dateFrom ?? ""}
-                onChange={(e) =>
-                  setFilters({ ...filters, dateFrom: e.target.value || null })
-                }
-              />
-            </div>
-
-            <div>
-              <FilterLabel>Telecast to</FilterLabel>
-              <Input
-                type="date"
-                className="h-9 w-full"
-                value={filters.dateTo ?? ""}
-                onChange={(e) =>
-                  setFilters({ ...filters, dateTo: e.target.value || null })
-                }
-              />
-            </div>
-
-            {hasFilters && (
-              <div className="flex items-end">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-9 w-full gap-1.5 border-red-500/30 bg-red-500/5 text-red-400 hover:border-red-500/50 hover:bg-red-500/10"
-                  onClick={resetFilters}
-                >
-                  <X className="h-3.5 w-3.5" />
-                  Clear Filters
-                </Button>
-              </div>
-            )}
-
-            <div className="flex items-end">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-9 w-full gap-2 border-(--svf-border-strong) bg-(--bg-raise) text-(--text) hover:bg-(--hover)"
-                onClick={() => setSheetsOpen(true)}
-              >
-                <FileSpreadsheet className="h-4 w-4" />
-                Sheets
-                {sheets.length > 0 && (
-                  <Badge variant="secondary" className="ml-0.5">
-                    {sheets.length}
-                  </Badge>
-                )}
-              </Button>
-            </div>
-
-            <div className="flex items-end">
-              {canManage ? (
-                <Button
-                  size="sm"
-                  className="h-9 w-full gap-2 border-0 bg-red-600 text-white shadow-lg shadow-red-900/30 hover:bg-red-500"
-                  onClick={() => setUploadOpen(true)}
-                >
-                  <Upload className="h-4 w-4" />
-                  Upload Sheet
-                </Button>
-              ) : (
-                <DisabledActionButton
-                  className="h-9 w-full gap-2 border-0 bg-red-600 shadow-lg shadow-red-900/30"
-                  reason="Only editors and admins can upload BARC sheets."
-                >
-                  <Upload className="h-4 w-4" />
-                  Upload Sheet
-                </DisabledActionButton>
-              )}
-            </div>
           </div>
         </CardContent>
       </Card>
 
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-end gap-3">
+        {hasFilters && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1.5 border-red-500/30 bg-red-500/5 text-red-400 hover:border-red-500/50 hover:bg-red-500/10"
+            onClick={resetFilters}
+          >
+            <X className="h-3.5 w-3.5" />
+            Clear Filters
+          </Button>
+        )}
         {!loading && (
           <p className="text-xs tabular-nums" style={{ color: "var(--text-faint)" }}>
             <strong style={{ color: "var(--text)" }}>{filtered.length}</strong>{" "}
@@ -427,11 +528,45 @@ export default function BarcPage() {
           <Table>
             <TableHeader style={{ background: "var(--bg-deep)" }}>
               <TableRow className="border-(--svf-border) hover:bg-transparent">
-                <TableHead>Movie</TableHead>
-                <TableHead>BARC description</TableHead>
-                <TableHead>Source</TableHead>
-                <TableHead>Certification</TableHead>
-                <TableHead>Language</TableHead>
+                <FilterableHead label="Movie">
+                  <ColumnFilter
+                    options={columnOptions("movie")}
+                    value={movieFilter}
+                    onChange={setMovieFilter}
+                    searchable
+                    searchPlaceholder="Search movie…"
+                  />
+                </FilterableHead>
+                <FilterableHead label="BARC description">
+                  <ColumnFilter
+                    options={columnOptions("description")}
+                    value={descFilter}
+                    onChange={setDescFilter}
+                    searchable
+                    searchPlaceholder="Search description…"
+                  />
+                </FilterableHead>
+                <FilterableHead label="Source">
+                  <ColumnFilter
+                    options={columnOptions("source", sourceLabel)}
+                    value={sourceFilter}
+                    onChange={setSourceFilter}
+                  />
+                </FilterableHead>
+                <FilterableHead label="Cert.">
+                  <ColumnFilter
+                    options={columnOptions("certification")}
+                    value={certFilter}
+                    onChange={setCertFilter}
+                  />
+                </FilterableHead>
+                <FilterableHead label="Language">
+                  <ColumnFilter
+                    options={columnOptions("language")}
+                    value={langFilter}
+                    onChange={setLangFilter}
+                  />
+                </FilterableHead>
                 <TableHead>Release date</TableHead>
                 <TableHead className="text-right">NIMS</TableHead>
                 <TableHead className="text-right">Rating</TableHead>
@@ -498,7 +633,7 @@ export default function BarcPage() {
                     <TableCell>
                       {r.source ? (
                         <Badge variant="outline">
-                          {r.source === "home_production" ? "Home" : "Acquired"}
+                          {sourceLabel(r.source)}
                         </Badge>
                       ) : (
                         "—"
@@ -517,7 +652,7 @@ export default function BarcPage() {
                       {formatMetric(r.grp, 3)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {formatDuration(r.weighted_ats_sec)}
+                      {r.weighted_ats_sec === null ? "—" : toDayFraction(r.weighted_ats_sec).toFixed(7)}
                     </TableCell>
                   </TableRow>
                 ))
@@ -528,8 +663,9 @@ export default function BarcPage() {
       </div>
 
       <p className="text-xs" style={{ color: "var(--text-faint)" }}>
-        NIMS counts telecast rows — a movie shown three times in a day
-        counts three times. Rating averages each week&#39;s average rat%;
+        NIMS counts distinct airings — unique Week + Date + Week Day + Start
+        Time + End Time + Target — so a movie shown three times in a day counts
+        three times, but one airing reported for several regions counts once. Rating averages each week&#39;s average rat%;
         GRP averages each week&#39;s summed GRP, where a telecast&#39;s GRP
         is (length × rat%) / 1800. With a single week selected both are
         that week&#39;s own average and sum. Average time is reach-weighted

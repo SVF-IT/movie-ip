@@ -12,6 +12,9 @@ export interface BarcTelecastAggRow {
   region: string | null;
   week: number | null;
   telecast_date: string;
+  week_day: string | null;
+  start_time_sec: number | null;
+  end_time_sec: number | null;
   rat_pct: number | null;
   daily_avg_rch_pct: number | null;
   ats_sec: number | null;
@@ -30,8 +33,10 @@ export interface BarcTelecastAggRow {
  * many times the movie ran in it. With a single week filtered, both collapse
  * to that week's own average and sum.
  *
- * NIMS is the telecast row count: a movie shown three times in a day counts
- * three times, because each airing carries its own rating.
+ * NIMS is the number of distinct airings, keyed on
+ * Week + Date + Week Day + Start Time + End Time + Target. A movie shown three
+ * times in a day still counts three times (each slot differs), but the same
+ * slot reported for several regions or channels counts once.
  */
 export function computeBarcMetrics(rows: BarcTelecastAggRow[]): {
   nims: number;
@@ -73,8 +78,14 @@ export function computeBarcMetrics(rows: BarcTelecastAggRow[]): {
     ? atsRows.reduce((sum, r) => sum + (r.ats_sec ?? 0) * (r.daily_avg_rch_pct ?? 0), 0) / weightTotal
     : null;
 
+  const airings = new Set(
+    rows.map((r) =>
+      [r.week, r.telecast_date, r.week_day, r.start_time_sec, r.end_time_sec, r.target].join("|")
+    )
+  );
+
   return {
-    nims: rows.length,
+    nims: airings.size,
     grp: mean(weeklyGrps),
     rating: mean(weeklyRatings),
     weighted_ats_sec: weightedAts,
