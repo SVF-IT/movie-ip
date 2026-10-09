@@ -277,6 +277,16 @@ export async function approvePendingChange(
   // Strip non-column joined relation keys
   const JOIN_KEYS = ["movies", "platforms", "id"];
 
+  // movie_rights payloads are snapshots of fetched rows and can carry joined objects
+  // (e.g. `movie`), so write only real columns. Timestamps/id are managed by the DB.
+  const MOVIE_RIGHT_COLUMNS = [
+    "movie_id", "right_type", "classification", "nature", "territory",
+    "start_date", "end_date", "syndication", "holdbacks", "created_by", "updated_by",
+  ];
+  function pickMovieRightColumns(obj: Record<string, unknown>): Record<string, unknown> {
+    return Object.fromEntries(Object.entries(obj).filter(([k]) => MOVIE_RIGHT_COLUMNS.includes(k)));
+  }
+
   // Apply the change
   if (c.change_type === "movie_fields") {
     const after = cleanPayload((c.payload.after || {}) as Record<string, unknown>);
@@ -300,16 +310,12 @@ export async function approvePendingChange(
     const { error } = await supabase.from("platform_rights").delete().eq("id", rightId);
     if (error) throw sanitizeError(error);
   } else if (c.change_type === "movie_right_create") {
-    const raw = { ...(c.payload.after as Record<string, unknown>) };
-    JOIN_KEYS.forEach(k => delete raw[k]);
-    const rightData = cleanPayload(raw);
+    const rightData = cleanPayload(pickMovieRightColumns((c.payload.after || {}) as Record<string, unknown>));
     const { error } = await supabase.from("movie_rights").insert(rightData);
     if (error) throw sanitizeError(error);
   } else if (c.change_type === "movie_right_update") {
     const rightId = c.payload.right_id as string;
-    const raw = { ...(c.payload.after as Record<string, unknown>) };
-    JOIN_KEYS.forEach(k => delete raw[k]);
-    const rightData = cleanPayload(raw);
+    const rightData = cleanPayload(pickMovieRightColumns((c.payload.after || {}) as Record<string, unknown>));
     const { error } = await supabase.from("movie_rights").update(rightData).eq("id", rightId);
     if (error) throw sanitizeError(error);
   } else if (c.change_type === "movie_right_delete") {
