@@ -66,6 +66,10 @@ const NONE_KEY = "__none__";
  * this one; if a sheet does not carry it, the first available target is used.
  */
 const DEFAULT_TARGET = "2+ All";
+/** The page opens on this region; matched case-insensitively against the data. */
+const DEFAULT_REGION = "West Bengal";
+const isDefaultRegion = (v: unknown) =>
+  typeof v === "string" && v.toLowerCase() === DEFAULT_REGION.toLowerCase();
 
 /** The filters this page offers; anything else in an old link is ignored. */
 const FILTER_KEYS = ["region", "year", "week", "target", "channel"];
@@ -150,7 +154,7 @@ export default function BarcPage() {
   // `a:b` parameter rather than eight separate keys.
   const [filters, setFilters] = useUrlFilterState<BarcFilters>(
     "f",
-    { year: initialYear, target: DEFAULT_TARGET },
+    { year: initialYear, target: DEFAULT_TARGET, region: DEFAULT_REGION },
     {
       encode: (v) => {
         const parts = Object.entries(v)
@@ -176,9 +180,10 @@ export default function BarcPage() {
         ([, val]) => val !== null && val !== undefined && val !== ""
       );
       return (
-        keys.length === 2 &&
+        keys.length === 3 &&
         v.year === initialYear &&
-        v.target === DEFAULT_TARGET
+        v.target === DEFAULT_TARGET &&
+        isDefaultRegion(v.region)
       );
     }
   );
@@ -226,6 +231,10 @@ export default function BarcPage() {
       }
       if (current.target && opts.targets.length > 0 && !opts.targets.includes(current.target)) {
         next.target = opts.targets.includes(DEFAULT_TARGET) ? DEFAULT_TARGET : opts.targets[0];
+      }
+      // Snap the default region to the data's spelling, or drop it if absent.
+      if (isDefaultRegion(current.region) && opts.regions.length > 0) {
+        next.region = opts.regions.find(isDefaultRegion) ?? null;
       }
       setFilters(next);
     } catch (e) {
@@ -307,7 +316,11 @@ export default function BarcPage() {
     options.targets.length === 0 || options.targets.includes(DEFAULT_TARGET)
       ? DEFAULT_TARGET
       : options.targets[0];
-  // Year and target open on a default, so those alone are not "a filter".
+  const defaultRegion =
+    options.regions.length === 0
+      ? DEFAULT_REGION
+      : options.regions.find(isDefaultRegion) ?? null;
+  // Year, target and region open on a default, so those alone are not "a filter".
   const hasFilters =
     Object.values(columnFilters).some((v) => v.length > 0) ||
     Object.entries(filters).some(
@@ -316,12 +329,14 @@ export default function BarcPage() {
         v !== undefined &&
         v !== "" &&
         !(k === "year" && v === defaultYear) &&
-        !(k === "target" && v === defaultTarget)
+        !(k === "target" && v === defaultTarget) &&
+        !(k === "region" && v === defaultRegion)
     ) ||
-    !filters.target;
+    !filters.target ||
+    (defaultRegion !== null && !filters.region);
 
   const resetFilters = () => {
-    setFilters({ year: defaultYear, target: defaultTarget });
+    setFilters({ year: defaultYear, target: defaultTarget, region: defaultRegion });
     setMovieFilter([]);
     setDescFilter([]);
     setSourceFilter([]);
@@ -352,9 +367,9 @@ export default function BarcPage() {
       Language: r.language || "",
       "Release Date": r.release_date || "",
       NIMS: r.nims,
-      Rating: r.rating === null ? "" : Number(r.rating.toFixed(3)),
+      TRP: r.rating === null ? "" : Number(r.rating.toFixed(3)),
       GRP: r.grp === null ? "" : Number(r.grp.toFixed(3)),
-      "Avg. Time": r.weighted_ats_sec === null ? "" : toDayFraction(r.weighted_ats_sec),
+      ATS: r.weighted_ats_sec === null ? "" : toDayFraction(r.weighted_ats_sec),
     }));
     const ws = XLSX.utils.json_to_sheet(data);
     ws["!cols"] = Object.keys(data[0] || {}).map((key) => ({
@@ -569,9 +584,9 @@ export default function BarcPage() {
                 </FilterableHead>
                 <TableHead>Release date</TableHead>
                 <TableHead className="text-right">NIMS</TableHead>
-                <TableHead className="text-right">Rating</TableHead>
+                <TableHead className="text-right">TRP</TableHead>
                 <TableHead className="text-right">GRP</TableHead>
-                <TableHead className="text-right">Avg. time</TableHead>
+                <TableHead className="text-right">ATS</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -665,10 +680,10 @@ export default function BarcPage() {
       <p className="text-xs" style={{ color: "var(--text-faint)" }}>
         NIMS counts distinct airings — unique Week + Date + Week Day + Start
         Time + End Time + Target — so a movie shown three times in a day counts
-        three times, but one airing reported for several regions counts once. Rating averages each week&#39;s average rat%;
+        three times, but one airing reported for several regions counts once. TRP averages each week&#39;s average rat%;
         GRP averages each week&#39;s summed GRP, where a telecast&#39;s GRP
         is (length × rat%) / 1800. With a single week selected both are
-        that week&#39;s own average and sum. Average time is reach-weighted
+        that week&#39;s own average and sum. ATS is reach-weighted
         and ignores telecasts reported as “n.a”.
       </p>
 
