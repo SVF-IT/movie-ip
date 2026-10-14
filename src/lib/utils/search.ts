@@ -21,8 +21,13 @@ export function containsTerm(term: string): string {
  * A PostgREST `.or()` clause matching the term anywhere in any of `columns`.
  *
  *   query.or(orContains(search, ["title", "production_no"]))
+ *
+ * The pattern is double-quoted, PostgREST's escape for reserved characters,
+ * so `,` and `(` `)` survive — stripping them made "Amanat (Repeat)" search
+ * for "Amanat Repeat" and match nothing. Inside quotes only `\` and `"` need
+ * a backslash; `%` is still dropped since it is the LIKE wildcard.
  */
 export function orContains(term: string, columns: string[]): string {
-  const escaped = escapeOrSearchTerm(term);
-  return columns.map((c) => `${c}.ilike.%${escaped}%`).join(",");
+  const quoted = term.replace(/%/g, "").replace(/[\\"]/g, "\\$&");
+  return columns.map((c) => `${c}.ilike."%${quoted}%"`).join(",");
 }

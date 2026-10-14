@@ -584,8 +584,12 @@ export default function BarcPage() {
                 </FilterableHead>
                 <TableHead>Release date</TableHead>
                 <TableHead className="text-right">NIMS</TableHead>
-                <TableHead className="text-right">TRP</TableHead>
-                <TableHead className="text-right">GRP</TableHead>
+                <TableHead className="border-x border-emerald-500/25 bg-emerald-500/15 text-right font-semibold text-emerald-700 dark:text-emerald-400">
+                  TRP
+                </TableHead>
+                <TableHead className="border-x border-blue-500/25 bg-blue-500/15 text-right font-semibold text-blue-700 dark:text-blue-400">
+                  GRP
+                </TableHead>
                 <TableHead className="text-right">ATS</TableHead>
               </TableRow>
             </TableHeader>
@@ -660,10 +664,10 @@ export default function BarcPage() {
                     <TableCell className="text-right tabular-nums">
                       {r.nims.toLocaleString()}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="border-x border-emerald-500/25 bg-emerald-500/[0.07] text-right font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
                       {formatMetric(r.rating, 3)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="border-x border-blue-500/25 bg-blue-500/[0.07] text-right font-semibold tabular-nums text-blue-700 dark:text-blue-400">
                       {formatMetric(r.grp, 3)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">

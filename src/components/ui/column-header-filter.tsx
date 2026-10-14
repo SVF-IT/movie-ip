@@ -57,18 +57,30 @@ export function ColumnFilter({
   // once when the popover closes. Without this every click refetches the rows.
   const [draft, setDraft] = useState<string[] | null>(null)
   const isControlledSearch = onSearchChange !== undefined
-  const search = isControlledSearch ? (searchValue ?? '') : localSearch
-  const setSearch = isControlledSearch ? onSearchChange : setLocalSearch
+  // A controlled search refetches the rows, so typing edits a draft that is
+  // committed on Enter or when the popover closes — never per keystroke, which
+  // reloaded the table mid-word and pulled the box out from under the user.
+  const [searchDraft, setSearchDraft] = useState<string | null>(null)
+  const committedSearch = isControlledSearch ? (searchValue ?? '') : localSearch
+  const search = isControlledSearch ? (searchDraft ?? committedSearch) : localSearch
+  const setSearch = isControlledSearch ? setSearchDraft : setLocalSearch
+  const commitSearch = () => {
+    if (isControlledSearch && searchDraft !== null && searchDraft !== committedSearch) {
+      onSearchChange(searchDraft)
+    }
+    setSearchDraft(null)
+  }
 
   const opts = useMemo(() => normalize(options), [options])
   const allValues = useMemo(() => opts.map((o) => o.value), [opts])
   const visible = useMemo(() => {
-    // A controlled search already narrowed the rows these options came from,
-    // so filtering the list again here would hide valid choices.
-    if (!searchable || isControlledSearch || !search.trim()) return opts
+    // A committed controlled search already narrowed the rows these options
+    // came from; only an uncommitted draft still needs narrowing here.
+    if (!searchable || !search.trim()) return opts
+    if (isControlledSearch && search === committedSearch) return opts
     const q = search.trim().toLowerCase()
     return opts.filter((o) => o.label.toLowerCase().includes(q))
-  }, [opts, search, searchable, isControlledSearch])
+  }, [opts, search, searchable, isControlledSearch, committedSearch])
 
   // While the popover is open the checkboxes reflect the uncommitted draft.
   const selected = draft ?? value
@@ -88,6 +100,7 @@ export function ColumnFilter({
   const handleOpenChange = (next: boolean) => {
     setOpen(next)
     if (!next) {
+      commitSearch()
       if (draft && !sameSet(draft, value)) onChange(draft)
       setDraft(null)
     }
@@ -116,12 +129,23 @@ export function ColumnFilter({
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                // Enter applies everything and closes, like clicking outside.
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  handleOpenChange(false)
+                }
+              }}
+              autoFocus
               placeholder={searchPlaceholder}
               className={cn('h-7 pl-7 text-xs rounded-[6px]', search && 'pr-7')}
             />
             {search && (
               <button
-                onClick={() => setSearch('')}
+                onClick={() => {
+                  setSearch('')
+                  if (isControlledSearch && committedSearch) onSearchChange('')
+                }}
                 className="absolute right-4 top-1/2 -translate-y-1/2 p-0.5 text-(--text-faint) hover:text-red-400 transition-colors"
                 aria-label="Clear search"
               >

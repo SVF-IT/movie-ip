@@ -23,6 +23,7 @@ import {
   type TemplateDefinition,
 } from '@/lib/types/templates'
 import { NONE_KEY } from '@/lib/utils/rights-types'
+import { orContains } from '@/lib/utils/search'
 
 const supabase = createClient()
 
@@ -348,8 +349,8 @@ export async function runTemplate(
     let query = supabase.from('movies_with_details').select('*').eq('approval_status', 'approved')
 
     if (overrides?.search) {
-      const term = overrides.search.replace(/[%,()]/g, '').trim()
-      if (term) query = query.or(`title.ilike.%${term}%,production_no.ilike.%${term}%`)
+      const term = overrides.search.trim()
+      if (term) query = query.or(orContains(term, ['title', 'production_no']))
     }
     const { data: rawMovies, error } = await query
     if (error) throw error

@@ -612,6 +612,14 @@ async function fetchGroupedMovies(
     group.total_versions = group.versions.length;
   });
 
+  // The suffix strip above is for language versions sharing a production_no
+  // ("X (Hindi)" under "X"). A lone title keeps its full name: "Amanat (Repeat)"
+  // or "Mon (2010)" stripped to "Amanat" / "Mon" became indistinguishable from
+  // the original and unfindable by its real title.
+  groupsMap.forEach((group) => {
+    if (group.versions.length === 1) group.title = group.versions[0].title;
+  });
+
   // Calculate rights counts for each group
   const allMovieIds = (allMovies || []).map((m: MovieWithDetails) => m.id);
 
