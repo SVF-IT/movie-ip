@@ -431,6 +431,11 @@ export async function runTemplate(
       mrByMovie.set(r.movie_id, list)
     }
 
+    // Last day SVF still holds the right, per acquired title: the owned right's
+    // end, capped by the agreement end. A title opening after this day has
+    // nothing left for SVF to sell. Absent means perpetual (or home production).
+    const heldUntilByMovie = new Map<string, string>()
+
     movies = movies.filter((m) => {
       if (m.source !== 'acquired') return true
 
@@ -461,6 +466,11 @@ export async function runTemplate(
 
       // Agreement End Date must be in the future or empty (perpetual).
       if (m.agreement_end_date && m.agreement_end_date < today) return false
+
+      const heldUntil = [effectiveEnd, m.agreement_end_date ?? null]
+        .filter((d): d is string => !!d)
+        .sort()[0]
+      if (heldUntil) heldUntilByMovie.set(m.id, heldUntil)
 
       return true
     })
@@ -609,38 +619,26 @@ export async function runTemplate(
         }
       }
 
-      let { opensOn: resolvedOpensOn, never } = resolveOpenDate(blockers)
+      const { opensOn: resolvedOpensOn, never } = resolveOpenDate(blockers)
 
-      // The agreement is the outer boundary on every blocker beneath it.
-      //
-      // A blocker with no end date is perpetual only in its own terms: a
-      // holdback recorded against an acquired title cannot outlive the
-      // agreement that granted it. So where the movie has an agreement end
-      // date, that date resolves the blocker — the title opens the day after
-      // the agreement lapses rather than never.
-      //
-      // Home productions have no agreement, so a perpetual blocker there really
-      // is perpetual and the title is dropped as before.
-      if (never && m.agreement_end_date) {
-        const freeAfterAgreement = dayAfter(m.agreement_end_date)
-        never = false
-        resolvedOpensOn =
-          resolvedOpensOn === null || freeAfterAgreement > resolvedOpensOn
-            ? freeAfterAgreement
-            : resolvedOpensOn
-      }
-
-      // A perpetual blocker with no agreement above it means the title never
-      // becomes open — drop it rather than showing a countdown that never
-      // arrives.
+      // A perpetual blocker means the title never becomes open — drop it rather
+      // than showing a countdown that never arrives. For an acquired title the
+      // blocker may end with the agreement, but by then SVF holds nothing to
+      // sell either, so the answer is the same.
       if (never) continue
 
       const opensInDays = resolvedOpensOn === null ? 0 : daysBetween(today, resolvedOpensOn)
+      const openDay = resolvedOpensOn ?? today
+
+      // SVF must still hold the right on the day the title opens. A deal that
+      // runs to the agreement end frees the title the day after — exactly when
+      // SVF's own right lapses — so it is never actually sellable.
+      const heldUntil = heldUntilByMovie.get(m.id)
+      if (heldUntil && openDay > heldUntil) continue
 
       // Rights window. Blank means today onwards — every open title, however far
       // out. `from` is compared against the day the title actually opens, so a
       // title already open counts as opening today.
-      const openDay = resolvedOpensOn ?? today
       const win = filters.rightsWindow
       if (win.from && openDay < win.from) continue
       if (win.to && openDay > win.to) continue

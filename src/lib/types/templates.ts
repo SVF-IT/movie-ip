@@ -212,6 +212,7 @@ const OPEN_TITLES_SATELLITE: BaseRuleSet = {
     { scope: 'acquired', text: 'Rights Owned must include Satellite (or Negative).' },
     { scope: 'acquired', text: 'The satellite right must not have expired; where it carries no end date, the agreement end date is used.' },
     { scope: 'acquired', text: 'Agreement End Date must be in the future or empty (perpetual).' },
+    { scope: 'acquired', text: 'SVF must still hold the right on the day the title opens — a title that only frees up after the right or agreement ends is excluded.' },
   ],
 }
 
@@ -255,6 +256,7 @@ function internetRules(type: ExploitationType): BaseRuleSet {
       },
       { scope: 'acquired', text: 'The internet right must not have expired; where it carries no end date, the agreement end date is used.' },
       { scope: 'acquired', text: 'Agreement End Date must be in the future or empty (perpetual).' },
+      { scope: 'acquired', text: 'SVF must still hold the right on the day the title opens — a title that only frees up after the right or agreement ends is excluded.' },
       { scope: 'acquired', text: `No holdback naming ${T} on the owned rights either.` },
     ],
   }
