@@ -3,6 +3,7 @@
 import { DisabledActionButton } from "@/components/disabled-action-button";
 import { RoleGate } from "@/components/role-gate";
 import { CensorCertificatesSection } from "@/components/movies/censor-certificates-section";
+import { MovieMusicSection } from "@/components/movies/movie-music-section";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -55,6 +56,7 @@ import {
   Languages,
   Loader2,
   MoreHorizontal,
+  Music,
   PlayCircle,
   Plus,
   ShieldCheck,
@@ -208,6 +210,7 @@ export default function MovieDetailPage() {
     { id: "exploitation", label: "Exploitation Rights", icon: FileText },
     { id: "history", label: "Rights History", icon: History },
     { id: "censor-certificates", label: "Censor Certificates", icon: Award },
+    { id: "music", label: "Music", icon: Music },
   ] as const;
   const [activeSection, setActiveSection] = useState<string>("info");
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -994,6 +997,11 @@ export default function MovieDetailPage() {
       {/* ── Censor Certificates ── */}
       <div ref={(el) => { sectionRefs.current["censor-certificates"] = el; }}>
         <CensorCertificatesSection movieId={selectedVersionId} />
+      </div>
+
+      {/* ── Music (read-only, from the SVF Music app) ── */}
+      <div ref={(el) => { sectionRefs.current.music = el; }}>
+        <MovieMusicSection movieId={selectedVersionId} />
       </div>
 
         </div>
