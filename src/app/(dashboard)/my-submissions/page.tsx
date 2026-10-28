@@ -10,7 +10,8 @@ import { useAppToast } from "@/hooks/use-app-toast";
 import { useUrlMultiSelectFilterState } from "@/hooks/use-url-multi-select-filter-state";
 import { getMovieApprovalHistory, getPendingMovies, type PendingMovieForApproval } from "@/lib/api/approvals";
 import { resubmitMovie } from "@/lib/api/approvals";
-import { getPendingChanges, type PendingChange, type PendingChangeStatus } from "@/lib/api/pending-changes";
+import { deletePendingChange, getPendingChanges, type PendingChange, type PendingChangeStatus } from "@/lib/api/pending-changes";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { ApprovalStatus, MovieApproval } from "@/lib/types/database";
 import {
   AlertTriangle,
@@ -26,6 +27,7 @@ import {
   RotateCcw,
   Search,
   SendHorizonal,
+  Trash2,
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
@@ -224,8 +226,26 @@ function SubmissionCard({ movie, onResubmit }: { movie: PendingMovieForApproval;
 
 // ── Pending change card ────────────────────────────────────────────────────────
 
-function ChangeCard({ change }: { change: PendingChange }) {
+function ChangeCard({ change, onDeleted }: { change: PendingChange; onDeleted: (id: string) => void }) {
   const [expanded, setExpanded] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const toast = useAppToast();
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await deletePendingChange(change.id);
+      setConfirmDelete(false);
+      toast.success("Change request deleted");
+      onDeleted(change.id);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete change request");
+      setConfirmDelete(false);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const after = (change.payload as any)?.after as Record<string, unknown> | undefined;
   const before = (change.payload as any)?.before as Record<string, unknown> | undefined;
@@ -251,13 +271,31 @@ function ChangeCard({ change }: { change: PendingChange }) {
             </div>
           </div>
 
-          <Link href={`/movies/${change.movie_id}/edit`}>
-            <Button size="sm" variant="outline" className="h-8 px-3 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover) shrink-0">
-              <Edit className="h-3.5 w-3.5 mr-1.5" /> View Movie
-            </Button>
-          </Link>
+          <div className="flex gap-2 shrink-0 flex-wrap">
+            <Link href={`/movies/${change.movie_id}/edit`}>
+              <Button size="sm" variant="outline" className="h-8 px-3 bg-(--bg-raise) border-(--svf-border-strong) text-(--text) hover:bg-(--hover)">
+                <Edit className="h-3.5 w-3.5 mr-1.5" /> View Movie
+              </Button>
+            </Link>
+            {change.status === "pending" && (
+              <Button size="sm" variant="outline" onClick={() => setConfirmDelete(true)} disabled={deleting}
+                className="h-8 px-3 bg-red-600/10 border-red-500/30 text-red-400 hover:bg-red-600/20">
+                <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete
+              </Button>
+            )}
+          </div>
         </div>
       </CardHeader>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={(open) => !deleting && setConfirmDelete(open)}
+        onConfirm={handleDelete}
+        title="Delete change request?"
+        description={`"${changeTypeLabel(change.change_type)}" on ${(change.movie as any)?.title || "this movie"} will be withdrawn and removed from the review queue. This cannot be undone.`}
+        confirmText="Delete"
+        isLoading={deleting}
+      />
 
       <CardContent className="pt-0 space-y-3">
         {/* Rejection reason */}
@@ -395,6 +433,10 @@ export default function MySubmissionsPage() {
 
   const handleResubmit = (movieId: string) => {
     setMovies(prev => prev.map(m => m.id === movieId ? { ...m, approval_status: "pending" as ApprovalStatus } : m));
+  };
+
+  const handleChangeDeleted = (changeId: string) => {
+    setChanges(prev => prev.filter(c => c.id !== changeId));
   };
 
   const pendingMovies = movies.filter(m => m.approval_status === "pending").length;
@@ -561,7 +603,7 @@ export default function MySubmissionsPage() {
           ) : (
             <div className="space-y-4">
               {changes.map((change) => (
-                <ChangeCard key={change.id} change={change} />
+                <ChangeCard key={change.id} change={change} onDeleted={handleChangeDeleted} />
               ))}
             </div>
           )}

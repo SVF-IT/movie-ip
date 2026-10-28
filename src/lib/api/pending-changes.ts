@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { sanitizeError } from "@/lib/utils/sanitize-error";
+import { logAudit } from "@/lib/api/audit";
 import type { PlatformRight, MovieRight } from "@/lib/types/database";
 
 const supabase = createClient();
@@ -376,4 +377,26 @@ export async function rejectPendingChange(
     .eq("id", changeId);
 
   if (error) throw sanitizeError(error);
+}
+
+// ─── Delete (submitter withdraws) ─────────────────────────────────────────────
+
+// Lets the submitter take back a change they raised by mistake. Only pending
+// changes can go — approved/rejected ones are a reviewer's decision and stay as
+// history. RLS (sql/37_pending_changes_delete_own.sql) enforces the same rule.
+export async function deletePendingChange(changeId: string): Promise<void> {
+  const { data, error } = await supabase
+    .from("movie_pending_changes")
+    .delete()
+    .eq("id", changeId)
+    .eq("status", "pending")
+    .select();
+
+  if (error) throw sanitizeError(error);
+  // 0 rows: a reviewer acted on it in the meantime, or it isn't ours to delete
+  if (!data || data.length === 0) {
+    throw new Error("This change request has already been reviewed and can no longer be deleted.");
+  }
+
+  logAudit("DELETE", "movie_pending_changes", changeId, data[0] as Record<string, unknown>, null);
 }
