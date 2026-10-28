@@ -53,26 +53,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 
 /**
- * A jointly-produced title whose exploitation rights sit with the partner house
- * rather than SVF is not ours to sell, so it counts as gone from the catalogue.
- */
-function heldByOtherHouse(version?: MovieLanguageVersion): boolean {
-  if (!version || version.jointly_owned !== true) return false;
-  const holder = (version.jointly_exploitation_rights || "").trim();
-  if (!holder) return false;
-  return !/^svf\b/i.test(holder);
-}
-
-/**
- * A home production is gone when the sold flag is set, when a legacy imported row
- * says "Sold" in its exploitation-rights text, or when a joint partner holds the
- * rights. Mirrors isSoldOrExpired in lib/api/dashboard.ts; keep the two in step.
+ * A home production is gone when the sold flag is set, or when a legacy imported row
+ * says "Sold" in its exploitation-rights text. Mirrors isSoldOrExpired in
+ * lib/api/dashboard.ts; keep the two in step.
  */
 function isSoldHome(version?: MovieLanguageVersion): boolean {
   if (!version) return false;
   if (version.home_sold === true) return true;
-  if (/sold/i.test(version.jointly_exploitation_rights || "")) return true;
-  return heldByOtherHouse(version);
+  return /sold/i.test(version.jointly_exploitation_rights || "");
 }
 
 export default function MoviesPage() {

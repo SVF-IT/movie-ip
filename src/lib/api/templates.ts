@@ -255,18 +255,6 @@ function matchesCertification(value: unknown, selected: string[]): boolean {
   return isUaVariant(v) && selected.some(isUaVariant)
 }
 
-/**
- * Jointly-owned home titles where the named exploitation-rights holder is not
- * SVF. Free text, so matching tolerates casing, whitespace and the
- * "SVF Entertainment" long form. Blank is permissive: it means unrecorded, not
- * someone else's, and blanking a field should not silently drop a title.
- */
-function heldByOtherHouse(m: any): boolean {
-  if (m.jointly_owned !== true) return false
-  const holder = (m.jointly_exploitation_rights || '').trim()
-  if (!holder) return false
-  return !/^svf\b/i.test(holder)
-}
 
 // ── Result shape ─────────────────────────────────────────────────────────────
 
@@ -416,7 +404,6 @@ export async function runTemplate(
       // is the legacy form still present on imported rows. Both mean sold.
       if (m.home_sold === true) return false
       if (/sold/i.test(m.jointly_exploitation_rights || '')) return false
-      if (heldByOtherHouse(m)) return false
       return true
     })
 

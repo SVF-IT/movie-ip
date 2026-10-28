@@ -208,7 +208,6 @@ const OPEN_TITLES_SATELLITE: BaseRuleSet = {
     { scope: 'both', text: 'No live satellite deal attached (Satellite TV, DTH VOD, Terrestrial TV) covering the selected territory. A deal with no nature recorded counts as Exclusive for World; an exclusive India deal still leaves Rest of World open.' },
     { scope: 'both', text: 'No holdback naming Satellite on the title or on any attached platform right.' },
     { scope: 'home', text: 'Sold titles are excluded.' },
-    { scope: 'home', text: 'Jointly owned titles where a partner house holds exploitation rights are excluded.' },
     { scope: 'acquired', text: 'Rights Owned must include Satellite (or Negative).' },
     { scope: 'acquired', text: 'The satellite right must not have expired; where it carries no end date, the agreement end date is used.' },
     { scope: 'acquired', text: 'Agreement End Date must be in the future or empty (perpetual).' },
@@ -249,7 +248,6 @@ function internetRules(type: ExploitationType): BaseRuleSet {
         text: 'Hoichoi is SVF\'s own OTT and non-exclusive, so a live Hoichoi deal never closes a title.',
       },
       { scope: 'home', text: 'Sold titles are excluded.' },
-      { scope: 'home', text: 'Jointly owned titles where a partner house holds exploitation rights are excluded.' },
       {
         scope: 'acquired',
         text: `Rights Owned must include Internet (or Negative), and its classification must include ${T} — a blank classification means the whole Internet right is owned.`,
