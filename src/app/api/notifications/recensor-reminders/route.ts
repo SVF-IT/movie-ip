@@ -10,20 +10,16 @@ export const maxDuration = 60;
  *
  * Triggered automatically by Vercel Cron (GET, via vercel.json) or manually
  * (POST, e.g. for testing) — both paths run the same authorized logic.
- * Protected by CRON_SECRET / Vercel's x-vercel-cron header / an authenticated session.
+ * Protected by CRON_SECRET only (sent by Vercel Cron as a Bearer token).
  */
 async function isAuthorizedRequest(): Promise<boolean> {
-  const headersList = await headers();
-  const authHeader = headersList.get("authorization");
+  // Only the shared secret is trusted. Vercel Cron sends it as a Bearer token
+  // when CRON_SECRET is set on the project; the x-vercel-cron header can be
+  // forged by any caller, so it is not accepted.
   const cronSecret = process.env.CRON_SECRET;
-
-  if (cronSecret && authHeader === `Bearer ${cronSecret}`) return true;
-  if (headersList.get("x-vercel-cron")) return true;
-
-  const { createClient } = await import("@/lib/supabase/server");
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  return !!user;
+  if (!cronSecret) return false;
+  const authHeader = (await headers()).get("authorization");
+  return authHeader === `Bearer ${cronSecret}`;
 }
 
 async function handleRecensorReminders() {

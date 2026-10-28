@@ -4,7 +4,6 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Film, Play, MonitorPlay, Loader2, AlertCircle, CheckCircle2, Lock } from "lucide-react";
 import Image from "next/image";
-import { createClient } from "@/lib/supabase/client";
 
 function ChangePasswordForm() {
   const router = useRouter();
@@ -39,15 +38,17 @@ function ChangePasswordForm() {
 
     setLoading(true);
     try {
-      const supabase = createClient();
-      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
-      if (updateError) { setError(updateError.message); setLoading(false); return; }
-
-      if (isFirstLogin) {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          await supabase.from("user_profiles").update({ must_change_password: false, updated_at: new Date().toISOString() }).eq("id", user.id);
-        }
+      // Server-side so must_change_password is only cleared once the password
+      // has really changed — users can't write that flag themselves.
+      const res = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: newPassword }),
+      });
+      if (!res.ok) {
+        const { message } = await res.json().catch(() => ({ message: null }));
+        setError(message || "Failed to change password. Please try again.");
+        return;
       }
 
       setSuccess(true);
