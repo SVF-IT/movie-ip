@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { stringCodec, useUrlFilterState } from "@/hooks/use-url-filter-state";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { MultiSelectFilter } from "@/components/ui/multi-select-filter";
-import { Loader2, ChevronRight, X, FilePlus, FilePen, Trash2 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Loader2, ChevronRight, X, FilePlus, FilePen, Trash2, Search } from "lucide-react";
 import { useAppToast } from "@/hooks/use-app-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { useUrlMultiSelectFilterState } from "@/hooks/use-url-multi-select-filter-state";
@@ -43,10 +44,13 @@ const FIELD_LABELS: Record<string, string> = {
 
 // ── Table display names ──────────────────────────────────────
 const TABLE_NAMES: Record<string, string> = {
-  movies: "Movie", platform_rights: "Right",
+  movies: "Movie", platform_rights: "Right", movie_rights: "Movie Right",
   user_profiles: "User", people: "Person", platforms: "Platform",
   production_houses: "Production House", saved_reports: "Report",
-  movie_people: "Cast / Crew",
+  movie_people: "Cast / Crew", movie_pending_changes: "Change Request",
+  rights_agreements: "Rights Agreement", rights_history: "Rights History",
+  agreement_documents: "Agreement Document", movie_censor_certificates: "Censor Certificate",
+  barc_sheets: "BARC Sheet", barc_descriptions: "BARC Description",
 };
 
 // ── Skip internal / noisy fields in diff ────────────────────
@@ -190,34 +194,52 @@ export default function AuditLogPage() {
   const [actionFilter, setActionFilter] = useUrlMultiSelectFilterState<string>("action", ACTION_OPTIONS);
   const [dateFrom, setDateFrom] = useUrlFilterState("from", "", stringCodec);
   const [dateTo, setDateTo]     = useUrlFilterState("to", "", stringCodec);
+  const [search, setSearch]     = useUrlFilterState("q", "", stringCodec);
+  // System entries (no user behind them — triggers, cron jobs) are hidden by
+  // default; "show" brings them back.
+  const [systemParam, setSystemParam] = useUrlFilterState("system", "", stringCodec);
+  const showSystem = systemParam === "show";
+  // The query waits for a pause in typing, so each keystroke is not a request.
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+  // Only the latest request may update the table; an older, slower one that
+  // resolves afterwards would otherwise overwrite newer results.
+  const requestId = useRef(0);
   const [loading, setLoading]   = useState(true);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const toast = useAppToast();
 
   const fetchLogs = useCallback(async () => {
+    const id = ++requestId.current;
     try {
       setLoading(true);
       const { data, count } = await getAuditLogs({
         tableName:  tableFilter.length  < TABLE_OPTIONS.length  ? tableFilter  : undefined,
         action:     actionFilter.length < ACTION_OPTIONS.length ? actionFilter : undefined,
+        search:     debouncedSearch || undefined,
+        includeSystem: showSystem,
         dateFrom:   dateFrom || undefined,
         dateTo:     dateTo   || undefined,
         limit:  10000,
-        offset: 0,
       });
+      if (id !== requestId.current) return;
       setLogs(data); setTotalCount(count);
     } catch (err) {
+      if (id !== requestId.current) return;
       toast.error(err instanceof Error ? err.message : "Failed to load audit logs");
-    } finally { setLoading(false); }
-  }, [tableFilter, actionFilter, dateFrom, dateTo]);
+    } finally { if (id === requestId.current) setLoading(false); }
+  }, [tableFilter, actionFilter, debouncedSearch, showSystem, dateFrom, dateTo]);
 
   useEffect(() => { fetchLogs(); getAuditLogStats().then(setStats).catch(() => {}); }, [fetchLogs]);
 
   const clearFilters = () => {
     setTableFilter(TABLE_OPTIONS); setActionFilter(ACTION_OPTIONS);
-    setDateFrom(""); setDateTo("");
+    setDateFrom(""); setDateTo(""); setSearch(""); setSystemParam("");
   };
-  const hasFilters = tableFilter.length < TABLE_OPTIONS.length || actionFilter.length < ACTION_OPTIONS.length || dateFrom || dateTo;
+  const hasFilters = tableFilter.length < TABLE_OPTIONS.length || actionFilter.length < ACTION_OPTIONS.length || dateFrom || dateTo || search || showSystem;
 
   if (authLoading || !isAdmin) return null;
 
@@ -241,6 +263,21 @@ export default function AuditLogPage() {
       {/* ── Directory Filters ── */}
       <div className="relative overflow-hidden rounded-[12px] bg-(--panel-solid)/40 border border-(--svf-border) backdrop-blur-xl p-4 shadow-xl">
         <div className="flex flex-wrap gap-3 items-center">
+          <div className="relative min-w-[200px] flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-(--text-faint)" />
+            <Input
+              placeholder="Search by movie, user or name…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 h-9 bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-sm"
+              aria-label="Search audit log"
+            />
+            {search && (
+              <button className="absolute right-2 top-1/2 -translate-y-1/2 text-(--text-faint) hover:text-(--text)" onClick={() => setSearch("")} aria-label="Clear search">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
           <MultiSelectFilter
             label="All Tables"
             options={TABLE_OPTIONS.map((k) => ({ value: k, label: TABLE_NAMES[k] }))}
@@ -260,6 +297,12 @@ export default function AuditLogPage() {
           <span className="text-(--text-faint) text-xs">to</span>
           <Input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); }}
             className="h-9 w-[150px] bg-(--bg-raise)/40 border-(--svf-border) text-(--text) placeholder:text-(--text-faint) text-sm" />
+          <label htmlFor="show-system" className="flex items-center gap-2 h-9 px-1 text-sm text-(--text-dim) cursor-pointer select-none"
+            title="Changes with no user behind them — made by triggers or scheduled jobs">
+            <Switch id="show-system" checked={showSystem}
+              onCheckedChange={(v: boolean) => setSystemParam(v ? "show" : "")} />
+            Show system
+          </label>
           {hasFilters && (
             <Button variant="ghost" size="sm" onClick={clearFilters}
               className="h-9 gap-1.5 text-(--text-faint) hover:text-(--text) hover:bg-(--hover)">
@@ -275,7 +318,7 @@ export default function AuditLogPage() {
       {/* ── Log entries ── */}
       <div className="glass-card overflow-hidden">
         {/* Column header */}
-        <div className="hidden md:grid grid-cols-[160px_180px_90px_100px_1fr_32px] gap-3 px-5 py-2.5 border-b border-(--svf-border)" style={{ background: "var(--bg-deep)" }}>
+        <div className="hidden md:grid grid-cols-[160px_180px_90px_130px_minmax(0,1fr)_32px] gap-3 px-5 py-2.5 border-b border-(--svf-border)" style={{ background: "var(--bg-deep)" }}>
           {["Time", "User", "Action", "Section", "What changed", ""].map((h) => (
             <span key={h} className="text-[10px] font-bold uppercase tracking-widest text-(--text-faint)">{h}</span>
           ))}
@@ -287,7 +330,9 @@ export default function AuditLogPage() {
           </div>
         ) : logs.length === 0 ? (
           <div className="text-center py-16 text-(--text-faint) text-sm">
-            No audit log entries match your filters.
+            {debouncedSearch
+              ? <>No audit log entries match &ldquo;{debouncedSearch}&rdquo;.</>
+              : "No audit log entries match your filters."}
           </div>
         ) : (
           <div className="divide-y divide-(--svf-border)">
@@ -307,7 +352,7 @@ export default function AuditLogPage() {
                 <div key={log.id}>
                   {/* ── Row ── */}
                   <div
-                    className={`grid md:grid-cols-[160px_180px_90px_100px_1fr_32px] gap-3 items-center px-5 py-3 transition-colors ${hasDetails ? "cursor-pointer hover:bg-(--hover)" : ""} ${isOpen ? "bg-(--hover)" : ""}`}
+                    className={`grid md:grid-cols-[160px_180px_90px_130px_minmax(0,1fr)_32px] gap-3 items-center px-5 py-3 transition-colors ${hasDetails ? "cursor-pointer hover:bg-(--hover)" : ""} ${isOpen ? "bg-(--hover)" : ""}`}
                     onClick={() => hasDetails && setExpandedRow(isOpen ? null : log.id)}
                   >
                     {/* Time */}
@@ -335,8 +380,8 @@ export default function AuditLogPage() {
                     </div>
 
                     {/* Section (table) */}
-                    <div className="hidden md:block">
-                      <span className="text-xs text-(--text-dim)">{TABLE_NAMES[log.table_name] || log.table_name}</span>
+                    <div className="hidden md:block min-w-0">
+                      <span className="block truncate text-xs text-(--text-dim)" title={log.table_name}>{TABLE_NAMES[log.table_name] || log.table_name}</span>
                     </div>
 
                     {/* Summary */}

@@ -4,55 +4,44 @@ import type { AuditLogEntry } from "@/lib/types/database";
 
 const supabase = createClient();
 
+/**
+ * Audit entries matching the filters, newest first. Runs through the
+ * audit_log_search function so the free-text search can match the user's name
+ * and the linked movie's title, neither of which is stored on the log row.
+ */
 export async function getAuditLogs(options?: {
   tableName?: string[];
   action?: string[];
-  userId?: string;
+  /** Matches user name/email, movie title, or a name in the logged values. */
+  search?: string;
+  /** false hides "System" entries — changes with no user behind them. */
+  includeSystem?: boolean;
   dateFrom?: string;
   dateTo?: string;
   limit?: number;
-  offset?: number;
 }): Promise<{ data: AuditLogEntry[]; count: number }> {
   if ((options?.tableName && options.tableName.length === 0) || (options?.action && options.action.length === 0)) {
     return { data: [], count: 0 };
   }
-  let query = supabase
-    .from("audit_logs")
-    .select("*", { count: "exact" });
 
-  if (options?.tableName && options.tableName.length > 0) {
-    query = query.in("table_name", options.tableName);
-  }
-  if (options?.action && options.action.length > 0) {
-    query = query.in("action", options.action);
-  }
-  if (options?.userId) {
-    query = query.eq("user_id", options.userId);
-  }
-  if (options?.dateFrom) {
-    query = query.gte("created_at", options.dateFrom);
-  }
-  if (options?.dateTo) {
-    query = query.lte("created_at", options.dateTo);
-  }
-  if (options?.limit) {
-    query = query.limit(options.limit);
-  }
-  if (options?.offset) {
-    query = query.range(
-      options.offset,
-      options.offset + (options.limit || 50) - 1
-    );
-  }
-
-  query = query.order("created_at", { ascending: false });
-
-  const { data, error, count } = await query;
+  const { data: result, error } = await supabase.rpc("audit_log_search", {
+    p_query: options?.search?.trim() || null,
+    p_tables: options?.tableName?.length ? options.tableName : null,
+    p_actions: options?.action?.length ? options.action : null,
+    p_date_from: options?.dateFrom || null,
+    p_date_to: options?.dateTo || null,
+    p_limit: options?.limit ?? 10000,
+    p_include_system: options?.includeSystem ?? true,
+  });
 
   if (error) {
     throw sanitizeError(error);
   }
 
+  const { rows: data, count } = (result ?? { rows: [], count: 0 }) as {
+    rows: Record<string, unknown>[];
+    count: number;
+  };
   const rows = data || [];
 
   // Batch-fetch user profiles for all distinct user_ids in the result page
