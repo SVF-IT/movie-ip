@@ -17,7 +17,6 @@ import { useSidebarCounts } from "@/hooks/use-sidebar-counts";
 import { isBarcRole, isEditorRole } from "@/lib/types/database";
 import {
   BarChart3,
-  Bell,
   Building2,
   Compass,
   Drama,
@@ -31,10 +30,8 @@ import {
   Megaphone,
   Satellite,
   Scale,
-  ScrollText,
   SendHorizonal,
   ShieldAlert,
-  ShieldCheck,
   Users,
 } from "lucide-react";
 import Image from "next/image";
@@ -92,16 +89,6 @@ const NAV_BASE = [
       { title: "Directors", icon: Megaphone, href: "/directors" },
       { title: "Platforms", icon: Building2, href: "/platforms" },
       { title: "Production Houses", icon: Factory, href: "/production-houses" },
-    ],
-  },
-  {
-    group: "Admin",
-    accent: "var(--st-wtp)",
-    groupIcon: ShieldCheck,
-    roleCheck: "admin",
-    items: [
-      { title: "Notification Setting", icon: Bell, href: "/settings/notifications" },
-      { title: "Audit Log", icon: ScrollText, href: "/audit-log" },
     ],
   },
 ];

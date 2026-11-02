@@ -17,7 +17,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/auth-context";
 import { useSidebarCounts } from "@/hooks/use-sidebar-counts";
-import { Clock, LogOut, Settings, Shield, User } from "lucide-react";
+import { Bell, Clock, LogOut, ScrollText, Settings, Shield, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -204,6 +204,26 @@ export function Header({ title = "Bengali IP Management Dashboard", subtitle }: 
                     <Link href="/admin/users" className="flex items-center">
                       <Shield className="mr-3 h-4 w-4" />
                       User Management
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    asChild
+                    className="cursor-pointer py-2.5 rounded-[7px] mx-1"
+                    style={{ color: "var(--st-wtp)" }}
+                  >
+                    <Link href="/settings/notifications" className="flex items-center">
+                      <Bell className="mr-3 h-4 w-4" />
+                      Notification Setting
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    asChild
+                    className="cursor-pointer py-2.5 rounded-[7px] mx-1"
+                    style={{ color: "var(--st-wtp)" }}
+                  >
+                    <Link href="/audit-log" className="flex items-center">
+                      <ScrollText className="mr-3 h-4 w-4" />
+                      Audit Log
                     </Link>
                   </DropdownMenuItem>
                 </>
