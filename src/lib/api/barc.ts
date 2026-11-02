@@ -2,7 +2,6 @@ import { createClient } from "@/lib/supabase/client";
 import { uploadFile, deleteFile } from "@/lib/api/storage";
 import { sanitizeError } from "@/lib/utils/sanitize-error";
 import { parseBarcSheet, normalizeDescription, type ParsedTelecast, type ParseResult } from "@/lib/barc/parse-sheet";
-import { computeBarcMetrics, type BarcTelecastAggRow } from "@/lib/barc/metrics";
 
 export { computeBarcMetrics } from "@/lib/barc/metrics";
 
@@ -14,26 +13,6 @@ export const BARC_SHEET_ACCEPTED_TYPES = [".xlsx", ".xls", ".csv"];
 const INSERT_CHUNK = 1000;
 /** Rows per duplicate-check call; keeps the JSON payload to a sane size. */
 const DUPLICATE_CHECK_CHUNK = 2000;
-/** PostgREST caps a response at 1000 rows; reads page through in steps of this. */
-const READ_PAGE = 1000;
-
-/**
- * Pages through a telecast query until it is exhausted. A single request is
- * silently cut off at 1000 rows, which dropped whole regions from the filter
- * list and computed metrics from a fraction of the data.
- */
-async function fetchAllTelecasts<T>(
-  build: () => { range: (from: number, to: number) => PromiseLike<{ data: unknown; error: unknown }> }
-): Promise<T[]> {
-  const out: T[] = [];
-  for (let from = 0; ; from += READ_PAGE) {
-    const { data, error } = await build().range(from, from + READ_PAGE - 1);
-    if (error) throw sanitizeError(error);
-    const page = (data || []) as T[];
-    out.push(...page);
-    if (page.length < READ_PAGE) return out;
-  }
-}
 
 export interface BarcSheet {
   id: string;
@@ -379,7 +358,11 @@ export async function mapBarcDescription(params: {
 
 // ── Filter options ───────────────────────────────────────────
 
-/** Distinct values backing the BARC page filter dropdowns. */
+/**
+ * Distinct values backing the BARC page filter dropdowns. Computed in Postgres
+ * (barc_filter_options) so the page makes one request instead of paging
+ * through every telecast row.
+ */
 export async function getBarcFilterOptions(): Promise<{
   years: number[];
   targets: string[];
@@ -387,29 +370,18 @@ export async function getBarcFilterOptions(): Promise<{
   regions: string[];
   weeks: number[];
 }> {
-  type OptionRow = {
-    telecast_year: number | null;
-    target: string | null;
-    channel: string | null;
-    region: string | null;
-    week: number | null;
-  };
-  const rows = await fetchAllTelecasts<OptionRow>(() =>
-    supabase
-      .from("barc_telecasts")
-      .select("telecast_year, target, channel, region, week")
-      .order("id")
-  );
+  const { data, error } = await supabase.rpc("barc_filter_options");
+  if (error) throw sanitizeError(error);
 
-  const uniq = <T,>(vals: (T | null | undefined)[]): T[] =>
-    [...new Set(vals.filter((v): v is T => v !== null && v !== undefined))];
-
+  const opts = (data ?? {}) as Partial<Record<"years" | "weeks", number[]> & Record<"targets" | "channels" | "regions", string[]>>;
+  // Text lists are sorted here, not in SQL, so the order follows JS string
+  // comparison exactly as before rather than the database collation.
   return {
-    years: uniq(rows.map((r) => r.telecast_year)).sort((a, b) => b - a),
-    targets: uniq(rows.map((r) => r.target)).sort(),
-    channels: uniq(rows.map((r) => r.channel)).sort(),
-    regions: uniq(rows.map((r) => r.region)).sort(),
-    weeks: uniq(rows.map((r) => r.week)).sort((a, b) => a - b),
+    years: opts.years ?? [],
+    targets: [...(opts.targets ?? [])].sort(),
+    channels: [...(opts.channels ?? [])].sort(),
+    regions: [...(opts.regions ?? [])].sort(),
+    weeks: opts.weeks ?? [],
   };
 }
 
@@ -438,79 +410,29 @@ export interface BarcMovieRow {
 }
 
 /**
- * Per-movie BARC metrics under the given filters, computed from the stored
- * telecast rows. Kept row-derived rather than reading the cache table so a
- * change to computeBarcMetrics takes effect immediately.
+ * Per-movie BARC metrics under the given filters. Aggregated in Postgres by
+ * barc_movie_metrics, which mirrors computeBarcMetrics, so only one summary
+ * row per movie crosses the wire instead of every telecast.
  */
 export async function getBarcMovieRows(filters: BarcFilters = {}): Promise<BarcMovieRow[]> {
-  const buildQuery = () => {
-    let query = supabase
-      .from("barc_telecasts")
-      .select(
-        "movie_id, description_raw, telecast_year, target, channel, region, week, telecast_date, week_day, start_time_sec, end_time_sec, rat_pct, daily_avg_rch_pct, ats_sec, grp"
-      )
-      .not("movie_id", "is", null);
+  const { data, error } = await supabase.rpc("barc_movie_metrics", {
+    p_year: filters.year || null,
+    p_target: filters.target || null,
+    p_channel: filters.channel || null,
+    p_region: filters.region || null,
+    p_week: filters.week || null,
+    p_movie_id: filters.movieId || null,
+    p_sheet_id: filters.sheetId || null,
+    p_date_from: filters.dateFrom || null,
+    p_date_to: filters.dateTo || null,
+  });
+  if (error) throw sanitizeError(error);
 
-    if (filters.year) query = query.eq("telecast_year", filters.year);
-    if (filters.target) query = query.eq("target", filters.target);
-    if (filters.channel) query = query.eq("channel", filters.channel);
-    if (filters.region) query = query.eq("region", filters.region);
-    if (filters.week) query = query.eq("week", filters.week);
-    if (filters.movieId) query = query.eq("movie_id", filters.movieId);
-    if (filters.sheetId) query = query.eq("sheet_id", filters.sheetId);
-    if (filters.dateFrom) query = query.gte("telecast_date", filters.dateFrom);
-    if (filters.dateTo) query = query.lte("telecast_date", filters.dateTo);
-
-    // A stable order keeps pages from overlapping or skipping rows.
-    return query.order("id");
-  };
-
-  const rows = await fetchAllTelecasts<BarcTelecastAggRow>(buildQuery);
-  if (rows.length === 0) return [];
-
-  const byMovie = new Map<string, BarcTelecastAggRow[]>();
-  for (const r of rows) {
-    if (!r.movie_id) continue;
-    const list = byMovie.get(r.movie_id);
-    if (list) list.push(r);
-    else byMovie.set(r.movie_id, [r]);
-  }
-
-  const movieIds = [...byMovie.keys()];
-  const { data: movies, error: movieError } = await supabase
-    .from("movies")
-    .select("id, title, source, certification, release_date, language, production_house_name")
-    .in("id", movieIds);
-
-  if (movieError) throw sanitizeError(movieError);
-
-  type MovieRow = {
-    id: string; title: string; source: string | null;
-    certification: string | null; release_date: string | null;
-    language: string | null; production_house_name: string | null;
-  };
-  const movieById = new Map(((movies || []) as MovieRow[]).map((m) => [m.id, m]));
-
-  const uniqSorted = (vals: (string | null)[]) =>
-    [...new Set(vals.filter((v): v is string => !!v))].sort();
-
-  return movieIds
-    .map((id) => {
-      const movie = movieById.get(id);
-      const movieRows = byMovie.get(id) ?? [];
-      const metrics = computeBarcMetrics(movieRows);
-      return {
-        movie_id: id,
-        title: movie?.title ?? "Unknown movie",
-        descriptions: uniqSorted(movieRows.map((r) => r.description_raw)),
-        source: movie?.source ?? null,
-        certification: movie?.certification ?? null,
-        release_date: movie?.release_date ?? null,
-        language: movie?.language ?? null,
-        production_house_name: movie?.production_house_name ?? null,
-        channels: uniqSorted(movieRows.map((r) => r.channel)),
-        ...metrics,
-      };
-    })
+  return ((data ?? []) as BarcMovieRow[])
+    .map((r) => ({
+      ...r,
+      descriptions: [...r.descriptions].sort(),
+      channels: [...r.channels].sort(),
+    }))
     .sort((a, b) => (b.grp ?? -1) - (a.grp ?? -1) || a.title.localeCompare(b.title));
 }

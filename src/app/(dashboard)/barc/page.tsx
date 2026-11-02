@@ -136,6 +136,9 @@ export default function BarcPage() {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<BarcMovieRow[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Rows wait for the first options load, which may snap the default year,
+  // target and region to the data; loading before that fetched the table twice.
+  const [optionsReady, setOptionsReady] = useState(false);
   const [sheets, setSheets] = useState<BarcSheet[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -239,6 +242,8 @@ export default function BarcPage() {
       setFilters(next);
     } catch (e) {
       toastRef.current.error(e instanceof Error ? e.message : "Could not load filters.");
+    } finally {
+      setOptionsReady(true);
     }
   }, []);
 
@@ -271,8 +276,8 @@ export default function BarcPage() {
   }, [loadOptions, loadSheets]);
 
   useEffect(() => {
-    loadRows();
-  }, [loadRows]);
+    if (optionsReady) loadRows();
+  }, [loadRows, optionsReady]);
 
   /** Rows passing every header funnel except `skip` — what that funnel offers. */
   const rowsExcept = useCallback(
